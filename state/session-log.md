@@ -558,3 +558,30 @@ Phase 0 essentially DONE: injection, slide formula, struct layout, singleton pat
 - **Next:** Either (a) P1.3 (Hookline — apply-trigger polling using FUN_102b75744 + the now-working data path) OR (b) P1.8 (Patchwork — YAML parser). Both are unblocked. After both + P1.10 (applicator), we have the end-to-end mod-application demo.
 
 ---
+
+## 2026-05-29 — P1.3 saga complete: SIOF diagnosed + fixed (Claude as Conductor)
+
+- **P1.3 (Hookline, 6.3 min):** Apply-trigger polling shipped. On-host 11/11 PASS. In-game smoke test failed silently after "firing callbacks".
+- **P1.3b (Hookline, 1.7 min, diagnostic-only):** Added batch.size() log + per-Verify trace points. Confirmed H1: `batch.size() == 0` at fire time despite RegisterApplyCallback running in Loader's constructor(101).
+- **P1.3c (Hookline, 2.6 min, the fix):**
+  - Root cause: SIOF. Loader's `__attribute__((constructor(101)))` ran BEFORE the namespace-scope `std::vector<ApplyCallback> g_callbacks` was dynamically initialized. Push succeeded into a zero-init vector; the real constructor then wiped the pushed element.
+  - Fix: Construct-on-first-use idiom for `g_callbacks` + `g_cbMutex` (replaced by `callbacks()` + `cbMutex()` function-local statics with C++11 magic-statics thread-safety).
+  - Atomics (`g_pollCount`, `g_fired`) and `g_startOnce` kept as namespace-scope (constant-initialized; SIOF-safe).
+  - Added Test 0 in apply_trigger_test.cpp: a `__attribute__((constructor(101)))` registered callback that MUST survive to fire. This would have caught the original bug. On-host: 13/13 PASS.
+  - Kept the "callback batch snapshot: size=N" diagnostic as a permanent SIOF canary.
+- **🎯 In-game smoke test PASS (independently re-verified):**
+  - All four [apply-trigger] lifecycle markers present (polling start, singleton non-null, count stable, firing callbacks)
+  - `[apply-trigger] lambda entered` and `system callbacks done` both appear
+  - `[tweakdb] H-008 verification: mapA(+0x58).count=193354 mapC(+0x108).count=10 verdict=flats-is-A` ✓
+  - `[hashmap] hash-function: fnv1a-8B stored=0x6f9d1a4b computed=0x6f9d1a4b ... bucket=0/843` ✓
+  - `[flat-layout] verdict: flatValue-ptr-at-entry type-tag-offset:+0x00(vft) value-data-offset:+0x8 ... tally{tdb=0 ptr@0x18=6 ptr@0x10=6 entryOff=0}/6` ✓
+- **Why P1.6b worked despite SIOF existing:** The old P1.2 deferred-sample thread called Verify functions DIRECTLY inline from Loader's constructor — no cross-TU global container involved. SIOF was hidden until P1.3 introduced the callback registry.
+- **Lesson learned (worth a FAILED_APPROACHES entry):** On-host unit tests that only call APIs from `main()` will not catch SIOF in production code that uses high-priority constructors. The fix is to mirror the constructor(101) call site in the test. Hookline's Test 0 does this; future test design should follow.
+- **Sprint 2 status:** P1.4 + P1.5 + P1.6 + P1.6b + P1.3 + P1.3b + P1.3c all DONE. Hookline + Schema tracks complete.
+- **Phase 1 progress:** 65% → 75%.
+- **Files changed:** ApplyTrigger.cpp (SIOF fix), Loader.cpp (kept trace lines from P1.3b), apply_trigger_test.cpp (Test 0 added); docs/probes/logs/red4ext-mac-2026-05-29-p1-3c.log; state/tasks.yaml, state/status.yaml; this log.
+- **FACTS/FAILED_APPROACHES:** None yet — FA-012 candidate: "high-priority constructors writing to cross-TU globals — must use construct-on-first-use" is good material for Scope on next fire.
+- **Blockers:** none.
+- **Next:** Patchwork's P1.8 (YAML parser) + P1.10 (applicator) + P1.11 (plugin orchestrator) — the final Sprint 2 stretch to end-to-end mod application.
+
+---

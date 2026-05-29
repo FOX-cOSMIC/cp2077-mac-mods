@@ -1,21 +1,22 @@
 // Loader.cpp — dylib startup entry point for red4ext-mac.
 //
-// Minimal P1.1 stub: ensures the Symbols module is initialized at load and
-// logs the captured slide once the main Cyberpunk2077 image is detected.
-// The eventual tweakxl-mac Plugin.cpp orchestrator hooks in from here.
+// At dylib load: ensures the Symbols module is initialized (captures the slide,
+// P1.1), does a one-shot singleton poll for diagnostics (P1.2), then registers
+// the framework's "DB ready" callbacks and starts the apply-trigger polling
+// loop (P1.3). The eventual tweakxl-mac Plugin.cpp orchestrator registers its
+// applicator callback the same way.
 //
-// No __TEXT writes, no mprotect (FA-001). Read-only slide capture only.
+// No __TEXT writes, no mprotect (FA-001). Read-only slide capture + polling.
 
 #include "../runtime/Symbols.hpp"
 #include "../runtime/SingletonAccess.hpp"
 #include "../runtime/TweakDB.hpp"
 #include "../runtime/HashMap.hpp"
+#include "../runtime/ApplyTrigger.hpp"
 
 #include <cstdarg>
 #include <cstdio>
 #include <ctime>
-#include <chrono>
-#include <thread>
 
 // Symbols' init entry — declared here (kept out of the public header, which is
 // the stable accessor API). Registers the dyld add-image callback idempotently.
@@ -80,31 +81,23 @@ static void red4ext_mac_loader_init() {
                  db ? "" : " (null — expected at load time; DB built later)");
     }
 
-    // Deferred single sample (temporary P1.2 validation aid). The smoke test
-    // waits ~10s for the game to construct TweakDB; this thread takes ONE late
-    // reading and logs it so the test can confirm the accessor returns the live
-    // heap pointer in-game. This is NOT the P1.3 apply-trigger: no loop, no
-    // stability/count logic, no callbacks — a single read, then the thread
-    // exits. P1.3 replaces it with the real polling loop; remove this then.
-    std::thread([] {
-        std::this_thread::sleep_for(std::chrono::seconds(6));
-        red4ext_mac::TweakDB* db = red4ext_mac::GetTweakDBUncached();
-        log_line("[singleton-access] deferred sample: %p%s", (void*)db,
-                 db ? "" : " (still null after delay)");
-
-        // P1.4: fold in the H-008 verification. On the first non-null sample,
-        // log the +0x58 vs +0x108 entry counts so the runtime learns which map
-        // is flats. VerifyH008 is once-only and reads via mach_vm so it can
-        // never crash even if the DB is still mid-populate at this point.
-        if (db) {
-            red4ext_mac::VerifyH008(db);
-            // P1.5: identify the bucket-hash function against a live records
-            // entry and round-trip a known key. Runs after VerifyH008 so the
-            // log reads top-down: which-map-is-flats, then how-to-hash-keys.
-            red4ext_mac::VerifyHashFunction(db);
-            // P1.6: discover the flats value-buffer layout, re-confirm the
-            // flats-map hash function, and round-trip a scalar read/write/restore.
-            red4ext_mac::VerifyFlatEntry(db);
-        }
-    }).detach();
+    // P1.3: register the framework's "DB populated & stable" callback, then
+    // start the apply-trigger polling loop. The callback runs ONCE on the
+    // polling thread when the records map is non-zero and stable (F-018 trigger
+    // point). It folds in the bring-up probes that P1.2's deferred-sample
+    // scaffold used to run (H-008 map identification, records hash function,
+    // flats value-buffer layout) — now driven by the real trigger. Patchwork's
+    // P1.10 applicator registers its own callback the same way; all registered
+    // callbacks receive the same live TweakDB*.
+    red4ext_mac::RegisterApplyCallback([](red4ext_mac::TweakDB* db) {
+        log_line("[apply-trigger] lambda entered (db=%p)", (void*)db);
+        red4ext_mac::VerifyH008(db);          // P1.4 — which map (+0x58/+0x108) is flats
+        log_line("[apply-trigger] after VerifyH008");
+        red4ext_mac::VerifyHashFunction(db);  // P1.5 — records bucket-hash function
+        log_line("[apply-trigger] after VerifyHashFunction");
+        red4ext_mac::VerifyFlatEntry(db);     // P1.6 — flats value-buffer layout + R/W mode
+        log_line("[apply-trigger] after VerifyFlatEntry");
+        log_line("[apply-trigger] system callbacks done; user mods can apply now");
+    });
+    red4ext_mac::EnsureStarted();
 }

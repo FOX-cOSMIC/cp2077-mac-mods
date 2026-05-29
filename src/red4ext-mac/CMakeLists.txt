@@ -24,6 +24,7 @@ add_library(red4ext SHARED
     src/runtime/SingletonAccess.cpp
     src/runtime/TweakDB.cpp
     src/runtime/HashMap.cpp
+    src/runtime/ApplyTrigger.cpp
 )
 
 target_compile_features(red4ext PRIVATE cxx_std_17)
@@ -68,6 +69,26 @@ set_target_properties(tweakdb_test PROPERTIES
 add_executable(hashmap_test src/runtime/hashmap_test.cpp)
 target_link_libraries(hashmap_test PRIVATE red4ext)
 set_target_properties(hashmap_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src/red4ext-mac"
+)
+
+# ── apply_trigger_test — P1.3 on-host polling-loop unit test ─────────────────
+# Drives the real PollingLoop() via the test seam with fake memory + fast
+# timings. Built from explicit sources (NOT linked against the dylib) so the
+# Loader constructor's auto-EnsureStarted() does NOT run a background polling
+# thread in the test process — that thread would race the synchronous test
+# driver over the shared ApplyTrigger globals. ApplyTrigger only needs
+# SingletonAccess + Symbols (and TweakDB.hpp header-only for the offset asserts).
+add_executable(apply_trigger_test
+    src/runtime/apply_trigger_test.cpp
+    src/runtime/ApplyTrigger.cpp
+    src/runtime/SingletonAccess.cpp
+    src/runtime/Symbols.cpp
+)
+target_compile_features(apply_trigger_test PRIVATE cxx_std_17)
+target_compile_options(apply_trigger_test PRIVATE -Wall -Wextra)
+target_include_directories(apply_trigger_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(apply_trigger_test PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src/red4ext-mac"
 )
 

@@ -585,3 +585,31 @@ Phase 0 essentially DONE: injection, slide formula, struct layout, singleton pat
 - **Next:** Patchwork's P1.8 (YAML parser) + P1.10 (applicator) + P1.11 (plugin orchestrator) — the final Sprint 2 stretch to end-to-end mod application.
 
 ---
+
+## 2026-05-29 — P1.8 shipped (despite CLI timeout) — YAML parser working (Claude as Conductor)
+
+- **Goal:** YAML mod parser using yaml-cpp via FetchContent; emits the op AST for P1.10's applicator.
+- **Patchwork's run (Opus 4.7, 755s ≈ 12.6 min, then CLI timeout abort):**
+  - The work landed before the timeout: Operation.hpp (152 lines), YAML.hpp (19 lines), YAML.cpp (520 lines), yaml_test.cpp (208 lines), CMakeLists.txt rewrite with yaml-cpp 0.8.0 FetchContent + CMake 4.x policy workaround.
+  - The CLI hung for 180s with no output and OpenClaw's failover terminated the session. Patchwork's final summary was lost, but the source files are intact + the build works.
+  - Conductor created tools/test-yaml-parser.sh wrapper (Patchwork didn't get to it).
+- **Design decision Patchwork made (D-NNN candidate to formalize later):** Option A — custom Op AST in `model/Operation.hpp` (not converting to psiberx TweakSource). The applicator only knows the Op AST; YAML and .tweak parsers both convert into it. Decouples us from psiberx internals.
+- **Build status:** clean. libtweakxl.dylib + yaml_test + yaml-cpp (fetched + built) — no warnings, no errors. yaml-cpp 0.8.0 pinned; CMAKE_POLICY_VERSION_MINIMUM=3.5 trick used to make it configure under CMake 4.x (yaml-cpp 0.8.0's CMakeLists requires pre-3.5 minimum).
+- **on-host yaml_test: 8/8 PASS:**
+  1. Basic flat assignment ✓
+  2. Record block with $base clone + properties (3 ops) ✓
+  3. Array mutation tags (!append, !append-once, !remove) ✓
+  4. !remove-all + !append-from with cross-reference + mixed-op warning ✓
+  5. $type/$value + $game gate preserved ✓
+  6. Unknown !tag → warning preserved, good tags survive ✓
+  7. Malformed top-level (sequence) → nullptr ✓
+  8. Struct inference (Vector3 from 3 floats) ✓
+- **Smoke test:** `tools/test-yaml-parser.sh` PASS (Conductor wrote wrapper).
+- **Sprint 2 Patchwork track:** 1 of 3 done (P1.8). P1.10 (applicator) + P1.11 (orchestrator) remain.
+- **Phase 1 progress:** 75% → 82%.
+- **Operational note:** Watch for CLI timeouts on bigger Patchwork tasks. The 180s no-output threshold was hit when yaml-cpp probably finished fetching but the model didn't emit output during a long thinking/reading phase. P1.10 might hit this too — could split into two halves if needed.
+- **Files changed:** Operation.hpp, YAML.hpp/cpp, yaml_test.cpp, tools/test-yaml-parser.sh new; CMakeLists.txt modified; state/tasks.yaml, state/status.yaml, this log.
+- **Blockers:** none.
+- **Next:** P1.10 (applicator) — Patchwork's big one. Takes op AST + ApplyCallback's TweakDB* → ReadFlat/WriteFlat. After P1.10 + P1.11, end-to-end mod application demo possible.
+
+---

@@ -1,7 +1,24 @@
 # tweakxl-mac — TweakDB patcher plugin (.tweak/YAML parser + applicator)
 #
-# P1.7 (mod scanner) + P1.9 (psiberx .tweak parser integration, D-005).
-# Builds libtweakxl.dylib. The applicator (P1.10) and YAML parser land later.
+# P1.7 (mod scanner) + P1.9 (psiberx .tweak parser) + P1.8 (YAML parser).
+# Builds libtweakxl.dylib. The applicator (P1.10) lands later.
+
+# --- yaml-cpp (P1.8) --------------------------------------------------------
+# Pinned to 0.8.0 — the latest stable tag (released 2023-09; no newer release
+# exists as of Spring 2026). yaml-cpp 0.8.0's CMakeLists declares a pre-3.5
+# minimum, which CMake 4.x refuses; CMAKE_POLICY_VERSION_MINIMUM=3.5 lets it
+# configure. We also disable its tests/contrib/tools to keep the build lean.
+include(FetchContent)
+set(YAML_CPP_BUILD_TESTS   OFF CACHE BOOL "" FORCE)
+set(YAML_CPP_BUILD_TOOLS   OFF CACHE BOOL "" FORCE)
+set(YAML_CPP_BUILD_CONTRIB OFF CACHE BOOL "" FORCE)
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)  # yaml-cpp 0.8.0 + CMake 4.x
+FetchContent_Declare(
+    yaml_cpp
+    GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
+    GIT_TAG 0.8.0
+)
+FetchContent_MakeAvailable(yaml_cpp)
 
 # --- psiberx reference sources we reuse (D-005) -----------------------------
 # The .tweak parser is psiberx's, compiled here under TWEAKXL_MAC_OFFLINE.
@@ -20,6 +37,7 @@ set(TWEAKXL_SOURCES
     src/loader/ModScanner.cpp
     src/parsers/Tweak.cpp
     src/parsers/PsiberxParser.cpp   # wraps reference Source/Parser.cpp
+    src/parsers/YAML.cpp            # P1.8 YAML → Op AST
 )
 
 add_library(tweakxl SHARED ${TWEAKXL_SOURCES})
@@ -37,11 +55,13 @@ target_compile_features(tweakxl PRIVATE cxx_std_20)
 target_compile_definitions(tweakxl PRIVATE TWEAKXL_MAC_OFFLINE=1)
 
 target_include_directories(tweakxl PRIVATE
-    src                 # our headers (loader/, parsers/)
+    src                 # our headers (loader/, parsers/, model/)
     "${PSIBERX_SRC}"    # Red/TweakDB/Source/*
     "${PEGTL_INC}"      # <tao/pegtl.hpp>
     "${RED4EXT_INC}"    # <RED4ext/Hashing/FNV1a.hpp>
 )
+
+target_link_libraries(tweakxl PRIVATE yaml-cpp::yaml-cpp)
 
 # std::format is gated behind macOS 13.3 in libc++'s availability annotations.
 # The game requires macOS 15.5 (FACTS F-001), so raising this target's floor is
@@ -67,3 +87,13 @@ add_executable(scanner_test src/loader/scanner_test.cpp src/loader/ModScanner.cp
 target_include_directories(scanner_test PRIVATE src)
 target_compile_features(scanner_test PRIVATE cxx_std_17)
 target_compile_options(scanner_test PRIVATE -Wall -Wextra)
+
+# --- yaml_test: standalone unit tests for P1.8 (temporary) ------------------
+# YAML.cpp has no std::format dependency, so the tests build at C++17 with the
+# project default deployment target.
+add_executable(yaml_test src/parsers/yaml_test.cpp src/parsers/YAML.cpp)
+target_include_directories(yaml_test PRIVATE src)
+target_compile_features(yaml_test PRIVATE cxx_std_17)
+target_compile_options(yaml_test PRIVATE -Wall -Wextra)
+target_link_libraries(yaml_test PRIVATE yaml-cpp::yaml-cpp)
+add_test(NAME yaml_test COMMAND yaml_test)

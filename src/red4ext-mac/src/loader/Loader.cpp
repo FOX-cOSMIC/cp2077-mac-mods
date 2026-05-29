@@ -97,6 +97,8 @@ static void red4ext_mac_loader_init() {
         log_line("[apply-trigger] after VerifyHashFunction");
         red4ext_mac::VerifyFlatEntry(db);     // P1.6 — flats value-buffer layout + R/W mode
         log_line("[apply-trigger] after VerifyFlatEntry");
+        red4ext_mac::VerifyCandidateFlats(db); // P1.12 — runtime-verify Scope's flat candidates
+        log_line("[apply-trigger] after VerifyCandidateFlats");
         log_line("[apply-trigger] system callbacks done; user mods can apply now");
     });
     red4ext_mac::EnsureStarted();

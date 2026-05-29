@@ -727,3 +727,34 @@ Found that tweakdb.bin stores record names (12,951) but not flat property names 
 **2026-05-29 — Scope (researcher) — Runtime flat-name candidate list (for Schema's probe)**
 
 Built tools/probes/candidate_flats.txt: 98 distinct scalar (Int32/Float/Bool) candidates, all records verified present via strings -8 grep -xF, properties drawn from matching ExtraFlats.yaml type blocks. Coverage: ~29 weapon (WeaponItem), ~16 grenade (Grenade/Item), ~20 attack/projectile (Attack_Projectile), ~18 character (Character), ~10 status-effect (StatusEffect), 3 consumable, 2 perk. Honest reallocation: vehicle/device/economy/movement buckets are NOT derivable as scalar flats (Vehicle ExtraFlats all String; price=TweakDBID; zero Constants.*; movement=StatModifier system) — documented in-file. No candidate is 'high' confidence: cinema rejected all 5 ExtraFlats picks, so this is a hypothesis set; M=51 (strong type-match), L=47. Embedded the exact probe interface + a systemic-bug warning for Schema (if ALL miss, suspect CRC32/hash-mode/offset bug, not absent flats — sanity-check a known RECORD id in the +0x88 records map first; confirm flats block per H-008). No F-NNN added (probe is the verifier). Did not run the game.
+
+## 2026-05-29 — P1.12 Candidate probe: MAJOR finding — F-012 needs revision (Claude as Conductor)
+
+- **Goal:** Lookup 98 candidate flats via runtime probe; find real flats for cinema demo.
+- **Schema's run (Opus 4.7, 675s ≈ 11 min):**
+  - Implemented VerifyCandidateFlats() with rigorous CRC32-independent self-test on BOTH maps
+  - Self-test: pulls first stored entry from each map, re-looks-up by full key AND compact key — confirms machinery without depending on knowing any name
+  - tools/test-candidate-probe.sh: 3 distinct exit codes (0=hits, 1=systemic-bug, 3=verified-absent)
+  - Verified CRC32 implementation offline via Python+zlib (`Items.Preset_Nova_Default` → 0xb1e27e8e matches binary 22×)
+- **🚨 In-game results — REAL FINDING:**
+  - `preflight-self(records): fullKeyLookup=HIT compactRebuildLookup=HIT` ✓ lookup works
+  - `preflight-self(flats):   fullKeyLookup=HIT compactRebuildLookup=HIT` ✓ lookup works
+  - `preflight: 'Items.Preset_Nova_Default' (0xb1e27e8e) -> MISS` ❌ but record is in binary 22×!
+  - `sweep complete: 98 candidates, hits=0, misses=98`
+- **What this means:**
+  - The +0x88 map has only **843 entries** — far too few for CP2077's full record set
+  - `Items.Preset_Nova_Default` is verified on-disk (CRC32 0xb1e27e8e × 22) but ABSENT from this map
+  - **F-012 was wrong**: +0x88 is NOT the general records map. It's a sub-map of some kind.
+- **Where are the real records?** Possibly:
+  - The +0x58 map (193,354 entries) might contain BOTH flats AND records (mingled)
+  - Or there's another store we haven't located
+- **Anomaly that needs Scope:** Schema's flats self-test HIT a real entry with `nameHash=0xce8348b9, len=39`. The 39-character name that CRC32s to 0xce8348b9 is a guaranteed-live flat — finding it (via brute-force CRC32 of (record × property) pairs) would give us a confirmed cinema target AND validate the name→hash chain.
+- **Status:** Phase 1 still 95% architecturally (framework works), but cinema demo is blocked on understanding what the +0x88 map actually is. F-012 candidate for revision/invalidation.
+- **Files changed:** TweakDB.{hpp,cpp} extended; Loader.cpp updated; tools/test-candidate-probe.sh new; docs/probes/logs/red4ext-mac-2026-05-29-candidate-probe.log (evidence); state/tasks.yaml, state/status.yaml; this log.
+- **Blockers:** Architecture-level. We don't know the real records-map location. Without it, cinema demo can't target a real flat reliably.
+- **Next:** Fire Scope to:
+  1. Investigate what the +0x88 map actually contains (since it has only 843 entries it can't be the general record store)
+  2. Re-disassemble TweakDB constructor/initializer to find where the ~12,951 records actually live at runtime
+  3. Possibly file F-021 with the correction; possibly invalidate or refine F-012
+
+---

@@ -15,9 +15,13 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <mutex>
+#include <string>
 
+#include <dlfcn.h>
 #include <mach/mach.h>
 #include <mach/mach_vm.h>
 
@@ -543,6 +547,186 @@ bool WriteFlat(TweakDB* db, TweakDBID id, FlatValue newValue) {
 
 void VerifyFlatEntry(const TweakDB* db) {
     std::call_once(g_flatEntry_once, [db] { DoVerifyFlatEntry(db); });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// P1.12 — runtime candidate-flat verifier.
+// ═══════════════════════════════════════════════════════════════════════════
+
+namespace {
+
+std::once_flag g_candidateFlats_once;
+
+// A known-present RECORD from the candidate file's verified set (first weapon
+// entry). Used by the pre-flight to prove the CRC32 + records hash path works
+// before trusting flats-map MISSes.
+constexpr const char* kPreflightRecord = "Items.Preset_Nova_Default";
+
+TweakDBID MakeCompactId(const std::string& name) {
+    TweakDBID id;
+    std::memset(&id, 0, sizeof(id));
+    id.nameHash   = Crc32(name.data(), name.size());   // zlib/ISO-3309 CRC32 (HashMap.cpp)
+    id.nameLength = (uint8_t)name.size();              // tdbOffset left {0,0,0}
+    return id;
+}
+
+// Drop everything from the first '#', then trim surrounding whitespace.
+std::string StripLine(std::string s) {
+    const auto h = s.find('#');
+    if (h != std::string::npos) s.erase(h);
+    const auto b = s.find_first_not_of(" \t\r\n");
+    if (b == std::string::npos) return "";
+    const auto e = s.find_last_not_of(" \t\r\n");
+    return s.substr(b, e - b + 1);
+}
+
+// TWEAKXL_CANDIDATES_FILE wins; otherwise derive from this dylib's own path.
+std::string ResolveCandidatesPath(bool* fromEnv) {
+    if (const char* env = std::getenv("TWEAKXL_CANDIDATES_FILE"); env && *env) {
+        *fromEnv = true;
+        return env;
+    }
+    *fromEnv = false;
+    Dl_info info;
+    if (dladdr(reinterpret_cast<const void*>(&VerifyCandidateFlats), &info) && info.dli_fname) {
+        std::string p = info.dli_fname;
+        const auto slash = p.find_last_of('/');
+        const std::string dir = (slash == std::string::npos) ? "." : p.substr(0, slash);
+        return dir + "/../../../tools/probes/candidate_flats.txt";
+    }
+    return "tools/probes/candidate_flats.txt";
+}
+
+// Prove a map's lookup PATH works independent of CRC32: round-trip its own
+// first stored entry, once with the full stored key, once with a compact
+// {nameHash,len,0} rebuild. Sets *full / *compact to the HIT results.
+void SelfTestMapLookup(const HashMap* map, HashMode mode, const char* label,
+                       bool* full, bool* compact) {
+    *full = false; *compact = false;
+    if (!map) { log_line("[flat-probe] preflight-self(%s): null map", label); return; }
+    const uintptr_t mb = reinterpret_cast<uintptr_t>(map);
+    uint32_t bucketCount = 0, stride = 0;
+    uintptr_t bucketArray = 0, entries = 0;
+    SafeReadU32(mb + offsetof(HashMap, bucketCount), &bucketCount);
+    SafeReadU32(mb + offsetof(HashMap, stride),      &stride);
+    SafeReadPtr(mb + offsetof(HashMap, bucketArray), &bucketArray);
+    SafeReadPtr(mb + offsetof(HashMap, entries),     &entries);
+
+    uint32_t headIdx = 0xFFFFFFFFu;
+    for (uint32_t i = 0; i < bucketCount; ++i) {
+        uint32_t v = 0xFFFFFFFFu;
+        if (SafeReadU32(bucketArray + (uint64_t)i * 4, &v) && v != 0xFFFFFFFFu) { headIdx = v; break; }
+    }
+    if (headIdx == 0xFFFFFFFFu || !entries || !stride) {
+        log_line("[flat-probe] preflight-self(%s): could not sample an entry", label);
+        return;
+    }
+    const uintptr_t e = entries + (uint64_t)headIdx * stride;
+    uint64_t storedKey = 0;
+    SafeReadU64(e + 0x08, &storedKey);
+
+    TweakDBID fullKey; std::memcpy(&fullKey, &storedKey, sizeof(fullKey));
+    *full = (Lookup(map, fullKey, mode) != nullptr);
+
+    TweakDBID cmp; std::memset(&cmp, 0, sizeof(cmp));
+    cmp.nameHash   = (uint32_t)(storedKey & 0xFFFFFFFFu);
+    cmp.nameLength = (uint8_t)((storedKey >> 32) & 0xFFu);
+    *compact = (Lookup(map, cmp, mode) != nullptr);
+
+    log_line("[flat-probe] preflight-self(%s): storedKey=0x%016llx fullKeyLookup=%s "
+             "compactRebuildLookup=%s", label, (unsigned long long)storedKey,
+             *full ? "HIT" : "MISS", *compact ? "HIT" : "MISS");
+}
+
+void DoVerifyCandidateFlats(const TweakDB* db) {
+    if (!db) { log_line("[flat-probe] skipped (db=null)"); return; }
+
+    const HashMap* recMap   = GetRecordsMap(db);
+    const HashMode rmode     = GetRecordsHashMode();
+    const HashMap* flatsMap0 = GetFlatsMapCandidate(db);
+    const HashMode fmode0     = GetFlatsHashMode();
+
+    // ── Pre-flight self-tests: prove BOTH map lookup paths work independent of
+    // CRC32. The candidate sweep queries the FLATS map, so its path is what
+    // makes a MISS trustworthy; the records path is the secondary cross-check.
+    bool recFull = false, recCompact = false, flatFull = false, flatCompact = false;
+    SelfTestMapLookup(recMap,   rmode,  "records", &recFull,  &recCompact);
+    SelfTestMapLookup(flatsMap0, fmode0, "flats",   &flatFull, &flatCompact);
+
+    // ── Pre-flight: the named known RECORD (tests CRC32-of-name end to end). ──
+    const TweakDBID recId = MakeCompactId(kPreflightRecord);
+    const bool recHit = (Lookup(recMap, recId, rmode) != nullptr);
+    log_line("[flat-probe] preflight: records-map lookup of '%s' (hash=0x%08x) -> %s",
+             kPreflightRecord, recId.nameHash, recHit ? "HIT" : "MISS");
+
+    // Gate on the FLATS path (that's what the sweep uses). If a known-present
+    // flats key, rebuilt compact, cannot be found, the flats lookup machinery is
+    // broken → MISSes would be noise → skip. Otherwise the sweep result is sound.
+    if (!flatCompact) {
+        log_line("[flat-probe] Flats-map lookup failing — compact-key lookup of a known-present "
+                 "flats entry MISSED (full-key=%s). Systemic bug (hash-mode/offset). Skipping sweep.",
+                 flatFull ? "HIT" : "MISS");
+        return;
+    }
+    if (!recHit) {
+        log_line("[flat-probe] NOTE: '%s' absent from records map (records path %s). Flats lookup "
+                 "path IS verified (self-test compact HIT) — candidate MISSes are trustworthy.",
+                 kPreflightRecord, recCompact ? "verified" : "ALSO failing — flag to researcher");
+    }
+
+    // ── Resolve + open the candidate file. ───────────────────────────────────
+    bool fromEnv = false;
+    const std::string path = ResolveCandidatesPath(&fromEnv);
+    log_line("[flat-probe] candidates file: %s (source=%s)",
+             path.c_str(), fromEnv ? "TWEAKXL_CANDIDATES_FILE" : "dylib-relative");
+    std::ifstream in(path);
+    if (!in) {
+        log_line("[flat-probe] ERROR: cannot open candidates file '%s' "
+                 "(set TWEAKXL_CANDIDATES_FILE)", path.c_str());
+        return;
+    }
+
+    const HashMap*  flats = GetFlatsMapCandidate(db);   // +0x58 (H-008 confirmed)
+    const HashMode  fmode = GetFlatsHashMode();         // nameHash-direct (P1.6/F-019)
+
+    unsigned total = 0, hits = 0, misses = 0;
+    std::string line;
+    while (std::getline(in, line)) {
+        const std::string name = StripLine(line);
+        if (name.empty()) continue;
+        ++total;
+
+        const TweakDBID id = MakeCompactId(name);
+        const uint8_t*  hit = Lookup(flats, id, fmode);
+        if (!hit) {
+            ++misses;
+            log_line("[flat-probe] MISS name=%s hash=0x%08x", name.c_str(), id.nameHash);
+            continue;
+        }
+        ++hits;
+        // Confirmed layout (P1.6): FlatValue ptr @ entry+0x18; vft @ +0x00; value @ +0x08.
+        const uintptr_t entry = reinterpret_cast<uintptr_t>(hit);
+        uintptr_t flatPtr = 0;
+        SafeReadPtr(entry + 0x18, &flatPtr);
+        uint64_t vft = 0;
+        uint32_t raw = 0;
+        if (flatPtr) {
+            SafeReadU64(flatPtr + 0x00, &vft);
+            SafeReadU32(flatPtr + 0x08, &raw);
+        }
+        log_line("[flat-probe] HIT name=%s hash=0x%08x flat=%p vft=0x%llx raw=0x%08x",
+                 name.c_str(), id.nameHash, (void*)flatPtr,
+                 (unsigned long long)vft, raw);
+    }
+
+    log_line("[flat-probe] sweep complete: %u candidates, hits=%u, misses=%u",
+             total, hits, misses);
+}
+
+} // namespace
+
+void VerifyCandidateFlats(const TweakDB* db) {
+    std::call_once(g_candidateFlats_once, [db] { DoVerifyCandidateFlats(db); });
 }
 
 } // namespace red4ext_mac

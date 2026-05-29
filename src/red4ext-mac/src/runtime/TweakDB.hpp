@@ -262,4 +262,17 @@ bool WriteFlat(TweakDB* db, TweakDBID id, FlatValue newValue);
 //   [hashmap] flats-map hash-function: <fnv1a-8B|fnv1a-5B|...>
 void VerifyFlatEntry(const TweakDB* db);
 
+// ───────────────────────────────────────────────────────────────────────────
+// P1.12 — runtime candidate-flat verifier (once-only).
+//
+// Reads a newline-delimited candidate-name file (TWEAKXL_CANDIDATES_FILE if set,
+// else derived from this dylib's path: <dylib dir>/../../../tools/probes/
+// candidate_flats.txt), strips '#' comments + whitespace, and for each name
+// computes TweakDBID{CRC32(name), strlen(name), {0,0,0}} and looks it up in the
+// flats map with GetFlatsHashMode(). HIT → reads the FlatValue ptr at entry+0x18
+// and dumps vft (+0x00) + raw value (+0x08). Pre-flight: first confirms a known
+// RECORD id resolves in the records map, so an all-MISS run distinguishes a
+// systemic lookup bug from genuine flat absence. Emits to /tmp/red4ext-mac.log.
+void VerifyCandidateFlats(const TweakDB* db);
+
 } // namespace red4ext_mac

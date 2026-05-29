@@ -302,9 +302,11 @@ tasks:
 
   - id: T-002c
     category: research
-    status: pending
+    status: done
     priority: P0
     owner: researcher
+    completed_at: 2026-05-29
+    completed_by: cp2077-researcher (Scope, Opus 4.7, 14 min)
     subject: Ghidra xref hunt from F-008 anchors — identify TweakDB accessor + struct layout
     description: |
       REFINED 2026-05-29 — concrete addresses provided by F-008.
@@ -341,6 +343,93 @@ tasks:
       - H-005 resolved to F-NNN
       - H-002 resolved (folded in per Scope's recommendation)
     depends_on: []   # unblocked
+
+  - id: T-002d
+    category: research
+    status: pending
+    priority: P0
+    owner: researcher
+    subject: Disassemble TweakDB constructor FUN_102b73db8 — flats map (H-006) + vtable (F-014b)
+    description: |
+      Next critical static analysis after T-002c. The constructor at
+      static 0x102b73db8 sets up the TweakDB struct after the initializer
+      allocates 0x168 bytes. Two unknowns to resolve in one pass:
+
+      1. **Flats map layout (resolves H-006).** The records map is at
+         +0x88..+0xa4. The flats map is elsewhere within the 0x168 struct.
+         Read constructor to find:
+         - Flats map base offset
+         - Bucket/entry/count fields
+         - Storage scheme: hash table? array? function-pointer table?
+           (This finally resolves H-001 for flats.)
+      2. **VTable presence (informs F-014b).** Check if the constructor
+         writes a vtable pointer at this+0x00. If yes: VTable hook is a
+         viable approach; record the vtable static address. If no: rule
+         out vtable hooks and stick with direct-data manipulation.
+
+      Method:
+      ```bash
+      cd reference/ghidra
+      L=$(grep -n -m1 '__text:102b73db8' Cyberpunk2077.txt | cut -d: -f1)
+      awk -v s=$L -v e=$((L+200)) 'NR>=s&&NR<=e' Cyberpunk2077.txt
+      ```
+      Read disassembly, identify all `str xN, [x0, #+offset]` instructions
+      where x0 is `this`.
+
+      Acceptance:
+      - F-NNN — Flats map layout (offsets, storage scheme). H-001 + H-006
+        resolved.
+      - F-NNN — VTable status (present/absent). F-014 hook approach
+        finalized.
+    depends_on: []
+
+  - id: T-002e
+    category: research
+    status: pending
+    priority: P1
+    owner: researcher
+    subject: Identify TweakDB data-load path + apply-mods trigger point (H-007)
+    description: |
+      Per Scope's T-002c follow-up. FUN_102b73b50 builds an empty TweakDB.
+      The data-load path (where r6/cache/tweakdb.bin is parsed and the
+      flats/records are populated) is the moment we want to apply mods.
+
+      Method:
+      1. From the global TweakDB* pointer xrefs, find writes that populate
+         the flats/records maps after construction.
+      2. Look for symbols/strings mentioning "TweakDBReloader", "TweakDBResource",
+         or the resource-load callback signature.
+      3. Identify the function that's called once population is complete —
+         that's where mod-loader hooks to apply the YAML/.tweak ops.
+
+      Acceptance: F-NNN with the apply-trigger function's static address +
+      brief signature. H-007 resolved.
+    depends_on: [T-002d]   # cleaner to do flats layout first
+
+  - id: T-002f
+    category: hook
+    status: pending
+    priority: P1
+    owner: hook-engineer
+    subject: Empirical probe — read live TweakDB singleton + dump struct layout
+    description: |
+      Validate F-011/F-012/F-013 empirically with a runtime probe.
+
+      Method:
+      1. Modify h001_probe.cpp (or write h002f_probe.cpp): after slide is
+         captured, read 8 bytes at (0x1080c92d0 + slide). Wait briefly
+         (or hook the initializer return). Read 0x168 bytes at the resulting
+         pointer.
+      2. Log hex dump grouped by offset (0x00..0x88 unknown, 0x88..0xa4
+         records map per F-012, 0xa4..0x168 unknown).
+      3. Cross-check: records map fields should match F-012's predictions
+         (bucket array pointer, counts, etc.).
+
+      Useful even before T-002d completes — gives raw bytes for unknown
+      offsets that may surface flats map structure.
+
+      Acceptance: F-NNN confirming F-011/F-012/F-013 against runtime data,
+      OR FA-NNN with the discrepancy.
 
   - id: T-018
     category: hook

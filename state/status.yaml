@@ -9,41 +9,45 @@ last_updated: 2026-05-29
 current_phase:
   id: 0
   name: bootstrap-and-revalidation
-  progress_pct: 65
+  progress_pct: 80
   description: >
-    Two probe runs complete. F-001..F-010 banked. Key discovery (F-008):
-    game::data::TweakDB exists in symtab but has ZERO function symbols
-    anywhere — all named symbols are DATA-only (guards + function-local
-    statics). Leverage is xref FROM the named statics. T-002c is now
-    unblocked with 3 concrete anchor addresses; H-002 folded in.
-    T-002b de-prioritized (slide variance already validates per-launch
-    behavior; targeted TweakDB validation can fold into a later probe).
-    Next: Scope hunts in Ghidra.
+    T-002c shipped huge results. F-011 (singleton path), F-012 (GetRecords
+    + records map layout), F-013 (struct = 0x168 same as Windows; records
+    are hash table NOT fn-ptr dispatch), F-014 (hook targets). H-002 →
+    resolved-failed, H-005 → resolved-fact. KEY ARCHITECTURE INSIGHT
+    (F-014): no code hook needed for records — read singleton pointer at
+    0x1080c92d0+slide, write directly to struct offsets. Three new tasks:
+    T-002d (constructor disasm for flats map + vtable), T-002e (apply-mods
+    trigger), T-002f (runtime probe to confirm static analysis). Phase 0
+    nearly complete.
 
 blockers: []
 
 pending_decisions: []
 
 next_action:
-  agent: researcher
-  task_id: T-002c
+  agent: lead
+  task_id: T-002d
   description: >
-    Scope hunts in Ghidra from F-008 anchors (0x1073bbea8 primary,
-    0x1073af788 hub, 0x1073eeab0 RTTI). Folds H-002 in. Outputs:
-    real accessor address + struct layout + viable hook targets.
-    No game needed; no probe iteration needed.
+    Three Phase 0 closers, one of which is parallel-eligible:
+    - T-002d (Scope, Ghidra) — disassemble constructor FUN_102b73db8 for
+      flats map layout (H-006) + vtable status. Resolves H-001 for flats.
+    - T-002e (Scope, Ghidra) — find apply-mods trigger point (H-007).
+      Depends on T-002d.
+    - T-002f (Hookline, probe) — empirical singleton dump to validate
+      F-011/F-012/F-013 against runtime. Could run in parallel with T-002d
+      but serializes on subscription.
+    Lucas's call: serial T-002d→T-002e→T-002f, or parallel-ish.
 
 recent_facts_added:
-  - F-001
-  - F-002
-  - F-003
-  - F-004
-  - F-005
-  - F-006
   - F-007
   - F-008
   - F-009
   - F-010
+  - F-011
+  - F-012
+  - F-013
+  - F-014
 recent_failed_added:
   - FA-001
   - FA-002

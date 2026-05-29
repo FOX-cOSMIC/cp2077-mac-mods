@@ -244,3 +244,40 @@ Recommendation: NO v3 probe for symbol discovery — go straight to Ghidra xref 
 - **Next:** Conductor fires Scope (Opus 4.7) for T-002c — Ghidra xref hunt from the three anchor addresses. Static analysis, no game needed.
 
 ---
+
+---
+
+**2026-05-29 — Scope (researcher) — T-002c (Ghidra xref hunt)**
+
+Used the 9GB full-disassembly listing (Cyberpunk2077.txt) — the 450MB decompiled .c is a PARTIAL decomp and does NOT contain the TweakDB accessor functions or the data-static xrefs, so the .c-only approach was a dead end; the .txt listing carries the DAT_ labels + XREFs needed. (Ghidra project cp2077-v1.rep also present + ghidraRun installed, but headless not needed — grep on .txt sufficed.)
+
+From F-008 anchor 0x1073bbea8, identified: GetRecords<Vehicle_Record> = FUN_10121f264 @ 0x10121f264 (F-012; reveals records hash-map at this+0x88..0xa4, FNV-1a keyed). Its callers get `this` from the singleton getter FUN_102b73c7c @ 0x102b73c7c (F-011), which reads the global TweakDB* at 0x1080c92d0 (__bss) and lazy-inits via FUN_102b73b50 @ 0x102b73b50. The initializer allocates 0x168 bytes → TweakDB struct = 0x168 (F-013), DISPROVING H-002's 0x198 claim (FA-010). Records storage is a plain hash table (no fn-ptr dispatch).
+
+Resolved: H-005 → resolved-fact (F-011/F-012/F-013). H-002 → resolved-failed (FA-010). Hook targets recorded in F-014: primary = read global 0x1080c92d0 (no __TEXT hook, FA-001-compliant); functions are direct-bl (no GOT hook applicable). OPEN: flats-map layout + value storage NOT yet examined (H-001 still open — only records examined); the data-LOAD path that populates the empty DB (the "when to apply mods" signal) NOT yet located; TweakDB vtable presence (this+0x00) unverified. These are the next research steps before Hookline can apply mods.
+
+## 2026-05-29 — T-002c shipped: full singleton path + struct layout (Claude as Conductor)
+
+- **Goal:** Find the real TweakDB accessor + struct layout via Ghidra xref from F-008 anchors.
+- **Scope's run (Opus 4.7, 848s ≈ 14 min, 1001 raw output lines):**
+  - **F-011** — Full singleton chain: getter `FUN_102b73c7c` @ 0x102b73c7c, global `*(0x1080c92d0)` in `__bss`, initializer `FUN_102b73b50` @ 0x102b73b50, constructor `FUN_102b73db8` @ 0x102b73db8.
+  - **F-012** — `GetRecords<Vehicle_Record>` = `FUN_10121f264` @ 0x10121f264. Records hash-map at TweakDB+0x88..0xa4: bucket array, count, modulus, entries array, stride. FNV-1a keyed.
+  - **F-013** — TweakDB struct = **0x168 bytes** (verified via `mov w0,#0x168` in the init allocation). Records storage = plain hash table, NOT fn-ptr dispatch. **Disproves H-002** (the "0x198" old session figure was wrong on 2.3.1).
+  - **F-014** — Hook/access targets: (1) global singleton pointer (no code hook needed — direct data manipulation possible!), (2) initializer (lifecycle anchor only), (3) GetRecords (read-path reference).
+- **Key architecture insight (from F-014):** Records can be modified by reading the singleton pointer + writing the hash table directly. No code hook needed. This corroborates FA-003's hash-table observation but with the CORRECT struct size. **FA-007's "direct memory write doesn't work" may have been wrong** — it failed because the prior approach used the wrong struct layout, not because the access model required fn-ptr interception.
+- **Hypotheses resolved:**
+  - H-002 → **resolved-failed** (FA-010 added: "Assuming macOS TweakDB struct = 0x198 differs from Windows")
+  - H-005 → **resolved-fact** (real accessor found via xref, exactly as theorized)
+  - H-001 narrowed: records confirmed hash table, NOT dispatch. Flats still unknown (separate map).
+- **New hypotheses added:** H-006 (flats map layout — unknown), H-007 (apply-mods trigger point — unknown).
+- **Tooling note (Scope):** The 450MB `Cyberpunk2077.c` decompilation is INCOMPLETE — doesn't contain TweakDB accessors. All T-002c results came from the 9GB `Cyberpunk2077.txt` full disassembly. Future Ghidra work must use `.txt` or the live `ghidraRun` project, not `.c`.
+- **New tasks:** T-002d (Scope, constructor disasm for flats map + vtable status), T-002e (Scope, apply-mods trigger), T-002f (Hookline, empirical singleton dump probe).
+- **Status:** progress 65% → 80%. Phase 0 nearly complete.
+- **Files changed:** docs/FACTS.md (F-011..F-014 by Scope), docs/FAILED_APPROACHES.md (FA-010 by Scope), docs/HYPOTHESES.md (H-002/H-005 resolved, H-006/H-007 added by Scope), state/tasks.yaml, state/status.yaml, this log.
+- **FACTS added:** F-011, F-012, F-013, F-014.
+- **FAILED_APPROACHES added:** FA-010.
+- **HYPOTHESES resolved:** H-002 (failed), H-005 (fact).
+- **HYPOTHESES added:** H-006, H-007.
+- **Blockers:** none.
+- **Next:** Lucas's call between T-002d (Ghidra), T-002e (gated on T-002d), T-002f (probe). My recommendation: serial T-002d → T-002f → T-002e.
+
+---

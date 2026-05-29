@@ -270,3 +270,85 @@ No additional stubs or changes are needed for the `.tweak` parser layer itself. 
 - **Invalidates:** none
 
 ---
+
+### F-011: TweakDB singleton access path — getter, global pointer, and initializer (resolves H-005)
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1 (build 5314028)
+- **Method:** Static analysis of `reference/ghidra/Cyberpunk2077.txt` (full disassembly listing), entered from the F-008 anchor `0x1073bbea8` (the `emptyRecords` static of `TweakDB::GetRecords<Vehicle_Record>`). All addresses below are **static** (Ghidra base `0x100000000`); runtime = static + slide (F-004), slide per-launch (F-007).
+- **The singleton getter — `FUN_102b73c7c` @ static `0x102b73c7c`:**
+  ```
+  adrp x19,0x1080c9000 ; add x19,#0x2d0   ; x19 = &g_TweakDB  (= 0x1080c92d0)
+  ldapr x8,[x19] ; cbz x8 -> init         ; acquire-load the global; if null, init
+  ldapr x0,[x19] ; ret                    ; return *g_TweakDB in x0
+  init: bl FUN_102b73b50 ; ldapr x0,[x19] ; ret
+  ```
+  Returns `game::data::TweakDB*` in x0. Called from thousands of sites (central accessor); confirmed it is the `this`-source for `GetRecords` (the caller at `0x10121c75c` does `bl FUN_102b73c7c` immediately before `bl FUN_10121f264`).
+- **The global singleton pointer — static `0x1080c92d0`, in `__bss`** (Ghidra label `__bss:DAT_1080c92d0`; writable, zero-initialized). Holds the heap `TweakDB*`. **Reading `*(0x1080c92d0 + slide)` at runtime yields the live TweakDB instance — no code hook required to obtain it.**
+- **The initializer — `FUN_102b73b50` @ static `0x102b73b50`:** allocates the instance (`mov w0,#0x168; bl red::memory::Pool…Allocate`), `bzero`s it, runs the constructor `FUN_102b73db8` @ static `0x102b73db8`, then `swpal` (atomic store) the pointer into `0x1080c92d0`. Note: this constructs an **empty** TweakDB — record/flat data is populated by a *later* load path (not in this function; see FOLLOW-UPS), so this is the lifecycle-create point, not the mods-apply point.
+- **How to re-verify:**
+  ```bash
+  cd reference/ghidra
+  grep -n -m1 '__text:102b73c7c' Cyberpunk2077.txt    # getter entry; body reads 0x1080c92d0
+  grep -n -m1 '__text:102b73b50' Cyberpunk2077.txt    # initializer; 'mov w0,#0x168' + Allocate
+  grep -n -m6 '1073bbea8' Cyberpunk2077.txt           # anchor xref into GetRecords (F-012)
+  ```
+- **Invalidates:** none (resolves H-005)
+
+---
+
+### F-012: `TweakDB::GetRecords<Vehicle_Record>` = `FUN_10121f264` @ static 0x10121f264; reveals records hash-map layout
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1 (build 5314028)
+- **Evidence:** `FUN_10121f264` references both the `emptyRecords` static `0x1073bbea8` (F-008 anchor 1) and its `__cxa_guard_acquire` guard `0x1073bbeb8`; the "no records" branch lazily constructs and returns that empty `red::DynArray`. This identifies it as `game::data::TweakDB::GetRecords<Vehicle_Record>() const` (returns `red::DynArray<THandle<TweakDBRecord>> const&`; `this` in x0). Its body performs an FNV-1a hash (basis `0x811c9dc5`, prime `0x01000193`) of the lookup key and indexes a hash table on `this`:
+  - `+0x88` — pointer to hash **bucket-index array** (uint32 entries; `ldr x10,[x19,#0x88]`, indexed `[x10, w9, UXTW #2]`)
+  - `+0x90` — entry **count** / non-empty flag (uint32; `cbz` → empty-records path)
+  - `+0x94` — **bucket count** (uint32; used as `udiv` modulus on the hash)
+  - `+0x98` — pointer to **entries array** (records map storage)
+  - `+0xa4` — **entry stride** (uint32; `mul w11,w11,w10` to index entries)
+  - Entry shape (walked at `0x10121f328`): `+0x00` next-index, `+0x04` stored hash (uint32), `+0x08` key/TweakDBID (8 bytes), payload follows.
+- **Callers (xrefs):** static `0x10121c760`, `0x101537164`, `0x1035ef734` — each obtains `this` from the singleton getter `FUN_102b73c7c` (F-011).
+- **How to re-verify:** `awk 'NR>=5974950 && NR<=5975110' reference/ghidra/Cyberpunk2077.txt` (function body around the `0x1073bbea8`/`0x1073bbeb8` references).
+- **Invalidates:** none
+
+---
+
+### F-013: macOS TweakDB struct is 0x168 bytes; records storage is a plain hash table (no function-pointer dispatch) — DISPROVES H-002
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1 (build 5314028)
+- **Evidence:** The singleton initializer `FUN_102b73b50` (F-011) allocates the TweakDB instance with `mov w0,#0x168` immediately before `bl red::memory::Pool…Allocate(ulonglong)`, then `bzero`s the `0x168`-byte block and constructs it in place. The constructed pointer is stored into the global `0x1080c92d0` and is the exact object `GetRecords` (F-012) dereferences — so the records hash-map fields at `+0x88…+0xa4` lie within this `0x168`-byte struct. Consistent.
+- **Two corrections to prior assumptions:**
+  1. **Struct size is `0x168` bytes (360), the SAME as the Windows layout — NOT `0x198`.** This directly disproves H-002 (which claimed macOS uses `0x198`, differing from Windows's `0x168`). The old session-20 "0x198" figure is wrong on build 2.3.1. → see FA-010, H-002 marked resolved-failed.
+  2. **Records storage is a conventional hash table** (bucket-index array + entries array + stride, F-012), read by inline code — **not** a function-pointer dispatch table. This corroborates FA-003's "hash table, not sorted array" observation and weakly counter-indicates H-001 (function-pointer dispatch) for the *records* map. (H-001 concerns *flats* specifically and remains open — flats map not yet examined; see FOLLOW-UPS.)
+- **How to re-verify:**
+  ```bash
+  cd reference/ghidra
+  L=$(grep -n -m1 '__text:102b73b50' Cyberpunk2077.txt | cut -d: -f1)
+  awk -v s=$((L+25)) -v e=$((L+40)) 'NR>=s&&NR<=e' Cyberpunk2077.txt   # shows 'mov w0,#0x168' + Allocate + swpal to 0x1080c92d0
+  ```
+- **Invalidates:** none added to FACTS; disproves hypothesis H-002 (see FA-010)
+
+---
+
+### F-014: Candidate hook/access targets for TweakDB runtime modification (for hook-engineer)
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1 (build 5314028)
+- **All addresses static (base 0x100000000); apply per-launch slide (F-004/F-007).**
+
+  | # | Target | Static addr | What it is | Suggested approach |
+  |---|--------|-------------|-----------|--------------------|
+  | 1 | Global singleton pointer | `0x1080c92d0` (`__bss`) | Live `TweakDB*` handle | **Read-only, no hook.** Read `*(0x1080c92d0+slide)` to get the live instance, then operate on its hash maps. `__bss` is writable but the *pointer target* is what we use. FA-001-compliant (no `__TEXT` write). |
+  | 2 | Singleton initializer | `FUN_102b73b50` @ `0x102b73b50` | Allocates+constructs the (empty) DB once | Lifecycle anchor only — DB is empty here; **not** the mods-apply point. |
+  | 3 | `GetRecords<T>` | `FUN_10121f264` @ `0x10121f264` | Records hash-map query | Reference for struct layout (F-012); a read-path, not a write target. |
+
+- **Hooking constraints (carry-forward):** Per FA-001, `__TEXT` is immutable — no inline patching. These functions are reached by **direct `bl`** (not GOT-indirected), so a GOT hook does **not** apply to intra-image direct calls. Viable FA-001-compliant strategies for hook-engineer to evaluate:
+  - **(a) Direct data manipulation** via target #1: read the global, walk/modify the records/flats hash maps in the heap instance. Needs the flats-map layout + value-storage format first (next research step).
+  - **(b) VTable hook** *iff* TweakDB has a vtable: the constructor `FUN_102b73db8` would write a vtable pointer at `this+0x00` — if so, the vtable lives in `__DATA_CONST`/`__DATA` and a virtual method (e.g. a load/reload entry) can be swapped without touching `__TEXT`. **Unverified** — requires inspecting `FUN_102b73db8` (not yet done).
+  - **The "when to apply mods" signal is still unknown** — the data-load/reload path that populates the empty DB is not yet located (see FOLLOW-UPS). Mods must be applied *after* that load, not at target #2.
+- **How to re-verify:** addresses cross-checked against F-011/F-012 evidence; re-run those greps.
+- **Invalidates:** none
+
+---

@@ -128,3 +128,14 @@ The following entries carry forward hard-won lessons from ~17 prior Claude sessi
   1. **Wrong namespace.** `RED4ext::*` is the *Windows mod SDK's* wrapper namespace — it does not exist in CDPR's shipped binary. The engine's actual types live under `game::data::TweakDB*` / `red::*`. So every `RED4ext::`-prefixed candidate is guaranteed to miss.
   2. **The real accessor is not an exported dynamic symbol anyway.** The binary is NOT export-stripped (67,928 exports — see F-006), yet none of its 136 exported `Tweak*` functions is a TweakDB singleton getter / `GetFlat` / `SetFlat`. Those are internal/inlined and have no name reachable by `dlsym`. (Consistent with FA-004: `GetFlat`/`SetFlat` are likely non-virtual/inlined.)
 - **What to do instead:** Do not use `dlsym` to locate TweakDB internals. Locate the function statically (Ghidra static address) and convert to runtime with the slide formula in F-004 (`runtime = static + slide`). Since Ghidra's auto-analysis did not name the accessor either (F-006), it must first be located by xref analysis — see H-005.
+
+---
+
+### FA-010: Assuming the macOS TweakDB struct is 0x198 bytes (differs from Windows's 0x168)
+
+- **Date:** 2026-05-29
+- **Tried by:** Scope (researcher), T-002c
+- **Source:** Disproves hypothesis H-002 (carried from old session 20); resolved by F-013.
+- **Approach:** Old session-20 work concluded the macOS TweakDB struct was `0x198` bytes — larger than the Windows `0x168` — because Windows field offsets (e.g. `0x148` for flatDataBuffer) appeared not to match the macOS layout.
+- **Why it failed (it's false):** The TweakDB singleton initializer `FUN_102b73b50` (@ static `0x102b73b50`) allocates the instance with `mov w0,#0x168` immediately before `bl red::memory::Pool…Allocate`, then `bzero`s the `0x168`-byte block, constructs it (`FUN_102b73db8`), and stores it into the global `0x1080c92d0`. The struct is **`0x168` bytes — identical to the Windows size.** The records hash-map fields (`+0x88…+0xa4`, F-012) all fit within `0x168`. The old "0x198" was wrong (likely a misread allocation site or a different object on an older build).
+- **What to do instead:** Use struct size `0x168` (F-013). The Windows-vs-macOS divergence is NOT in the struct size — it is in the *internal field layout / storage semantics* (macOS records storage is a hash table per FA-003/F-012). Do not re-derive struct size; cite F-013. Re-validate only if the binary SHA256 (F-001) changes.

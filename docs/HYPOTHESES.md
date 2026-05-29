@@ -48,7 +48,7 @@ Resolved hypotheses can be deleted after 30 days (the source of truth is now in 
 - **Proposed:** 2026-05-28 (carried from old session 20)
 - **Why we think this:** Old finding that Windows offsets (`0x148` for flatDataBuffer) didn't match macOS layout.
 - **How to test:** Locate TweakDB constructor in current Ghidra output, measure struct size from allocation site.
-- **Status:** open
+- **Status:** **resolved-failed (2026-05-29)** — DISPROVED. The singleton initializer `FUN_102b73b50` allocates `0x168` bytes (`mov w0,#0x168; bl Allocate`), so the macOS struct is `0x168` — the SAME as Windows, not `0x198`. See **F-013** and **FA-010**. The old session-20 figure was wrong on build 2.3.1.
 - **Owner:** researcher
 
 ### H-003: VTABLE[5] of TweakDB is a reliable startup-fire hook
@@ -76,6 +76,24 @@ Resolved hypotheses can be deleted after 30 days (the source of truth is now in 
   2. **Singleton hunt:** find the callers of those `GetRecords` functions — they must obtain the `TweakDB*` (the `this`) from somewhere. That source is the singleton getter / global the game uses. 
   3. **Secondary hub:** static `0x1073af788` (the `game::data::TweakDBID` RTTI type-object pointer) is read from many call sites; its writer is `GetTypeObject<TweakDBID>()` and `RegisterGameTweakDBRTTI` (`0x1073eeab0`) — useful for mapping the TweakDB record/flat type registration.
   4. Record the static address of the most stable candidate (singleton getter or init/load). Convert to runtime with `static + slide` (F-004), using the slide from the launch's probe log (F-007). Confirm by reading the bytes (see redefined T-002b).
-- **Status:** open — anchors identified (F-008), Ghidra xref not yet started
+- **Status:** **resolved-fact (2026-05-29)** — RESOLVED via T-002c Ghidra xref. The singleton getter `FUN_102b73c7c` (@ static `0x102b73c7c`), the global instance pointer (`0x1080c92d0`, `__bss`), the initializer (`FUN_102b73b50` @ `0x102b73b50`), and a concrete member function `GetRecords<Vehicle_Record>` (`FUN_10121f264` @ `0x10121f264`) were all identified by xref from the F-008 anchor `0x1073bbea8`. See **F-011** (singleton path), **F-012** (GetRecords + layout), **F-013** (struct size + hash-table storage). The accessor is reachable; the original premise (find via xref, not symbol/dlsym) was correct.
 - **Owner:** researcher
-- **Depends on:** nothing blocking — the Ghidra xref can start now from the F-008 anchors. (The runtime byte-confirmation step depends on the slide-formula check, redefined T-002b, but the static analysis does not.)
+- **Resolved by:** F-011 / F-012 / F-013
+
+### H-006: TweakDB flats are stored in a second hash map within the 0x168 struct, parallel to the records map
+
+- **Proposed:** 2026-05-29 by Scope (researcher)
+- **Why we think this:** F-012 showed the *records* map is a hash table at `this+0x88…+0xa4` inside the `0x168` struct (F-013). The struct has room before `+0x88` and after `+0xa4` for a second, structurally-similar map. TweakXL on Windows treats flats and records as distinct collections; the macOS struct almost certainly mirrors this with a separate flats hash map (the thing mod-loader must write to apply flat Assign/Append/Remove).
+- **How to test:** Disassemble the TweakDB constructor `FUN_102b73db8` (@ static `0x102b73db8`) to enumerate every field it initializes across the `0x168` block; identify a second bucket-array/entries/stride triple (the flats map) and its base offset. Cross-check by finding a flat-read function (xref from a flat-typed RTTI or a `GetFlat`-shaped access) and confirming it indexes the same offsets.
+- **Status:** open
+- **Owner:** researcher
+- **Note:** This is the direct prerequisite for hook-target approach F-014(a) (direct data manipulation) — mod-loader cannot write flats without this layout.
+
+### H-007: The DB-populate/load path (not the FUN_102b73b50 constructor) is the correct mods-apply hook point
+
+- **Proposed:** 2026-05-29 by Scope (researcher)
+- **Why we think this:** F-011 showed `FUN_102b73b50` constructs an EMPTY TweakDB (allocate + bzero + ctor). The records/flats maps are populated later, from the on-disk TweakDB data (the engine has `TweakDBReloader`/`TweakDBResource` machinery — seen in exported symbols, F-006/F-008). Mods must be applied AFTER that load completes, or they'll be overwritten.
+- **How to test:** Locate the function that fills the records/flats maps (xref the maps' writer sites, or trace `TweakDBResource` text-format resource loader / `TweakDBReloader` symbols). Find the post-load completion point. That is the timing signal for mod application.
+- **Status:** open
+- **Owner:** researcher
+- **Note:** Until this is found, Hookline has no validated "apply mods now" trigger. Highest-priority next research step alongside H-006.

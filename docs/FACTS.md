@@ -352,3 +352,68 @@ No additional stubs or changes are needed for the `.tweak` parser layer itself. 
 - **Invalidates:** none
 
 ---
+
+### F-015: Complete TweakDB struct field map (from constructor FUN_102b73db8) — 0x168 bytes, three parallel hash maps + flat-data-buffer region
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1 (build 5314028)
+- **Method:** Disassembled the constructor `FUN_102b73db8` @ static `0x102b73db8` (T-002d), addressing every `str`/`strh`/`strb`/`stur` to `this` (x19). Destructor `FUN_102b73fa8` @ `0x102b73fa8` cross-checked the container teardown/hash semantics. All static addresses (base 0x100000000; +slide for runtime, F-004/F-007).
+- **Top-level field map (offset → field → notes):**
+
+  | Offset | Field | Evidence / notes |
+  |---|---|---|
+  | `+0x00..0x1F` | zeroed | `stp q0,q0,[x0]`, q0=0 — **vtable slot is ZERO, no vtable (F-016)** |
+  | `+0x20` | u16 = 0 | `strh wzr,[x0,#0x20]` (atomic/refcount field; dtor touches +0x20/+0x21) |
+  | `+0x28` | ptr → heap **0x158-byte** sub-object | `mov w0,#0x158; Allocate; bzero; thunk_FUN_102b7b084(init); str x20,[x19,#0x28]` — largest sub-alloc; **flat-value pool / manager candidate** |
+  | `+0x30` | ptr → heap **0xf8-byte** sub-object | `mov w0,#0xf8; Allocate; bzero; FUN_102b76e78(init); str x20,[x19,#0x30]` — secondary manager |
+  | `+0x38` | u8 = 1 | `mov w8,#1; strb w8,[x19,#0x38]` — flag (owns/initialized) |
+  | `+0x40` | embedded sub-object | `add x20,x19,#0x40; FUN_102b03e88; FUN_1000285e0` (lock/small container) |
+  | `+0x4c` | 8 bytes = 0 | `stur d0,[x19,#0x4c]` |
+  | **`+0x58`** | **hash map A** (bucket array; entries +0x68; sentinel +0x78=0xffffffff; allocator +0x80) | structurally identical to records — **flats-map candidate (inferred, see F-017)** |
+  | **`+0x88`** | **hash map B = RECORDS** | F-012: bucket +0x88, count +0x90, bucketcount +0x94, entries +0x98, stride +0xa4; sentinel +0xa8; allocator +0xb0 |
+  | `+0xb8` | embedded sub-object | `add x20,x19,#0xb8; FUN_102b05460; FUN_1000285e0` |
+  | `+0xc4` | u32 = 0 | |
+  | `+0xc8` | embedded **small hash map** | `FUN_1000285e0`; dtor frees entries of size 0x8/align 4 (HashMap<key,u32>-like); count +0xd4 |
+  | `+0xe0` | embedded sub-object | `FUN_102b05ba8; FUN_1000285e0` |
+  | `+0xec` | u32 = 0 | |
+  | `+0xf0` | embedded container | `FUN_1000285e0`; +0xfc = 0 |
+  | **`+0x108`** | **hash map C** (bucket array +0x108; count +0x114; entries +0x118; sentinel +0x128; allocator +0x130) | dtor resets buckets to 0xffffffff, frees entries size 0x20; **queries-map candidate (inferred)** |
+  | `+0x138` | embedded container | `FUN_102b028b0; FUN_1000285e0`; count +0x144 |
+  | `+0x148` | ptr = 0 | `str xzr,[x19,#0x148]` — **flat-data-buffer pointer** (mirrors Windows flatDataBuffer@0x148; filled at load time, not in ctor) |
+  | `+0x150` | u32 = 0 | buffer size/end |
+  | `+0x158` | 8 bytes = 0 | buffer capacity/ptr |
+  | `+0x160` | u8 = 0 | |
+  | `+0x164` | u32 = 0 | last field; struct ends at **0x168** |
+
+- **Confirmed:** struct = 0x168 (F-013); records map at +0x88 (F-012); **three structurally-identical hash maps** at +0x58 / +0x88 / +0x108 (same bucket-index-array + entries + `0xffffffff` empty-bucket sentinel template).
+- **How to re-verify:** `L=$(grep -n -m1 '__text:102b73db8' reference/ghidra/Cyberpunk2077.txt | cut -d: -f1); awk -v s=$L -v e=$((L+125)) 'NR>=s&&NR<=e' reference/ghidra/Cyberpunk2077.txt`
+- **Invalidates:** none (extends F-012/F-013)
+
+---
+
+### F-016: TweakDB has NO vtable — VTable hooking is not viable (finalizes F-014b)
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1 (build 5314028)
+- **Evidence:** The constructor `FUN_102b73db8`'s **first** memory operation on `this` is `movi v0.2D,#0x0` then `stp q0,q0,[x0]` — it writes 32 zero bytes to `this+0x00..0x1F`. `this+0x00` (the C++ vtable slot for a polymorphic class) is therefore set to **0**, and no code pointer is written to `this+0x00` (or any other offset) anywhere in the constructor. The initializer `FUN_102b73b50` (F-011) calls this constructor directly with no derived-class wrapper. As constructed, the TweakDB object is non-polymorphic: no vtable pointer is installed.
+- **Consequence for hook-engineer:** **F-014 approach (b) (VTable hook) is NOT viable** — there is no vtable to swap. This also retires the old VTABLE-slot line of investigation (H-003, FA-004, FA-005) for *this* object: TweakDB methods are not dispatched through a vtable. The remaining FA-001-compliant path is **direct data manipulation** via the global singleton pointer (F-014 approach (a)).
+- **How to re-verify:** inspect the first ~3 instructions of `FUN_102b73db8` (lines after entry): `movi v0.2D,#0x0; stp q0,q0,[x0]`.
+- **Invalidates:** none (finalizes F-014's approach (b) as non-viable)
+
+---
+
+### F-017: TweakDB flats use plain hash-table + data-buffer storage (NOT a function-pointer dispatch table) — resolves H-001 and H-006
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1 (build 5314028)
+- **Evidence (all from the constructor F-015 + records function F-012):**
+  1. The struct contains **three structurally-identical hash maps** (+0x58, +0x88=records, +0x108), each a plain data hash table: a bucket-index array of `uint32` (empty = `0xffffffff`), an entries array, a bucket count, and an entry stride — indexed by an FNV-1a hash of the TweakDBID (F-012). No entry is a code pointer; lookup is inline arithmetic, not a call through a pointer table.
+  2. A **flat-data-buffer region at +0x148** (pointer +0x148, size +0x150, capacity +0x158) holds the actual flat *values* — mirrors the Windows `flatDataBuffer@0x148`. Zeroed in the constructor; populated at load time.
+  3. The constructor writes **no function pointers** into the struct (F-016): `this+0x00` is zeroed; every initialized field is a data value, an embedded data container, or an allocator pointer.
+- **Resolves H-001 (DISPROVED):** the old theory that TweakDB storage is a "function-pointer dispatch table" is wrong on build 2.3.1. Flats (and records, and queries) are stored in conventional hash tables backed by a flat-value buffer — plain data, no code-pointer dispatch. The old session-62 "staticFlatDataBuffer contained code pointers" reading was mistaken (it likely dumped a region of embedded sub-object/allocator pointers or misattributed the slide). → see FA-011.
+- **Resolves H-006 (CONFIRMED in substance):** flats ARE stored in a hash map parallel to the records map (the records template repeats; F-015), plus the +0x148 flat-value buffer. Storage scheme = **hash table + value buffer**, same family as records.
+- **One detail still open (narrowed, NOT drift-resolved here):** *which* of the two non-records hash maps is specifically **flats** vs **queries** — block A (+0x58) vs block C (+0x108) — is **inferred** (records=+0x88 is the middle of three; RED's declaration order is flats, records, queries → flats=+0x58, queries=+0x108) and is consistent with the Windows analogy, but is **not** directly confirmed by a macOS `GetFlat` accessor disassembly. Per FA-006, do not treat the +0x58=flats assignment as fact until a `GetFlat`/flat-read function is xref'd to it. This is a one-step follow-up (T-002e).
+- **How to re-verify:** F-015 / F-012 re-verify commands; confirm no `bl`-through-pointer in GetRecords and no code pointer written by the constructor.
+- **Invalidates:** none in FACTS; disproves H-001 (see FA-011)
+
+---

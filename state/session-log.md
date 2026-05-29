@@ -281,3 +281,39 @@ Resolved: H-005 → resolved-fact (F-011/F-012/F-013). H-002 → resolved-failed
 - **Next:** Lucas's call between T-002d (Ghidra), T-002e (gated on T-002d), T-002f (probe). My recommendation: serial T-002d → T-002f → T-002e.
 
 ---
+
+---
+
+**2026-05-29 — Scope (researcher) — T-002d (constructor disassembly)**
+
+Disassembled TweakDB ctor FUN_102b73db8 (0x102b73db8) + cross-checked dtor FUN_102b73fa8. Produced complete 0x168 struct field map (F-015): three structurally-identical hash maps at +0x58 / +0x88(records, F-012) / +0x108, two heap sub-objects (ptr@+0x28→0x158B, ptr@+0x30→0xf8B), and a flat-data-buffer region at +0x148 (mirrors Windows flatDataBuffer@0x148).
+
+VTABLE: ABSENT (F-016). First ctor op is stp q0,q0,[x0] with q0=0 → this+0x00 zeroed, no code ptr written anywhere. F-014(b) VTable hooking ruled out; only F-014(a) direct-data manipulation remains. Also retires the old VTABLE-slot lines (H-003/FA-004/FA-005) for this object.
+
+H-001 DISPROVED (FA-011) and H-006 RESOLVED (F-017): flats are plain hash-table + value-buffer storage, NOT a function-pointer dispatch table. One detail intentionally left for T-002e (not drift): the exact flats-vs-queries block assignment (+0x58 vs +0x108) is inferred from declaration order + Windows analogy and needs a GetFlat-accessor xref to become byte-fact (FA-006 caution). That xref is the prerequisite for any flat-writing code (F-014a). T-002e should also still find the data-LOAD/apply-trigger (H-007).
+
+## 2026-05-29 — T-002d shipped: complete struct map + no-vtable + flats-are-hashtable (Claude as Conductor)
+
+- **Goal:** Disassemble TweakDB constructor `FUN_102b73db8` to nail flats map layout (H-006) and vtable status (F-014b).
+- **Scope's run (Opus 4.7, 534s ≈ 9 min, 672 raw output lines):**
+  - **F-015** — Complete TweakDB struct field map. Every `str` to `this` in ctor accounted for. 0x168 bytes. **Three parallel hash maps** at +0x58, +0x88 (records confirmed), +0x108. **Flat-data-buffer pointer at +0x148** — same offset as Windows. Two heap sub-objects at +0x28 (0x158B, flat-pool candidate) and +0x30 (0xf8B).
+  - **F-016** — TweakDB has **NO vtable**. `this+0x00` is zeroed first thing in ctor (`stp q0,q0,[x0]`). No code pointer written anywhere. **F-014(b) VTable hook is ruled out.** Retires H-003 / FA-004 / FA-005 vtable lines for this object.
+  - **F-017** — Flats are stored in a plain hash table + value buffer (NOT fn-ptr dispatch). **Resolves H-001 (DISPROVED)** and **H-006 (CONFIRMED)**.
+  - **FA-011** — Theory that TweakDB storage is a function-pointer dispatch table (H-001). Documented as wrong on 2.3.1.
+- **Architectural simplification — MAJOR:**
+  - No vtable → no VTable hooks
+  - No fn-ptr dispatch → no fn-ptr-table hooks
+  - Three hash maps + value buffer = pure data
+  - **Implementation = read singleton pointer + walk hash map + write value buffer.** Zero code hooks needed for the data path.
+  - Re-signing for `allow-jit` may NEVER be needed for v1.0 TweakXL work (only relevant if Phase 2+ ArchiveXL/CET needs MAP_JIT trampolines)
+- **One remaining static-analysis unknown:** which of the two non-records hash maps (+0x58 or +0x108) is flats vs queries. Per RED's declaration order (flats, records, queries), +0x58 = flats, +0x108 = queries. But this is **inferred from Windows analogy**, not directly confirmed by a macOS GetFlat xref. T-002e resolves this with ONE xref.
+- **H-007 (apply-trigger) merged into T-002e** — same Ghidra session can find both.
+- **Status:** progress 80% → 90%. Phase 0 has one task left (T-002e).
+- **Files changed:** docs/FACTS.md (F-015..F-017 by Scope); docs/HYPOTHESES.md (H-001 resolved-failed, H-006 resolved-fact by Scope); docs/FAILED_APPROACHES.md (FA-011 by Scope); state/tasks.yaml (T-002d done, T-002e refined); state/status.yaml; this log.
+- **FACTS added:** F-015, F-016, F-017.
+- **FAILED_APPROACHES added:** FA-011.
+- **HYPOTHESES resolved:** H-001 (failed), H-006 (fact). H-003 effectively retired for TweakDB per F-016 (no vtable).
+- **Blockers:** none.
+- **Next:** Fire T-002e immediately — one Ghidra pass settles the flats/queries ambiguity AND finds the apply-mods trigger. After that, Phase 0 is closed, Phase 1 implementation can start.
+
+---

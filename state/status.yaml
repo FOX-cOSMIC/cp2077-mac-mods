@@ -9,45 +9,38 @@ last_updated: 2026-05-29
 current_phase:
   id: 0
   name: bootstrap-and-revalidation
-  progress_pct: 80
+  progress_pct: 90
   description: >
-    T-002c shipped huge results. F-011 (singleton path), F-012 (GetRecords
-    + records map layout), F-013 (struct = 0x168 same as Windows; records
-    are hash table NOT fn-ptr dispatch), F-014 (hook targets). H-002 →
-    resolved-failed, H-005 → resolved-fact. KEY ARCHITECTURE INSIGHT
-    (F-014): no code hook needed for records — read singleton pointer at
-    0x1080c92d0+slide, write directly to struct offsets. Three new tasks:
-    T-002d (constructor disasm for flats map + vtable), T-002e (apply-mods
-    trigger), T-002f (runtime probe to confirm static analysis). Phase 0
-    nearly complete.
+    T-002d shipped — full TweakDB struct map (F-015), no vtable (F-016),
+    flats use plain hash table + value buffer at +0x148 (F-017, mirrors
+    Windows!). H-001 → resolved-FAILED (no fn-ptr dispatch anywhere).
+    H-006 → resolved-fact. ARCHITECTURE NOW SIMPLE: read singleton
+    pointer, walk hash map by FNV-1a TweakDBID, write flat-value buffer.
+    Zero code hooks needed for the data path. Only T-002e left (flats
+    vs queries +0x58/+0x108 disambiguation + apply-trigger H-007), then
+    Phase 0 is DONE and Phase 1 implementation can begin.
 
 blockers: []
 
 pending_decisions: []
 
 next_action:
-  agent: lead
-  task_id: T-002d
+  agent: researcher
+  task_id: T-002e
   description: >
-    Three Phase 0 closers, one of which is parallel-eligible:
-    - T-002d (Scope, Ghidra) — disassemble constructor FUN_102b73db8 for
-      flats map layout (H-006) + vtable status. Resolves H-001 for flats.
-    - T-002e (Scope, Ghidra) — find apply-mods trigger point (H-007).
-      Depends on T-002d.
-    - T-002f (Hookline, probe) — empirical singleton dump to validate
-      F-011/F-012/F-013 against runtime. Could run in parallel with T-002d
-      but serializes on subscription.
-    Lucas's call: serial T-002d→T-002e→T-002f, or parallel-ish.
+    Phase 0 closer. Scope finds: (A) which non-records hash map (+0x58 or
+    +0x108) is flats — single GetFlat xref settles it. (B) apply-mods
+    trigger function — where the DB populate path completes.
+    After T-002e, Phase 0 is done.
 
 recent_facts_added:
-  - F-007
-  - F-008
-  - F-009
-  - F-010
   - F-011
   - F-012
   - F-013
   - F-014
+  - F-015
+  - F-016
+  - F-017
 recent_failed_added:
   - FA-001
   - FA-002

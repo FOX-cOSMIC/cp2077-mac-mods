@@ -139,3 +139,14 @@ The following entries carry forward hard-won lessons from ~17 prior Claude sessi
 - **Approach:** Old session-20 work concluded the macOS TweakDB struct was `0x198` bytes — larger than the Windows `0x168` — because Windows field offsets (e.g. `0x148` for flatDataBuffer) appeared not to match the macOS layout.
 - **Why it failed (it's false):** The TweakDB singleton initializer `FUN_102b73b50` (@ static `0x102b73b50`) allocates the instance with `mov w0,#0x168` immediately before `bl red::memory::Pool…Allocate`, then `bzero`s the `0x168`-byte block, constructs it (`FUN_102b73db8`), and stores it into the global `0x1080c92d0`. The struct is **`0x168` bytes — identical to the Windows size.** The records hash-map fields (`+0x88…+0xa4`, F-012) all fit within `0x168`. The old "0x198" was wrong (likely a misread allocation site or a different object on an older build).
 - **What to do instead:** Use struct size `0x168` (F-013). The Windows-vs-macOS divergence is NOT in the struct size — it is in the *internal field layout / storage semantics* (macOS records storage is a hash table per FA-003/F-012). Do not re-derive struct size; cite F-013. Re-validate only if the binary SHA256 (F-001) changes.
+
+---
+
+### FA-011: Theory that TweakDB storage is a function-pointer dispatch table (H-001)
+
+- **Date:** 2026-05-29
+- **Tried by:** Scope (researcher), T-002d
+- **Source:** Disproves hypothesis H-001 (carried from old session 62e, dated 2025-12-14); resolved by F-017.
+- **Approach (the disproved theory):** Old session 62 dumped a region it called `staticFlatDataBuffer` and saw values that looked like code pointers (e.g. `0x102f53b04`), concluding TweakDB flats are accessed via a function-pointer dispatch table — and that hooking those table entries was the way to intercept flat reads/writes.
+- **Why it failed (it's false):** The TweakDB constructor `FUN_102b73db8` (@ static `0x102b73db8`) writes **no function pointers** into the `0x168` struct. `this+0x00` is zeroed (no vtable — F-016). Flats, records, and queries are stored in three structurally-identical **plain hash tables** (bucket-index array of u32 with `0xffffffff` empty sentinel + entries array; +0x58/+0x88/+0x108, F-015), keyed by an FNV-1a hash of the TweakDBID and looked up with inline arithmetic (F-012) — not via calls through a pointer table. Actual flat *values* live in a data buffer at +0x148 (F-017). The old "code pointers in staticFlatDataBuffer" reading was a misattribution — most likely embedded allocator/sub-object pointers, or a slide-conversion error.
+- **What to do instead:** Treat TweakDB as plain data. To read/modify flats, walk the hash table to resolve a TweakDBID to its entry, then read/write the flat-value buffer (+0x148 region). No code hooking, no dispatch-table interception. See F-015/F-017 and hook approach F-014(a). The remaining step is to byte-confirm the flats block (+0x58 vs +0x108) via a `GetFlat` xref (T-002e).

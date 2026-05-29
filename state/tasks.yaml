@@ -346,9 +346,11 @@ tasks:
 
   - id: T-002d
     category: research
-    status: pending
+    status: done
     priority: P0
     owner: researcher
+    completed_at: 2026-05-29
+    completed_by: cp2077-researcher (Scope, Opus 4.7, 9 min)
     subject: Disassemble TweakDB constructor FUN_102b73db8 — flats map (H-006) + vtable (F-014b)
     description: |
       Next critical static analysis after T-002c. The constructor at
@@ -386,25 +388,52 @@ tasks:
   - id: T-002e
     category: research
     status: pending
-    priority: P1
+    priority: P0
     owner: researcher
-    subject: Identify TweakDB data-load path + apply-mods trigger point (H-007)
+    subject: GetFlat xref — disambiguate flats vs queries (+0x58 vs +0x108) + apply-trigger (H-007)
     description: |
-      Per Scope's T-002c follow-up. FUN_102b73b50 builds an empty TweakDB.
-      The data-load path (where r6/cache/tweakdb.bin is parsed and the
-      flats/records are populated) is the moment we want to apply mods.
+      REFINED 2026-05-29 per T-002d follow-up.
+      Last static-analysis prerequisite before mod-loader writes the
+      flat-write code.
 
-      Method:
-      1. From the global TweakDB* pointer xrefs, find writes that populate
-         the flats/records maps after construction.
-      2. Look for symbols/strings mentioning "TweakDBReloader", "TweakDBResource",
-         or the resource-load callback signature.
-      3. Identify the function that's called once population is complete —
-         that's where mod-loader hooks to apply the YAML/.tweak ops.
+      TWO sub-questions, one Ghidra session:
 
-      Acceptance: F-NNN with the apply-trigger function's static address +
-      brief signature. H-007 resolved.
-    depends_on: [T-002d]   # cleaner to do flats layout first
+      A. Disambiguate flats vs queries hash map (refines F-017):
+         The struct has three identical hash maps at +0x58, +0x88, +0x108.
+         +0x88 = records (F-012 confirmed). The other two are inferred
+         per RED's declaration order to be flats (+0x58) and queries
+         (+0x108), but this needs ONE concrete xref to confirm.
+
+         Method:
+         1. Find any GetFlat-like accessor — call site that reads from
+            either +0x58 or +0x108.
+         2. The accessor probably indexes into the flat-data-buffer at
+            +0x148 with the entry's offset/index from the hash table.
+         3. Record: which hash-map base offset (+0x58 or +0x108) is flats?
+            What's the entry-to-buffer indexing scheme?
+
+      B. Apply-mods trigger point (H-007):
+         The constructor builds an EMPTY TweakDB. Where does the game
+         populate it? When is "the DB is ready for mods" signal fired?
+
+         Method:
+         1. From global TweakDB* writes (xrefs to 0x1080c92d0), find
+            the singleton init site. From there, trace forward.
+         2. Look for symbol/string refs to TweakDBReloader, TweakDBResource,
+            or .bin file loading.
+         3. Identify the function called once population is complete —
+            that's the hook target for mod-loader.
+
+      Acceptance:
+      - F-NNN — confirms flats hash-map offset (+0x58 vs +0x108) + entry
+        → flat-value-buffer indexing scheme. Resolves the inferred part
+        of F-017.
+      - F-NNN — apply-trigger function with static address + signature.
+        Resolves H-007.
+
+      After this, Phase 0 is DONE — mod-loader + tweakdb-engineer have
+      everything they need to start Phase 1 (real implementation).
+    depends_on: []   # unblocked
 
   - id: T-002f
     category: hook

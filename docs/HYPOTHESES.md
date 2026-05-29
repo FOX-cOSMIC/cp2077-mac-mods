@@ -40,8 +40,9 @@ Resolved hypotheses can be deleted after 30 days (the source of truth is now in 
 - **Proposed:** 2026-05-28 (carried from old session 62e, dated 2025-12-14)
 - **Why we think this:** Old dump showed `staticFlatDataBuffer` contained code pointers (e.g., `0x102f53b04`) rather than data values. Hook on entry[16] reportedly fired at startup.
 - **How to test:** Re-dump the structure at the same offset on the current game build. Disassemble entries[0..20] and check if they're code (function prologues) or data (TweakDBID-shaped values).
-- **Status:** open
+- **Status:** **resolved-failed (2026-05-29)** — DISPROVED. The TweakDB constructor `FUN_102b73db8` writes no function pointers; `this+0x00` is zeroed (no vtable, F-016); flats/records/queries are plain hash tables (+0x58/+0x88/+0x108) backed by a flat-value buffer at +0x148, not a code-pointer dispatch table. See **F-015/F-016/F-017** and **FA-011**.
 - **Owner:** researcher
+- **Resolved by:** F-017 (disproved); FA-011
 
 ### H-002: macOS TweakDB struct is 0x198 bytes, not Windows's 0x168 bytes
 
@@ -85,9 +86,10 @@ Resolved hypotheses can be deleted after 30 days (the source of truth is now in 
 - **Proposed:** 2026-05-29 by Scope (researcher)
 - **Why we think this:** F-012 showed the *records* map is a hash table at `this+0x88…+0xa4` inside the `0x168` struct (F-013). The struct has room before `+0x88` and after `+0xa4` for a second, structurally-similar map. TweakXL on Windows treats flats and records as distinct collections; the macOS struct almost certainly mirrors this with a separate flats hash map (the thing mod-loader must write to apply flat Assign/Append/Remove).
 - **How to test:** Disassemble the TweakDB constructor `FUN_102b73db8` (@ static `0x102b73db8`) to enumerate every field it initializes across the `0x168` block; identify a second bucket-array/entries/stride triple (the flats map) and its base offset. Cross-check by finding a flat-read function (xref from a flat-typed RTTI or a `GetFlat`-shaped access) and confirming it indexes the same offsets.
-- **Status:** open
+- **Status:** **resolved-fact (2026-05-29)** — CONFIRMED in substance. The constructor (F-015) shows **three** structurally-identical hash maps parallel to the records map (+0x58 / +0x88=records / +0x108), plus a flat-data-buffer region at +0x148. Flats are stored as a hash table + value buffer, same family as records (F-017). **Open detail (narrowed, not blocking H-006):** which non-records block (+0x58 vs +0x108) is flats vs queries is inferred from declaration order, pending a `GetFlat` accessor xref — tracked as the T-002e follow-up below, NOT as part of H-006.
 - **Owner:** researcher
-- **Note:** This is the direct prerequisite for hook-target approach F-014(a) (direct data manipulation) — mod-loader cannot write flats without this layout.
+- **Resolved by:** F-015 / F-017
+- **Note:** This is the direct prerequisite for hook-target approach F-014(a) (direct data manipulation) — mod-loader cannot write flats without the byte-exact block assignment, so the T-002e `GetFlat`-xref step must precede any flat-writing code.
 
 ### H-007: The DB-populate/load path (not the FUN_102b73b50 constructor) is the correct mods-apply hook point
 

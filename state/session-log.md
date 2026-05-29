@@ -496,3 +496,33 @@ Phase 0 essentially DONE: injection, slide formula, struct layout, singleton pat
 - **Next:** P1.6 (value buffer R/W) — Schema again. Then we've got the full read+write primitive chain ready for P1.10 (applicator).
 
 ---
+
+## 2026-05-29 — P1.6 shipped + DISCOVERY: flats use different hash mode than records (Claude as Conductor)
+
+- **Goal:** Value buffer R/W primitive. Schema's first task with mutation.
+- **Schema's run (Opus 4.7, 670s ≈ 11.2 min, 1386 raw output lines):**
+  - Created Values.hpp (26-type system with FlatType enum, FlatValue tagged variant)
+  - Extended TweakDB.hpp/.cpp with FlatLayout discovery, ReadFlat, WriteFlat, VerifyFlatEntry
+  - Added mach_vm_write safe-write primitive with verified-readback + audit logging
+  - Fail-safe design: Read returns nullopt and Write returns false until in-game probe confirms layout
+  - Built clean, -Wall -Wextra, zero warnings
+- **In-game smoke test results (mixed — major discovery + bug surfaced):**
+  - ✅ **Flats layout VERDICT: `flatValue-ptr-at-entry`** — tally 6/6 for ptr@0x18 (matches F-019's ref-counted-payload destructor finding). Buffer at base=0x71af1c000, size=4,291,664 B confirmed live.
+  - ✅ **Type tag at FlatValue+0x00 (vft pointer), value data at FlatValue+0x08** — Windows-style FlatValue wrapper.
+  - 🆕 **DISCOVERY: Flats map uses `nameHash-direct`, NOT `fnv1a-8B` like records.** Sample 0 stored=0xce8348b9 matches TweakDBID.nameHash (0xce8348b9) exactly; FNV-1a candidates all differ.
+  - ❌ **Round-trip FAILED** — Read using Schema's global HashMode (fnv1a-8B from P1.5 records test) on flats → wrong bucket → entry not found. Architectural assumption (one global HashMode) was wrong.
+- **What this means:**
+  - Records use FNV-1a 32-bit on 8 bytes (computed)
+  - Flats use the stored nameHash field directly (no recomputation — the binary spec's CRC32 nameHash is used straight as the bucket key)
+  - HashMap needs per-map hash mode, not a global one
+  - This is a one-line fix in HashMap.cpp + VerifyHashFunction needs to set the mode per-map, not globally
+- **Schema's design choices that paid off:**
+  - VerifyFlatEntry runs all 4 hash candidates on the actual flats map — that's how we caught the difference
+  - Fail-safe Write (no-op until layout confirmed) prevented any bad mutations
+  - The dual-pointer logging (ptr@0x10 AND ptr@0x18) gave us the layout regardless of which the probe picked
+- **Next:** Fire Schema for P1.6-FIX — per-map hash mode threading. Single edit, then re-test. After that: P1.6 truly complete and P1.10 applicator can build on it.
+- **Status:** Phase 1 progress 45% → 50% (discovery counts even though R/W round-trip didn't). Sprint 2 P1.6 80% done.
+- **FACTS / FAILED_APPROACHES added:** none yet. The flats=nameHash-direct + records=fnv1a-8B distinction is excellent F-NNN material — should be filed by Scope on next fire.
+- **Blockers:** none — the fix is well-scoped.
+
+---

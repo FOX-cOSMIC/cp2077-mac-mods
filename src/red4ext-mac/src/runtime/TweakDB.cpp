@@ -15,6 +15,7 @@
 
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <mutex>
 
 #include <mach/mach.h>
@@ -134,6 +135,408 @@ void DoVerifyH008(const TweakDB* db) {
 
 void VerifyH008(const TweakDB* db) {
     std::call_once(g_h008_once, [db] { DoVerifyH008(db); });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// P1.6 — flat value buffer R/W + Phase A layout discovery.
+// ═══════════════════════════════════════════════════════════════════════════
+
+namespace {
+
+constexpr uint32_t kEmptyBucket = 0xFFFFFFFFu;
+constexpr size_t   kEntryHashOff = 0x04;
+constexpr size_t   kEntryKeyOff  = 0x08;
+
+// Generic safe reads (the P1.4 block only had U32).
+bool SafeRead(uintptr_t addr, void* out, size_t n) {
+    if (addr == 0) return false;
+    mach_vm_size_t got = 0;
+    kern_return_t kr = mach_vm_read_overwrite(
+        mach_task_self(), (mach_vm_address_t)addr, (mach_vm_size_t)n,
+        (mach_vm_address_t)out, &got);
+    return kr == KERN_SUCCESS && got == n;
+}
+bool SafeReadU64(uintptr_t a, uint64_t* v) { return SafeRead(a, v, sizeof(*v)); }
+bool SafeReadPtr(uintptr_t a, uintptr_t* v) { return SafeRead(a, v, sizeof(*v)); }
+
+// Safe write: mach_vm_write returns an error (not a signal) on a read-only or
+// unmapped target, so a bad write fails cleanly instead of crashing the game.
+bool SafeWrite(uintptr_t addr, const void* data, size_t n) {
+    if (addr == 0) return false;
+    kern_return_t kr = mach_vm_write(
+        mach_task_self(), (mach_vm_address_t)addr,
+        (vm_offset_t)data, (mach_msg_type_number_t)n);
+    return kr == KERN_SUCCESS;
+}
+
+// A pointer that plausibly points into slid game/heap memory (filters 0/garbage).
+bool PlausiblePtr(uintptr_t p) {
+    return p >= 0x100000000ull && p < 0x0001000000000000ull;
+}
+
+// ── Global discovered layout (guarded; defaults to Unknown/unconfirmed) ──────
+std::mutex g_layoutMtx;
+FlatLayout g_layout;   // .confirmed == false until VerifyFlatEntry validates one
+
+// Snapshot of a flats map's load-bearing fields.
+struct FlatMapView {
+    uint32_t  bucketCount = 0, stride = 0, count = 0;
+    uintptr_t bucketArray = 0, entries = 0;
+};
+bool ReadFlatsMap(const TweakDB* db, FlatMapView* mv) {
+    const HashMap* m = GetFlatsMapCandidate(db);   // +0x58 (H-008 confirmed flats)
+    if (!m) return false;
+    const uintptr_t mb = reinterpret_cast<uintptr_t>(m);
+    if (!SafeReadU32(mb + offsetof(HashMap, bucketCount), &mv->bucketCount)) return false;
+    if (!SafeReadU32(mb + offsetof(HashMap, stride),      &mv->stride))      return false;
+    if (!SafeReadU32(mb + offsetof(HashMap, count),       &mv->count))       return false;
+    if (!SafeReadPtr(mb + offsetof(HashMap, bucketArray), &mv->bucketArray)) return false;
+    if (!SafeReadPtr(mb + offsetof(HashMap, entries),     &mv->entries))     return false;
+    return mv->bucketCount && mv->stride && mv->bucketArray && mv->entries;
+}
+
+void ReadBuffer(const TweakDB* db, uintptr_t* base, uint32_t* size) {
+    const uintptr_t dbA = reinterpret_cast<uintptr_t>(db);
+    *base = 0; *size = 0;
+    SafeReadPtr(dbA + offsetof(TweakDB, flatDataBuffer),     base);
+    SafeReadU32(dbA + offsetof(TweakDB, flatDataBufferSize), size);
+}
+
+// Given an entry and a layout, resolve the value-OBJECT base address (the thing
+// whose +valueDataOff holds the scalar). Reads the entry's STORED key, so the
+// caller's id need not carry a tdbOffset.
+bool ResolveValueObj(const TweakDB* db, uintptr_t entry,
+                     const FlatLayout& lay, uintptr_t* out) {
+    uintptr_t bufBase = 0; uint32_t bufSize = 0;
+    ReadBuffer(db, &bufBase, &bufSize);
+
+    switch (lay.source) {
+        case FlatValueSource::BufferViaTdbOffset: {
+            uint64_t key = 0;
+            if (!SafeReadU64(entry + kEntryKeyOff, &key)) return false;
+            const uint32_t off = (uint32_t)((key >> 40) & 0xFFFFFFu); // key bytes 5..7
+            if (!bufBase || off == 0 || off >= bufSize) return false;
+            *out = bufBase + off;
+            return true;
+        }
+        case FlatValueSource::BufferViaEntryOffset: {
+            uint32_t off = 0;
+            if (!SafeReadU32(entry + lay.entryFieldOff, &off)) return false;
+            if (!bufBase || off == 0 || off >= bufSize) return false;
+            *out = bufBase + off;
+            return true;
+        }
+        case FlatValueSource::FlatValuePtrAtEntry: {
+            uintptr_t p = 0;
+            if (!SafeReadPtr(entry + lay.entryFieldOff, &p) || !PlausiblePtr(p)) return false;
+            *out = p;
+            return true;
+        }
+        case FlatValueSource::InlineEntry:
+            *out = entry + lay.entryFieldOff;
+            return true;
+        case FlatValueSource::Unknown:
+        default:
+            return false;
+    }
+}
+
+// Collect the head entries of up to `maxN` distinct non-empty buckets.
+int CollectSampleEntries(const FlatMapView& mv, uintptr_t* outEntries, int maxN) {
+    int n = 0;
+    for (uint32_t i = 0; i < mv.bucketCount && n < maxN; ++i) {
+        uint32_t idx = kEmptyBucket;
+        if (SafeReadU32(mv.bucketArray + (uint64_t)i * 4, &idx) && idx != kEmptyBucket)
+            outEntries[n++] = mv.entries + (uint64_t)idx * mv.stride;
+    }
+    return n;
+}
+
+std::once_flag g_flatEntry_once;
+
+// Round-trip R/W on a chosen sample, restoring the original. Logs a verdict.
+void RunValueRwSelfTest(const TweakDB* db, const uintptr_t* samples, int nSamples);
+
+void DoVerifyFlatEntry(const TweakDB* db) {
+    if (!db) { log_line("[flat-layout] verdict: skipped (db=null)"); return; }
+
+    FlatMapView mv;
+    if (!ReadFlatsMap(db, &mv)) {
+        log_line("[flat-layout] verdict: skipped (flats map unreadable)");
+        return;
+    }
+    uintptr_t bufBase = 0; uint32_t bufSize = 0;
+    ReadBuffer(db, &bufBase, &bufSize);
+    log_line("[flat-layout] flats: count=%u stride=0x%x bufferBase=%p bufferSize=%u",
+             mv.count, mv.stride, (void*)bufBase, bufSize);
+
+    uintptr_t samples[6];
+    const int nS = CollectSampleEntries(mv, samples, 6);
+    if (nS == 0) { log_line("[flat-layout] verdict: skipped (no non-empty buckets)"); return; }
+
+    // Per-sample raw dump + per-hypothesis plausibility tally.
+    int okTdb = 0, okEntryOff = 0, okPtr10 = 0, okPtr18 = 0;
+    for (int i = 0; i < nS; ++i) {
+        const uintptr_t e = samples[i];
+        uint32_t storedHash = 0; uint64_t key = 0;
+        SafeReadU32(e + kEntryHashOff, &storedHash);
+        SafeReadU64(e + kEntryKeyOff, &key);
+        const uint32_t nameHash = (uint32_t)(key & 0xFFFFFFFFu);
+        const uint8_t  len      = (uint8_t)((key >> 32) & 0xFFu);
+        const uint32_t tdbOff   = (uint32_t)((key >> 40) & 0xFFFFFFu);
+
+        // Candidate value objects.
+        uintptr_t vTdb = (bufBase && tdbOff && tdbOff < bufSize) ? bufBase + tdbOff : 0;
+        uint32_t  eOff = 0; SafeReadU32(e + 0x10, &eOff);
+        uintptr_t vEntryOff = (bufBase && eOff && eOff < bufSize) ? bufBase + eOff : 0;
+        uintptr_t p10 = 0, p18 = 0;
+        SafeReadPtr(e + 0x10, &p10);
+        SafeReadPtr(e + 0x18, &p18);
+
+        // For the tdbOffset candidate, peek the value object: [vft][value@+8].
+        uint64_t vftTdb = 0; uint32_t raw32 = 0;
+        if (vTdb) { SafeReadU64(vTdb, &vftTdb); SafeReadU32(vTdb + 0x08, &raw32); }
+
+        if (vTdb && PlausiblePtr((uintptr_t)vftTdb)) ++okTdb;
+        if (vEntryOff) ++okEntryOff;
+        if (PlausiblePtr(p10)) ++okPtr10;
+        if (PlausiblePtr(p18)) ++okPtr18;
+
+        float asF; std::memcpy(&asF, &raw32, 4);
+        log_line("[flat-layout] sample[%d]: hash=0x%08x key=<TweakDBID(0x%08x,len=%u,off=0x%06x)> "
+                 "viaTdb.vft=0x%llx viaTdb.raw32=0x%08x asI32=%d asF32=%g "
+                 "entry+0x10.i32=%u ptr@0x10=%p ptr@0x18=%p",
+                 i, storedHash, nameHash, len, tdbOff,
+                 (unsigned long long)vftTdb, raw32, (int)raw32, (double)asF,
+                 eOff, (void*)p10, (void*)p18);
+    }
+
+    // Decide the layout: prefer the hypothesis plausible across the most samples.
+    FlatLayout chosen;
+    const int majority = (nS + 1) / 2;
+    if (okTdb >= majority) {
+        chosen.source = FlatValueSource::BufferViaTdbOffset;
+        chosen.valueDataOff = 0x08;
+    } else if (okPtr18 >= majority) {
+        chosen.source = FlatValueSource::FlatValuePtrAtEntry;  // F-019 payload @ +0x18
+        chosen.entryFieldOff = 0x18; chosen.valueDataOff = 0x08;
+    } else if (okPtr10 >= majority) {
+        chosen.source = FlatValueSource::FlatValuePtrAtEntry;
+        chosen.entryFieldOff = 0x10; chosen.valueDataOff = 0x08;
+    } else if (okEntryOff >= majority) {
+        chosen.source = FlatValueSource::BufferViaEntryOffset;
+        chosen.entryFieldOff = 0x10; chosen.valueDataOff = 0x08;
+    } else {
+        chosen.source = FlatValueSource::Unknown;
+    }
+    chosen.confirmed = (chosen.source != FlatValueSource::Unknown);
+
+    { std::lock_guard<std::mutex> lk(g_layoutMtx); g_layout = chosen; }
+
+    const char* srcName =
+        chosen.source == FlatValueSource::BufferViaTdbOffset   ? "buffer-via-tdbOffset" :
+        chosen.source == FlatValueSource::BufferViaEntryOffset ? "buffer-via-entryOffset" :
+        chosen.source == FlatValueSource::FlatValuePtrAtEntry  ? "flatValue-ptr-at-entry" :
+        chosen.source == FlatValueSource::InlineEntry          ? "inline-entry" : "unknown";
+    log_line("[flat-layout] verdict: %s type-tag-offset:+0x00(vft) value-data-offset:+0x%x "
+             "buffer-offset-source:%s tally{tdb=%d ptr@0x18=%d ptr@0x10=%d entryOff=%d}/%d",
+             srcName, chosen.valueDataOff,
+             chosen.source == FlatValueSource::BufferViaTdbOffset   ? "tdbOffset" :
+             chosen.source == FlatValueSource::BufferViaEntryOffset ? "entry+0x10" :
+             chosen.source == FlatValueSource::FlatValuePtrAtEntry  ? "entry-ptr" : "N/A",
+             okTdb, okPtr18, okPtr10, okEntryOff, nS);
+
+    // ── Flats-map hash function (tdbOffset is non-zero here → 8B vs 5B distinct).
+    {
+        const uintptr_t e = samples[0];
+        uint32_t storedHash = 0; uint8_t kb[8] = {0};
+        SafeReadU32(e + kEntryHashOff, &storedHash);
+        SafeRead(e + kEntryKeyOff, kb, 8);
+        const uint32_t cF8 = Fnv1a32(kb, 8), cF5 = Fnv1a32(kb, 5), cC8 = Crc32(kb, 8);
+        const uint32_t cName = (uint32_t)kb[0] | ((uint32_t)kb[1] << 8) |
+                               ((uint32_t)kb[2] << 16) | ((uint32_t)kb[3] << 24);
+        const char* m =
+            storedHash == cF8  ? "fnv1a-8B" :
+            storedHash == cF5  ? "fnv1a-5B" :
+            storedHash == cC8  ? "crc32-8B" :
+            storedHash == cName? "nameHash-direct" : "unknown";
+        log_line("[hashmap] flats-map hash-function: %s stored=0x%08x "
+                 "fnv8=0x%08x fnv5=0x%08x crc8=0x%08x name=0x%08x",
+                 m, storedHash, cF8, cF5, cC8, cName);
+    }
+
+    if (chosen.confirmed)
+        RunValueRwSelfTest(db, samples, nS);
+    else
+        log_line("[flat-rw] verdict: skipped (layout unconfirmed)");
+}
+
+void RunValueRwSelfTest(const TweakDB* db, const uintptr_t* samples, int nSamples) {
+    const FlatLayout lay = GetFlatLayout();
+
+    // Prefer a sample whose value decodes as a small non-negative int — likely a
+    // genuine Int32/enum flat, minimizing risk if anything reads it mid-test.
+    uintptr_t chosenEntry = 0; uint32_t chosenRaw = 0; uint64_t chosenKey = 0;
+    for (int i = 0; i < nSamples; ++i) {
+        uintptr_t vobj = 0;
+        if (!ResolveValueObj(db, samples[i], lay, &vobj)) continue;
+        uint32_t raw = 0;
+        if (!SafeReadU32(vobj + lay.valueDataOff, &raw)) continue;
+        uint64_t key = 0; SafeReadU64(samples[i] + kEntryKeyOff, &key);
+        if (chosenEntry == 0) { chosenEntry = samples[i]; chosenRaw = raw; chosenKey = key; }
+        if (raw <= 1000000u) { chosenEntry = samples[i]; chosenRaw = raw; chosenKey = key; break; }
+    }
+    if (chosenEntry == 0) {
+        log_line("[flat-rw] verdict: fail (no resolvable sample value)");
+        return;
+    }
+
+    // Build the compact lookup key (offset stripped — exercises the by-name path).
+    TweakDBID id;
+    std::memset(&id, 0, sizeof(id));
+    id.nameHash   = (uint32_t)(chosenKey & 0xFFFFFFFFu);
+    id.nameLength = (uint8_t)((chosenKey >> 32) & 0xFFu);
+
+    auto rd = ReadFlat(db, id);
+    log_line("[flat-rw] read id=<TweakDBID(0x%08x,len=%u)> found=%s raw=0x%08x",
+             id.nameHash, id.nameLength, rd ? "yes" : "no", chosenRaw);
+    if (!rd) { log_line("[flat-rw] verdict: fail (ReadFlat miss)"); return; }
+
+    const uint32_t newRaw = chosenRaw + 1u;
+    FlatValue nv; nv.type = FlatType::Int32; nv.value = (int32_t)newRaw;
+    const bool wrote = WriteFlat(const_cast<TweakDB*>(db), id, nv);
+
+    auto rd2 = ReadFlat(db, id);
+    uint32_t after = 0;
+    if (rd2 && std::holds_alternative<uint32_t>(rd2->value)) after = std::get<uint32_t>(rd2->value);
+    const bool match = wrote && rd2 && (after == newRaw);
+    log_line("[flat-rw] write id=<0x%08x> old=0x%08x new=0x%08x result=%s reread=0x%08x match=%s",
+             id.nameHash, chosenRaw, newRaw, wrote ? "ok" : "fail", after, match ? "yes" : "no");
+
+    // Restore the original value so game state is left untouched.
+    FlatValue rv; rv.type = FlatType::Int32; rv.value = (int32_t)chosenRaw;
+    const bool restored = WriteFlat(const_cast<TweakDB*>(db), id, rv);
+    log_line("[flat-rw] restore old=0x%08x result=%s", chosenRaw, restored ? "ok" : "fail");
+
+    log_line("[flat-rw] verdict: %s", match ? "pass" : "fail");
+}
+
+} // namespace
+
+FlatLayout GetFlatLayout() {
+    std::lock_guard<std::mutex> lk(g_layoutMtx);
+    return g_layout;
+}
+
+std::optional<FlatValue> ReadFlat(const TweakDB* db, TweakDBID id) {
+    if (!db) return std::nullopt;
+    const FlatLayout lay = GetFlatLayout();
+    if (!lay.confirmed) return std::nullopt;
+
+    const uint8_t* entryP = Lookup(GetFlatsMapCandidate(db), id);
+    if (!entryP) return std::nullopt;
+
+    uintptr_t vobj = 0;
+    if (!ResolveValueObj(db, reinterpret_cast<uintptr_t>(entryP), lay, &vobj))
+        return std::nullopt;
+
+    uint32_t raw = 0;
+    if (!SafeReadU32(vobj + lay.valueDataOff, &raw)) return std::nullopt;
+
+    // The vft→FlatType map is a pending follow-up; report the raw 4 bytes as an
+    // untyped uint32 so callers (who already know the declared type) can use it.
+    FlatValue fv;
+    fv.type  = FlatType::Unknown;
+    fv.value = raw;
+    return fv;
+}
+
+bool WriteFlat(TweakDB* db, TweakDBID id, FlatValue newValue) {
+    if (!db) return false;
+    const FlatLayout lay = GetFlatLayout();
+    if (!lay.confirmed) {
+        log_line("[flat-write] REFUSED id=<0x%08x>: flat layout unconfirmed "
+                 "(run VerifyFlatEntry first)", id.nameHash);
+        return false;
+    }
+    if (!IsScalarFlatType(newValue.type)) {
+        log_line("[flat-write] REFUSED id=<0x%08x>: type %s not supported at this "
+                 "layer (scalar only; String/CName/arrays are P1.6+/P1.10)",
+                 id.nameHash, FlatTypeName(newValue.type));
+        return false;
+    }
+
+    // Marshal the caller-declared scalar into bytes (NO coercion: the active
+    // variant alternative must agree with the declared type).
+    uint8_t bytes[4] = {0};
+    uint32_t width = ScalarFlatTypeSize(newValue.type);
+    switch (newValue.type) {
+        case FlatType::Int32: {
+            int32_t v;
+            if      (std::holds_alternative<int32_t>(newValue.value))  v = std::get<int32_t>(newValue.value);
+            else if (std::holds_alternative<uint32_t>(newValue.value)) v = (int32_t)std::get<uint32_t>(newValue.value);
+            else { log_line("[flat-write] REFUSED id=<0x%08x>: Int32 value variant mismatch", id.nameHash); return false; }
+            std::memcpy(bytes, &v, 4);
+            break;
+        }
+        case FlatType::Float: {
+            if (!std::holds_alternative<float>(newValue.value)) {
+                log_line("[flat-write] REFUSED id=<0x%08x>: Float value variant mismatch", id.nameHash); return false;
+            }
+            float v = std::get<float>(newValue.value);
+            std::memcpy(bytes, &v, 4);
+            break;
+        }
+        case FlatType::Bool: {
+            if (!std::holds_alternative<bool>(newValue.value)) {
+                log_line("[flat-write] REFUSED id=<0x%08x>: Bool value variant mismatch", id.nameHash); return false;
+            }
+            bytes[0] = std::get<bool>(newValue.value) ? 1 : 0;
+            break;
+        }
+        default:
+            return false;
+    }
+
+    const uint8_t* entryP = Lookup(GetFlatsMapCandidate(db), id);
+    if (!entryP) { log_line("[flat-write] REFUSED id=<0x%08x>: not found in flats map", id.nameHash); return false; }
+
+    uintptr_t vobj = 0;
+    if (!ResolveValueObj(db, reinterpret_cast<uintptr_t>(entryP), lay, &vobj)) {
+        log_line("[flat-write] REFUSED id=<0x%08x>: could not resolve value object", id.nameHash);
+        return false;
+    }
+    const uintptr_t valueAddr = vobj + lay.valueDataOff;
+
+    // Read old bytes (for the audit log + atomicity: confirm the slot is live).
+    uint32_t oldRaw = 0;
+    if (!SafeReadU32(valueAddr, &oldRaw)) {
+        log_line("[flat-write] REFUSED id=<0x%08x>: value slot unreadable @%p", id.nameHash, (void*)valueAddr);
+        return false;
+    }
+
+    if (!SafeWrite(valueAddr, bytes, width)) {
+        log_line("[flat-write] FAILED id=<0x%08x>: mach_vm_write rejected @%p (read-only?)",
+                 id.nameHash, (void*)valueAddr);
+        return false;
+    }
+
+    // Verify the write landed (atomic-or-reject: a partial/failed write is caught).
+    uint32_t check = 0;
+    SafeReadU32(valueAddr, &check);
+    uint32_t newRaw = 0; std::memcpy(&newRaw, bytes, width < 4 ? width : 4);
+    const uint32_t mask = (width >= 4) ? 0xFFFFFFFFu : ((1u << (width * 8)) - 1u);
+    const bool ok = (check & mask) == (newRaw & mask);
+
+    log_line("[flat-write] id=<TweakDBID(0x%08x,len=%u)> type=%s @%p old=0x%08x new=0x%08x "
+             "width=%u verify=%s",
+             id.nameHash, id.nameLength, FlatTypeName(newValue.type),
+             (void*)valueAddr, oldRaw, newRaw, width, ok ? "ok" : "MISMATCH");
+    return ok;
+}
+
+void VerifyFlatEntry(const TweakDB* db) {
+    std::call_once(g_flatEntry_once, [db] { DoVerifyFlatEntry(db); });
 }
 
 } // namespace red4ext_mac

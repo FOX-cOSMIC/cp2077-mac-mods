@@ -19,6 +19,10 @@
 //
 #include <cstddef>
 #include <cstdint>
+#include <optional>
+
+#include "Values.hpp"     // FlatType, FlatValue
+#include "HashMap.hpp"     // TweakDBID, Lookup
 
 namespace red4ext_mac {
 
@@ -192,5 +196,70 @@ inline uint64_t GetValueBufferCapacity(const TweakDB* db) {
 // Reads are done through mach_vm_read_overwrite so a partially-constructed or
 // unmapped struct can never crash the game (same safety model as P1.2).
 void VerifyH008(const TweakDB* db);
+
+// ───────────────────────────────────────────────────────────────────────────
+// P1.6 — flat value buffer R/W.
+//
+// How a flat's value is reached from its hash-map entry is NOT yet mapped on
+// macOS. Two evidence-backed candidates (resolved in-game by VerifyFlatEntry):
+//
+//   BufferViaTdbOffset  — the stored TweakDBID's 24-bit tdbOffset (key +0x05)
+//                         is a byte offset into the +0x148 value buffer
+//                         (windows-tweakxl-api §"compact ID": tdbOffset is
+//                         filled from the file at load = the buffer offset).
+//   BufferViaEntryOffset— an int32 offset stored in the entry payload (+0x10),
+//                         Windows' HashMap<TweakDBID,int32_t> model.
+//   FlatValuePtrAtEntry — a ref-counted FlatValue* in the entry payload
+//                         (F-019: +0x58 dtor releases a payload at entry+0x18).
+//
+// At the resolved value object, the layout mirrors Windows' TweakDBFlatValue
+// (Buffer.cpp ResolveOffset): [vft ptr @ +0x00][value @ +valueDataOff]. For
+// 4-byte scalars valueDataOff is +0x08 (after the 8-byte vft).
+enum class FlatValueSource : uint8_t {
+    Unknown,
+    BufferViaTdbOffset,
+    BufferViaEntryOffset,
+    FlatValuePtrAtEntry,
+    InlineEntry,            // value lives directly in the entry (no indirection)
+};
+
+struct FlatLayout {
+    FlatValueSource source       = FlatValueSource::Unknown;
+    uint16_t        entryFieldOff = 0x10;  // where the offset/ptr lives in an entry
+    uint16_t        valueDataOff  = 0x08;  // value bytes within the value object
+    bool            confirmed     = false; // VerifyFlatEntry validated it in-game
+};
+
+// The layout VerifyFlatEntry settled on (defaults to Unknown/unconfirmed).
+// Read/WriteFlat refuse to operate until this is confirmed.
+FlatLayout GetFlatLayout();
+
+// Read a flat by TweakDBID. nullopt if not found, layout unconfirmed, or the
+// type is not yet decodable. For confirmed scalar layouts this returns the raw
+// 4-byte value as FlatType::Unknown carrying a uint32_t (the vft→FlatType map
+// is a pending follow-up); callers reinterpret per the type they already know.
+// Safe-read everywhere — never crashes.
+std::optional<FlatValue> ReadFlat(const TweakDB* db, TweakDBID id);
+
+// Write a flat by TweakDBID. Returns true on success. Scalar types only
+// (Int32/Float/Bool); String/CName/arrays are rejected (logged) at this layer.
+// No type coercion (P1.10's job): the caller-declared FlatType decides the
+// write width. WRITE is the first mutation in the stack — every call is logged
+// (target id, old bytes, new bytes). Atomic: validates the target slot is
+// writable and in-bounds before committing; refuses otherwise.
+bool WriteFlat(TweakDB* db, TweakDBID id, FlatValue newValue);
+
+// ───────────────────────────────────────────────────────────────────────────
+// P1.6 Phase A — flat entry/value layout discovery (once-only).
+//
+// Dumps sample flats-map entries + candidate value objects, tests each value
+// source hypothesis across several entries, sets the global FlatLayout, and
+// re-confirms the flats-map hash function (tdbOffset is non-zero on flats, so
+// fnv1a-8B vs fnv1a-5B is distinguishable — sharper than P1.5's records test).
+// Emits to /tmp/red4ext-mac.log:
+//   [flat-layout] verdict: <source> type-tag-offset:+0xNN buffer-offset-source:<..> ...
+//   [flat-layout] sample[i]: hash=.. key=.. valueObj=.. vft=.. raw32=.. asI32=.. asF32=..
+//   [hashmap] flats-map hash-function: <fnv1a-8B|fnv1a-5B|...>
+void VerifyFlatEntry(const TweakDB* db);
 
 } // namespace red4ext_mac

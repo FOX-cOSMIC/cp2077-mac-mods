@@ -102,6 +102,9 @@ static void red4ext_mac_loader_init() {
             // entry and round-trip a known key. Runs after VerifyH008 so the
             // log reads top-down: which-map-is-flats, then how-to-hash-keys.
             red4ext_mac::VerifyHashFunction(db);
+            // P1.6: discover the flats value-buffer layout, re-confirm the
+            // flats-map hash function, and round-trip a scalar read/write/restore.
+            red4ext_mac::VerifyFlatEntry(db);
         }
     }).detach();
 }

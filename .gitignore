@@ -1,0 +1,37 @@
+# Build output
+build/
+out/
+cmake-build-*/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+Makefile
+*.cbp
+compile_commands.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# macOS
+.AppleDouble
+.LSOverride
+Icon?
+
+# Tooling outputs
+*.log
+*.tmp
+/tmp/
+
+# Crash reports captured locally
+crash-reports/
+
+# User-local overrides
+.openclaw/local-config.yaml
+.env

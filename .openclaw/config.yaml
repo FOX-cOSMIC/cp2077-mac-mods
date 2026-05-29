@@ -1,0 +1,60 @@
+# OpenClaw runtime configuration for cp2077-mac-mods
+#
+# Reference: https://github.com/Enderfga/claw-orchestrator
+#            https://github.com/shenhao-stu/openclaw-agents
+#
+# This file is consumed by the OpenClaw gateway. Adjust paths to match your
+# local OpenClaw installation if needed.
+
+project:
+  name: cp2077-mac-mods
+  root: /Users/lucas_1/Programming/cp2077-mac-mods
+  description: Port RED4ext + TweakXL to macOS Apple Silicon for Cyberpunk 2077
+
+# Default workflow per the OpenClaw code-agent convention.
+workflow:
+  pattern: plan-review-execute
+  plan_approval: delegate   # orchestrator reviews; escalates to user on uncertainty
+  worktree_isolation: true  # each agent works in its own git worktree
+
+# Where to find agent role files.
+agents_dir: .openclaw/agents
+
+# Routing rules — which agent gets which kinds of tasks.
+routing_file: .openclaw/routing.yaml
+
+# State files the gateway watches for progress tracking.
+state:
+  status: state/status.yaml
+  tasks: state/tasks.yaml
+  log: state/session-log.md
+
+# Documentation contracts — agents must respect these append-only / write-restricted rules.
+doc_contracts:
+  - path: docs/FACTS.md
+    rule: append_only
+    invalidation_requires: doc-keeper-approval
+
+  - path: docs/FAILED_APPROACHES.md
+    rule: append_only_strict   # never remove entries
+
+  - path: docs/HYPOTHESES.md
+    rule: append_then_resolve  # entries must move to FACTS or FAILED within 14 days
+
+  - path: docs/DECISIONS.md
+    rule: append_only
+    invalidation_requires: doc-keeper-approval
+
+  - path: state/status.yaml
+    rule: doc_keeper_only
+
+# LLM backends — uses installed OpenClaw provider configuration.
+# Override per-agent in agent role files if a specific model is required.
+default_backend: claude-code
+fallback_backend: codex
+
+# Notification channels (configured separately in OpenClaw gateway).
+notify:
+  on_blocker: true
+  on_phase_change: true
+  on_failed_approach_added: true

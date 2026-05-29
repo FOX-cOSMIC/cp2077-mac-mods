@@ -1,0 +1,392 @@
+# Open task queue. Routed by .openclaw/routing.yaml.
+# Format:
+#   - id: T-NNN
+#     category: <see routing.yaml for valid categories>
+#     status: pending | in-progress | blocked | done
+#     priority: P0 | P1 | P2
+#     owner: <agent role>  # set when claimed
+#     subject: <one line>
+#     description: |
+#       Multi-line context, requirements, acceptance criteria.
+#     depends_on: [T-NNN, ...]   # optional
+
+tasks:
+  - id: T-001
+    category: research
+    status: done
+    priority: P0
+    owner: researcher
+    completed_at: 2026-05-29
+    completed_by: cp2077-researcher (Scope)
+    subject: Validate current game version and capture baseline
+    description: |
+      DONE 2026-05-29. F-001 added. Game build 2.3.1 (CFBundleVersion 5314028),
+      SHA256 2a6ba5c2847759f7ed896b6bed7b36fe5a7990f75fe9f779383a62adb19d5a15.
+
+      MAJOR FINDING: stock binary already has the two entitlements required for
+      DYLD_INSERT_LIBRARIES (disable-library-validation,
+      allow-dyld-environment-variables). Re-signing is NOT a prerequisite for
+      basic dylib injection on this build. allow-unsigned-executable-memory and
+      allow-jit are absent but only matter once we need MAP_JIT trampolines.
+
+      Codesigning doc should be amended with a "current build status" note.
+
+  - id: T-002
+    category: hook
+    status: done
+    priority: P0
+    owner: hook-engineer
+    completed_at: 2026-05-29
+    completed_by: cp2077-hook-engineer (Hookline) — probe built + ran; Scope analyzed
+    subject: Build probe dylib for H-001 (function-pointer dispatch table)
+    description: |
+      DONE 2026-05-29. Hookline shipped:
+        - src/red4ext-mac/src/probes/h001_probe.cpp (8.5KB, C++17)
+        - src/red4ext-mac/probes/CMakeLists.txt
+        - tools/run-h001-probe.sh (executable launcher)
+        - docs/probes/h001-probe.md
+
+      Probe behavior: __attribute__((constructor)) at dylib load, registers
+      _dyld_register_func_for_add_image callback, on Cyberpunk2077 image load
+      logs base + slide + __TEXT bounds, then tries dlsym for four mangled
+      TweakDB::Get() candidates. If singleton non-null: dumps 64 qwords with
+      __TEXT-pointer detection (16 bytes raw at each). All speculative reads
+      via mach_vm_read_overwrite — no crash on bad pointer.
+
+      Dylib already built: build/src/red4ext-mac/libh001_probe.dylib
+      (Mach-O arm64, 52KB).
+
+      Hookline expects TweakDB singleton will be NULL at injection time
+      (image-load is too early). Primary value of this run: confirm
+      injection works + capture image base + slide for Ghidra correlation.
+
+      NEXT: Lucas runs tools/run-h001-probe.sh, captures /tmp/h001-probe.log,
+      hands to Scope. Then T-002 either resolves H-001 (if singleton became
+      non-null) or motivates T-002b (hook construction point per H-003).
+    depends_on: [T-001]
+
+  - id: T-003
+    category: research
+    status: pending
+    priority: P1
+    owner: researcher
+    subject: Re-test H-002 (macOS TweakDB struct size)
+    description: |
+      Find TweakDB constructor in Ghidra; determine actual struct size from
+      allocation site. Compare to old session claim of 0x198 bytes.
+
+      Acceptance: F-NNN documenting actual struct size with Ghidra references.
+    depends_on: [T-001]
+
+  - id: T-004
+    category: research
+    status: pending
+    priority: P1
+    owner: researcher
+    subject: Re-test H-003 (VTABLE[5] as startup-fire hook)
+    description: |
+      Hook VTABLE[5] of the TweakDB instance using a probe dylib. Log first-fire
+      timestamp and call count over 30 seconds of game launch (no save load).
+
+      Acceptance: F-NNN if it still fires reliably, or FA-NNN if it doesn't.
+    depends_on: [T-001, T-002]
+
+  - id: T-005
+    category: research
+    status: pending
+    priority: P2
+    owner: researcher
+    subject: Smoke-test H-004 (inline __TEXT hooking still blocked)
+    description: |
+      Quick confirm: attempt mprotect() on a __TEXT page in the running game,
+      expect EPERM. This is a one-shot test; outcome is well-known but worth
+      reconfirming on the current OS / game build.
+
+      Acceptance: F-NNN confirming __TEXT immutability (or, surprisingly, FA-NNN
+      if the constraint has changed).
+    depends_on: [T-001]
+
+  - id: T-006
+    category: docs
+    status: pending
+    priority: P1
+    owner: doc-keeper
+    subject: Audit FAILED_APPROACHES seeds against current researcher findings
+    description: |
+      After T-001..T-005 complete, review each FA-NNN seed entry. If a finding
+      has changed (e.g., the game now exposes a hookable __TEXT region), update
+      the FA entry with an INVALIDATED note and create a new FACT.
+
+      Acceptance: All seeded FAs reviewed within 7 days of T-005 completion.
+    depends_on: [T-002, T-003, T-004, T-005]
+
+  - id: T-007
+    category: docs
+    status: done
+    priority: P2
+    owner: doc-keeper
+    completed_at: 2026-05-28
+    completed_by: cp2077-doc-keeper (Ledger)
+    subject: Write docs/reference/macos-codesigning.md
+    description: |
+      DONE 2026-05-28. Ledger replaced the stub with a 319-line canonical
+      reference covering: background on Hardened Runtime, the four required
+      entitlements with rationale, six-step re-sign procedure with backup,
+      game-update signature reversion detection (entitlement check + SHA256
+      hash), troubleshooting (DYLD ignored, immediate crash, mprotect EPERM
+      cross-referencing FA-001), rcodesign alternative, and a script outline
+      for tools/resign-game.sh.
+
+      Ledger flagged: troubleshooting case "--options runtime omitted causes
+      immediate crash" is industry-known but not yet validated against the
+      actual game build. Should become FA-009 if hit in a real session.
+
+  - id: T-008
+    category: docs
+    status: done
+    priority: P2
+    owner: doc-keeper
+    completed_at: 2026-05-28
+    completed_by: cp2077-doc-keeper (Ledger)
+    subject: Write docs/reference/arm64-hooking.md
+    description: |
+      DONE 2026-05-28. 304-line canonical reference covering: __TEXT
+      immutability (cross-ref FA-001/H-004), ARM64 absolute-jump encoding with
+      bit-field layout + encoder expressions for MOVZ/MOVK/BR x16 in all four
+      shift variants, trampoline layout diagram, full position-dependent
+      relocation table (B/BL/B.cond/CBZ/CBNZ/TBZ/TBNZ/ADR/ADRP/LDR-literal),
+      MAP_JIT allocation + pthread_jit_write_protect_np W^X toggle,
+      __builtin___clear_cache, three hook types (GOT/vtable/fn-ptr-table).
+
+      Ledger flagged: ARM64 encodings in §2 were computed manually from the
+      ISA spec. Verify against actual assembler before hook-engineer ships
+      encoder helpers. See T-012.
+
+  - id: T-009
+    category: docs
+    status: done
+    priority: P2
+    owner: doc-keeper
+    completed_at: 2026-05-28
+    completed_by: cp2077-doc-keeper (Ledger)
+    subject: Write docs/reference/tweakdb-binary-format.md
+    description: |
+      DONE 2026-05-28. 249-line canonical reference: magic 0x0BB1DB47 with
+      endianness note, full 32-byte header table, layout diagram, Records
+      section, Flats section (8-byte key entry: u32 hash + u8 length + u24
+      offset), TweakDBID encoding with CRC32 polynomial and compact-form
+      constructor, Queries/Group Tags sections briefly, all 13 scalar + 13
+      array flat types, Windows-vs-macOS section honestly marking in-memory
+      layout as UNKNOWN per H-001/H-002 while noting on-disk format is shared.
+
+      Ledger flagged: header byte 0x1C field, Queries internal layout, and
+      Group Tags internal layout are all TBD pending WolvenKit verification.
+      See T-013.
+
+  - id: T-010
+    category: docs
+    status: done
+    priority: P2
+    owner: doc-keeper
+    completed_at: 2026-05-28
+    completed_by: cp2077-doc-keeper (Ledger)
+    subject: Write docs/reference/windows-tweakxl-api.md
+    description: |
+      DONE 2026-05-28. 526-line canonical reference drawn from psiberx's
+      Windows source: file discovery (recursive scan + 3 priority tiers with
+      exact first-char markers _#$!^), full YAML format with all 8
+      $-prefixed attribute keys, 9 array mutation tags
+      (!append/!append-once/!append-from/!prepend/!prepend-once/!prepend-from/!merge/!remove/!remove-all)
+      with FNV1a64 hash keys, template system with $instances and
+      $(var)/${var} substitution, legacy groups/flats format, .tweak grammar
+      from Grammar.hpp, operations table, TweakDBID encoding (zlib CRC32),
+      full type coercion table, error catalog, compatibility contract.
+
+  - id: T-012
+    category: research
+    status: pending
+    priority: P2
+    owner: researcher
+    subject: Verify ARM64 instruction encodings in arm64-hooking.md against actual assembler
+    description: |
+      Ledger computed the MOVZ/MOVK/BR encoder expressions in
+      docs/reference/arm64-hooking.md §2 manually from the ARM ISA spec.
+      Before hook-engineer ships encoder helpers using these expressions,
+      verify them empirically.
+
+      Method:
+      1. Write a tiny .s file with MOVZ x16, #0xABCD; MOVK x16, #0xEF01, LSL #16;
+         MOVK x16, #0xDEAD, LSL #32; MOVK x16, #0xBEEF, LSL #48; BR x16
+      2. Assemble: clang -target arm64-apple-macos -c test.s -o test.o
+      3. Dump: otool -tvj test.o | head -10  (or llvm-objdump)
+      4. Compare hex output against Ledger's encoder formulas
+      5. If discrepancies: file FA-NNN documenting the encoding error and
+         correct the doc.
+
+      Acceptance: append F-NNN to FACTS.md confirming the encodings are
+      correct, OR file an FA + fix the doc.
+    depends_on: [T-001]
+
+  - id: T-013
+    category: research
+    status: pending
+    priority: P1
+    owner: researcher
+    subject: WolvenKit verification of TweakDB header[0x1C], Queries, Group Tags layouts
+    description: |
+      docs/reference/tweakdb-binary-format.md has three TBD entries pending
+      verification against WolvenKit's open-source C# parser:
+      1. Header field at byte offset 0x1C (size, type, semantics)
+      2. Queries section entry layout
+      3. Group Tags section entry layout
+
+      Method:
+      1. Read https://github.com/WolvenKit/WolvenKit/tree/main/WolvenKit.RED4.Types/TweakDB
+      2. Identify the parser class for tweakdb.bin
+      3. Extract the layout for the three TBD items
+      4. Update the doc with the verified spec + commit reference
+
+      Acceptance: doc no longer has TBD markers for these three items, and
+      F-NNN entries in FACTS.md cite the WolvenKit commit hash used.
+
+  - id: T-015
+    category: docs
+    status: done
+    priority: P2
+    owner: doc-keeper
+    completed_at: 2026-05-29
+    completed_by: cp2077-doc-keeper (Ledger)
+    subject: Amend macos-codesigning.md with current build (2.3.1) entitlement status
+    description: |
+      F-001 found that the stock 2.3.1 binary already has
+      disable-library-validation + allow-dyld-environment-variables. The
+      codesigning doc currently implies re-signing is required for any
+      injection work. It should be amended with a "Current build status"
+      callout noting:
+      - On 2.3.1, basic DYLD injection works WITHOUT re-signing
+      - Re-signing is only needed when MAP_JIT trampolines come online
+        (allow-jit + allow-unsigned-executable-memory)
+      - The full procedure remains valid for future game builds that may
+        strip the entitlements
+      Acceptance: doc has the callout near the top; cross-references F-001.
+
+  - id: T-002b
+    category: hook
+    status: pending
+    priority: P0
+    owner: hook-engineer
+    subject: Empirical slide-formula validation via exported function byte-compare
+    description: |
+      Per Scope's T-002 recommendation (Option C). Use F-004's slide formula
+      and F-006's confirmation that the binary IS exported (not stripped) to
+      pick an exported function with a known static address and prove the
+      conversion empirically. Zero Ghidra dependency.
+
+      Method:
+      1. Pick an exported function. Scope suggested _AlignedMalloc at static
+         0x100fa6e08. Verify with `nm` on the binary.
+      2. Modify h001_probe.cpp (or write h002b_probe.cpp): at image-load time,
+         compute runtime = static + slide. Read N bytes (16-32) at the runtime
+         address via mach_vm_read_overwrite.
+      3. Open the on-disk Mach-O at the corresponding file offset (static -
+         load base = file offset for a function in __TEXT), read the same
+         N bytes.
+      4. Compare. Log match/mismatch with hex of both buffers.
+      5. Lucas re-runs `tools/run-h001-probe.sh`. The byte-compare result
+         either confirms F-004 (mark as F-NNN-confirmed) or falsifies it
+         (file as FA-NNN with the discrepancy).
+
+      Acceptance: F-NNN logged confirming F-004's slide formula, OR a FA-NNN
+      explaining why the formula doesn't hold for this build.
+    depends_on: []   # all prerequisites already met
+
+  - id: T-002c
+    category: research
+    status: pending
+    priority: P0
+    owner: researcher
+    subject: Find real TweakDB accessor via xref from exported game::data::TweakDBID symbols (H-005)
+    description: |
+      Once T-002b confirms F-004, the xref hunt for the real accessor
+      becomes immediately actionable. Per H-005:
+
+      1. From exported symbols (via nm) identify `game::data::TweakDBID`
+         RTTI / type-object entries. These ARE present (F-006).
+      2. In Ghidra, follow xrefs from those type-objects to their callers.
+      3. Identify the unnamed FUN_* that constructs the TweakDB singleton.
+      4. Identify the unnamed FUN_* that reads flat values (GetFlat-equivalent).
+      5. Record their static addresses; convert to runtime via slide formula.
+      6. Pass static addresses to hook-engineer as hook targets.
+
+      Acceptance: F-NNN entries for the real TweakDB::Get-equivalent (or
+      construction-time hook target) with static address and Ghidra
+      function name (e.g. FUN_103xxxxxx).
+    depends_on: [T-002b]
+
+  - id: T-016
+    category: applicator
+    status: pending
+    priority: P1
+    owner: mod-loader
+    subject: Wire psiberx .tweak parser into our build per D-005 (if accepted)
+    description: |
+      Once D-005 ADR is accepted (reuse psiberx parser via TWEAKXL_MAC_OFFLINE),
+      wire it into our CMakeLists.txt:
+      1. Add reference/windows-tweakxl/vendor/pegtl to include path
+      2. Add reference/windows-tweakxl/src/Red/TweakDB/Source/{Parser.cpp} to
+         the tweakxl-mac target
+      3. Define TWEAKXL_MAC_OFFLINE for the target
+      4. Build a minimal smoke test that parses a sample .tweak file
+      Acceptance: smoke test compiles and parses example-mods .tweak files
+      without errors.
+    depends_on: [T-002]   # need D-005 accepted, plus T-002 confirms hooking
+                          # path works at all before we lay parser work on top
+
+  - id: T-014
+    category: research
+    status: done
+    priority: P1
+    owner: researcher
+    completed_at: 2026-05-29
+    completed_by: cp2077-researcher (Scope)
+    subject: Investigate psiberx's TWEAKXL_MAC_OFFLINE path — reusable parser code for mod-loader
+    description: |
+      DISCOVERED 2026-05-28 by Ledger while researching T-010. The Windows
+      TweakXL repo at reference/windows-tweakxl/ contains:
+        - src/mac/CoreStubs.hpp  (std:: wrappers replacing TiltedCore types)
+        - TWEAKXL_MAC_OFFLINE preprocessor flag in Source.hpp + likely elsewhere
+
+      This means psiberx (or a contributor) prepared the YAML/.tweak PARSER
+      LAYER to be buildable on macOS without runtime hooking dependencies.
+
+      This does NOT contradict FA-002 (offline-patching binary on disk is
+      different from offline-mode parser code).
+
+      Implication: mod-loader (Patchwork) may be able to reuse psiberx's
+      parser source directly with TWEAKXL_MAC_OFFLINE defined, instead of
+      writing one from scratch.
+
+      Method:
+      1. Find all #ifdef TWEAKXL_MAC_OFFLINE in reference/windows-tweakxl/
+      2. Document what's stubbed and what's preserved
+      3. Build a minimal test exercising just the parser path on macOS
+      4. Decide: reuse psiberx source + flag, or write our own
+      5. Record decision as a new ADR (D-005)
+
+      Acceptance: A FACTS entry documenting what works under the flag, and
+      either D-005 confirming reuse or a brief note explaining why we wrote
+      our own.
+
+  - id: T-011
+    category: docs
+    status: done
+    priority: P2
+    owner: doc-keeper
+    subject: Archive old project dirs
+    description: |
+      Archived to /Users/lucas_1/Programming/_archive-2026-05-28/ on 2026-05-28.
+      Contents: new-claude/, cp2077-tweakxl-mac/, cp2077-tweak-xl-mac/,
+      cp2077-tweak-xl/ (still symlinked from reference/windows-tweakxl),
+      Planning/, claud.md, memory-offset-verification.md.
+      See state/session-log.md for full event log and
+      _archive-2026-05-28/README.md for the archive manifest.

@@ -1,0 +1,212 @@
+# Session Log
+
+Append-only log of significant events. One entry per session. Most recent at the bottom.
+
+Format:
+
+```markdown
+## YYYY-MM-DD — <session title> (<agent>)
+
+- **Goal:** <what this session aimed to do>
+- **Outcome:** <what happened>
+- **Files changed:** <git summary>
+- **FACTS added/invalidated:** <F-NNN list>
+- **FAILED_APPROACHES added:** <FA-NNN list>
+- **Blockers:** <if any>
+- **Next:** <what should happen next, who should do it>
+```
+
+---
+
+## 2026-05-28 — Project re-org and OpenClaw-ready bootstrap (Claude)
+
+- **Goal:** Replace the scattered 6-month-old project state (multiple directories, contradictory findings, 17+ session summaries) with a clean, agent-portable repo.
+- **Outcome:** Fresh repo at `/Users/lucas_1/Programming/cp2077-mac-mods/` with:
+  - Full directory skeleton (docs/, state/, src/, reference/, tools/, .openclaw/)
+  - Top-level entry docs: AGENTS.md, CLAUDE.md, README.md, ARCHITECTURE.md, HANDOFF.md, BUILD.md
+  - Seven agent role definitions in `.openclaw/agents/`
+  - OpenClaw runtime config + routing
+  - Three-tier truth model bootstrapped (FACTS, HYPOTHESES with 4 seeded items, FAILED_APPROACHES with 8 seeded items)
+  - State files (status.yaml, tasks.yaml with 11 open tasks, this log)
+  - Reference materials carried over from `Programming/Ghidra/`, `Programming/adtional-modding-data/`, and Windows TweakXL source
+- **Files changed:** Initial commit (whole repo is new).
+- **FACTS added/invalidated:** None — no facts validated yet for current game build.
+- **FAILED_APPROACHES added:** FA-001 through FA-008 seeded from prior session lessons.
+- **Blockers:** None.
+- **Next:** `researcher` agent picks up T-001 (validate game version + capture baseline) before any other work begins.
+
+## 2026-05-28 — Archived superseded directories (Claude)
+
+- **Goal:** Move all old project material out of active locations into a single archive folder.
+- **Outcome:** Created `/Users/lucas_1/Programming/_archive-2026-05-28/` containing:
+  - `new-claude/` (110MB, 17+ session summaries)
+  - `cp2077-tweakxl-mac/` (730KB, old offline-patching attempt)
+  - `cp2077-tweak-xl-mac/` (older port iteration)
+  - `cp2077-tweak-xl/` (Windows TweakXL reference — still actively symlinked)
+  - `Planning/` (older planning docs)
+  - `claud.md`, `memory-offset-verification.md` (orphan files)
+  - Removed empty `Programming/OLD/`
+- **Symlink fix:** `cp2077-mac-mods/reference/windows-tweakxl` re-pointed to the archived location.
+- **Archive README** written, prominently flagging that `cp2077-tweak-xl/` must not be deleted (it's still referenced).
+- **Files changed:** Archive folder created; symlink updated; this log; task T-011 closed.
+- **FACTS added/invalidated:** None.
+- **FAILED_APPROACHES added:** None.
+- **Blockers:** None.
+- **Next:** Unchanged — `researcher` picks up T-001.
+
+## 2026-05-28 — Registered 7 OpenClaw agents (Claude)
+
+- **Goal:** Materialize the 7 specialized agents (researcher, hook-engineer, tweakdb-engineer, mod-loader, reviewer, tester, doc-keeper) inside the running OpenClaw installation so they can be invoked via the gateway.
+- **Outcome:** Created and registered seven isolated OpenClaw agents:
+  - 🔬 **Scope** (`cp2077-researcher`)
+  - 🪝 **Hookline** (`cp2077-hook-engineer`)
+  - 🗄️ **Schema** (`cp2077-tweakdb-engineer`)
+  - 🧩 **Patchwork** (`cp2077-mod-loader`)
+  - 🔍 **Sieve** (`cp2077-reviewer`)
+  - 🎮 **Crashlog** (`cp2077-tester`)
+  - 📒 **Ledger** (`cp2077-doc-keeper`)
+- Each has its own workspace at `~/.openclaw/workspaces/cp2077-<role>/` with:
+  - `AGENTS.md` (role-specific bring-up that points to `cp2077-mac-mods/.openclaw/agents/<role>.md`)
+  - `IDENTITY.md`, `SOUL.md`, `TOOLS.md`, `USER.md`
+- Registered via `openclaw agents add` with model `anthropic/claude-sonnet-4-6`
+- Verified via `openclaw agents list` — all 7 visible alongside the existing `main` agent
+- **Files changed:** `~/.openclaw/openclaw.json` updated by OpenClaw CLI; workspace files in `~/.openclaw/workspaces/cp2077-*/`; this log.
+- **FACTS / FAILED_APPROACHES:** None.
+- **Blockers:** None.
+- **Next:** Invoke `openclaw agent --agent cp2077-researcher` to begin T-001 (validate current game version). Or have the orchestrator route a research task to that agent.
+
+## 2026-05-28 — Created cp2077-lead orchestrator (Claude)
+
+- **Goal:** Add a coordinating agent that talks to Lucas and delegates to the 7 specialists. The user wants to continue work in OpenClaw and needs a single point of contact.
+- **Outcome:** Created **🎼 Conductor** (`cp2077-lead`) — the 8th agent:
+  - Role contract: `.openclaw/agents/lead.md` (coordinates, doesn't implement)
+  - Workspace: `~/.openclaw/workspaces/cp2077-lead/` with full IDENTITY/AGENTS/SOUL/USER/TOOLS
+  - `MEMORY.md` seeded with full project context — Conductor wakes up knowing everything (current state, the 7 specialists, the 8 FAILED_APPROACHES, the 4 hypotheses, the 4 ADRs)
+  - `memory/2026-05-28.md` — context from this session
+  - Registered in OpenClaw with model `anthropic/claude-sonnet-4-6`
+- **Routing:** `.openclaw/routing.yaml` updated — `lead` is now the `default_agent` and handles `orchestration` / `delegation` / `user-facing` categories
+- **State:** `state/status.yaml.next_action.agent` switched from `researcher` to `lead` — Conductor will delegate T-001 to Scope
+- **Project AGENTS.md:** updated to list lead as the user-facing agent
+- **Files changed:** see above
+- **FACTS / FAILED_APPROACHES:** none.
+- **Blockers:** none.
+- **Next:** Lucas invokes `openclaw agent --agent cp2077-lead`. Conductor reads state, asks permission to delegate T-001 to Scope, work begins.
+
+## 2026-05-28 — T-007 delivered by Ledger (Claude acting as Conductor)
+
+- **Goal:** Validate the multi-agent invocation path end-to-end and ship a useful doc Lucas will need before testing.
+- **Setup:** Applied `openclaw exec-policy preset yolo` for bypass-permissions, then invoked `cp2077-doc-keeper` via `openclaw agent --local --message <scoped T-007 prompt>` (claude-cli backend, claude-sonnet-4-6).
+- **Outcome:** Ledger expanded `docs/reference/macos-codesigning.md` from a 90-line stub into a 319-line canonical reference. Sections: Background, Four Entitlements + rationale, six-step Re-Sign Procedure (paths/backup/extract/merge/sign/verify), Game Update Detection (entitlement + SHA256), Troubleshooting (DYLD ignored / immediate crash / mprotect EPERM), `rcodesign` alternative, `tools/resign-game.sh` outline, Cross-References table.
+- **Flagged for follow-up:** Ledger noted the "`--options runtime` omitted → immediate crash" troubleshooting entry is industry-known but not validated against the actual cp2077 binary. If hit in a real session, should become **FA-009** with evidence. Not blocking — recorded for researcher's attention.
+- **Files changed:** `docs/reference/macos-codesigning.md` (replaced); `state/tasks.yaml` (T-007 → done); `state/status.yaml` (progress 0% → 10%); this log.
+- **FACTS / FAILED_APPROACHES added:** none (correct — Ledger doesn't add to those, and the `--options runtime` observation is unverified).
+- **Blockers:** none.
+- **Next:** T-008/T-009/T-010 (arm64-hooking, tweakdb-binary-format, windows-tweakxl-api docs) are all P2 docs tasks Ledger can do without the game. T-001 (researcher baseline) needs the game install confirmed first.
+
+## 2026-05-28 — T-008/T-009/T-010 batch delivered by Ledger (Claude acting as Conductor)
+
+- **Goal:** Complete the three remaining reference docs in one Ledger invocation, before runtime work starts.
+- **Invocation:** Single `openclaw agent --agent cp2077-doc-keeper --local` call with batched prompt covering all three tasks. claude-cli backend. Turn duration: ~632 seconds (~10.5 min) — within timeout.
+- **Outcome:** All three stubs replaced with canonical references. Totals:
+  - `docs/reference/arm64-hooking.md` — 304 lines, 9 sections
+  - `docs/reference/tweakdb-binary-format.md` — 249 lines, 13 sections
+  - `docs/reference/windows-tweakxl-api.md` — 526 lines, 18 sections
+- **Three follow-ups surfaced by Ledger → added as new tasks:**
+  - **T-012 (P2 research, Scope):** Verify ARM64 encodings empirically against an assembler before hook-engineer uses them.
+  - **T-013 (P1 research, Scope):** Resolve three TBD items in tweakdb-binary-format.md (header byte 0x1C, Queries layout, Group Tags layout) by reading WolvenKit C# source.
+  - **T-014 (P1 research, Scope):** Investigate `TWEAKXL_MAC_OFFLINE` in psiberx's repo. Real finding: `reference/windows-tweakxl/src/mac/CoreStubs.hpp` and the flag exist — psiberx prepared the parser layer for macOS builds. **Does NOT contradict FA-002** (FA-002 is about offline tweakdb.bin patching; this is offline-mode parser code). Likely lets mod-loader reuse Windows parser source instead of rewriting.
+- **Files changed:** `docs/reference/{arm64-hooking,tweakdb-binary-format,windows-tweakxl-api}.md` (all rewritten); `state/tasks.yaml` (T-008/009/010 closed, T-012/013/014 added); `state/status.yaml` (10% → 25%); this log.
+- **FACTS / FAILED_APPROACHES added:** none — T-014 is a hypothesis until Scope reads the actual mac/ stubs in detail.
+- **Blockers:** none.
+- **Next:** Phase 0 reference library is complete. Real next steps are gated on the game install:
+  1. Lucas confirms game install + completes re-sign per `docs/reference/macos-codesigning.md`
+  2. Conductor delegates T-001 (baseline) to Scope
+  3. Then T-002, T-014, T-012, T-013 in some order
+  4. With FACTS established, engineering work unblocks
+
+---
+
+---
+
+**2026-05-29 — Scope (researcher) — T-001 + T-014**
+
+T-001: Validated game v2.3.1 (build 5314028) at the Steam path. Binary SHA256: 2a6ba5c2... Stock binary ships with BOTH critical entitlements (`disable-library-validation`, `allow-dyld-environment-variables`) — no re-signing required for DYLD injection. `allow-unsigned-executable-memory` and `allow-jit` are absent but not needed for mod loading. Facts logged as F-001.
+
+T-014: Static analysis of psiberx's `TWEAKXL_MAC_OFFLINE` flag. Flag has a single source branch point in `Source.hpp` — swaps TiltedCore for stdlib-only stubs (CoreStubs.hpp). The `.tweak` parser (`Red::TweakParser`) compiles with just C++20 stdlib + PEGTL (already in vendor/). yaml-cpp is a separate dep for the YAML tweak format, not needed for `.tweak` parsing. CMakeLists.txt defines the flag but has not yet wired parser source into the binary — that is the next integration step. Facts logged as F-002. Recommending D-005 ADR (mod-loader reuse of psiberx parser via flag).
+
+## 2026-05-29 — T-001 + T-014 verified and integrated (Claude acting as Conductor)
+
+- **Goal:** Verify Scope's F-001 + F-002, propagate findings through project state, propose D-005 ADR.
+- **Invocation:** Single backgrounded `openclaw agent --agent cp2077-researcher --local` call with batched T-001 + T-014 prompt. claude-cli backend. Turn duration: 169s (~3 min — substantially faster than batch doc work because tasks were small).
+- **Two major findings landed as FACTS:**
+  - **F-001 (game baseline):** Build 2.3.1 (CFBundleVersion 5314028), SHA256 `2a6ba5c2...`. **Stock binary ships with `disable-library-validation` + `allow-dyld-environment-variables`** — DYLD injection works without re-signing on this build. `allow-jit` + `allow-unsigned-executable-memory` are absent but only matter for MAP_JIT trampolines (future concern).
+  - **F-002 (psiberx parser reuse feasible):** `TWEAKXL_MAC_OFFLINE` cleanly separates the `.tweak` parser (C++20 stdlib + PEGTL only) from the Windows runtime layer. CoreStubs.hpp provides `Core::Vector/SharedPtr/WeakPtr` aliases. Parser source is buildable on macOS as-is.
+- **Tasks closed:** T-001, T-014.
+- **Tasks added:** T-015 (Ledger amends codesigning doc with current build status), T-016 (mod-loader wires psiberx parser per D-005, depends on T-002 + D-005 accept).
+- **ADR proposed:** D-005 — reuse psiberx `.tweak` parser via `TWEAKXL_MAC_OFFLINE`. Status: `proposed`, awaiting Lucas's approval. Listed in `state/status.yaml.pending_decisions`.
+- **Status:** progress 25% → 40%. `next_action.task_id` updated from T-001 to T-002 (probe-dylib work for H-001).
+- **Files changed:** `docs/FACTS.md` (F-001, F-002 appended by Scope); `docs/DECISIONS.md` (D-005 appended, then fixed after misplacement); `state/tasks.yaml` (T-001/T-014 closed, T-015/T-016 added); `state/status.yaml` (progress, next_action, recent_facts_added, pending_decisions); this log.
+- **FACTS added:** F-001, F-002.
+- **FAILED_APPROACHES added:** none.
+- **Blockers:** none.
+- **Next:** **Lucas's call on D-005** (accept → unblocks T-016 for mod-loader). Independently of that: T-002 (probe dylib for H-001) is the highest-value next step. Hookline writes a minimal probe → Scope analyzes. Game install is ready; entitlements already sufficient.
+
+---
+
+## 2026-05-29 — Scope expansion: explicit long-term roadmap added (Claude)
+
+- **Goal:** Lucas asked whether the project is on track toward "all the more gameplay-changing mods" working, not just TweakXL. Yes — but the existing docs were ambiguous: v1.0 scope read like a hard ceiling, when really it's the first slice. Picked option D from the menu: keep v1.0 narrow, document the broader vision explicitly.
+- **Reassurance items confirmed:**
+  - D-001 (runtime hooking, no offline patching) is firm. Unchanged.
+  - `TWEAKXL_MAC_OFFLINE` is a compile-time flag name in psiberx's repo — not an architectural choice. Our runtime is still injection + in-memory hooks.
+  - D-005 (proposed) is about reusing parser SOURCE; runtime stays hook-based.
+- **Changes made:**
+  - Added D-006 ADR (scope slicing: narrow v1.0 + explicit long-term roadmap).
+  - ARCHITECTURE.md — new "Long-Term Roadmap" section with v1.0 → v1.x → v2.0 visual + per-version scope.
+  - AGENTS.md — Mission section reworked: long-term goal explicit, v1.0 framed as first deliverable, v1.x/v2.0 acknowledged.
+  - README.md — opening paragraph mentions full ecosystem with version slicing.
+  - status.yaml — new `long_term_vision` field + `version_roadmap` block (v1.0/v1.x/v2.0 with status).
+  - Conductor's MEMORY.md — updated so future sessions know the broader goal and how to answer "do we support X?" questions.
+- **Files changed:** DECISIONS.md, ARCHITECTURE.md, AGENTS.md, README.md, state/status.yaml, ~/.openclaw/workspaces/cp2077-lead/MEMORY.md, this log.
+- **FACTS / FAILED_APPROACHES added:** none.
+- **Blockers:** none.
+- **Next:** Back to the original question — D-005 acceptance + T-002 (probe dylib for H-001) + optional T-015 (codesigning doc amendment). Nothing about the scope expansion changes the immediate next steps.
+
+---
+
+---
+
+**2026-05-29 — Scope (researcher) — T-002 (H-001 probe analysis)**
+
+Analyzed `/tmp/h001-probe.log`. Confirmed DYLD injection works on stock 2.3.1 with no re-signing (F-003, empirically backs F-001). Documented static base `0x100000000`, this-run slide `0x285c000`, and the `runtime = static + slide` conversion formula (F-004). Documented `__TEXT` span `0x6de0000` / 112,512K (F-005).
+
+Two corrections to incoming assumptions, both verified independently with `nm`:
+1. **Provenance:** the analyzed log was produced by an *earlier* probe build (run 08:27:02; current dylib built 08:27:18, 16s later; format strings, symtab scan, and __DATA dump all differ). The current richer probe that actually tests H-001 has NOT been run yet — the log contains no dispatch-table data. Flagged in F-003.
+2. **"Binary strips exports" is FALSE.** `nm -gU` shows 67,928 exported symbols (F-006). dlsym failed because the probe guessed `RED4ext::TweakDB::*` — a Windows-SDK wrapper namespace absent from CDPR's binary — and because the real accessor isn't an exported symbol anyway. Logged FA-009. Ghidra decomp names no `TweakDB::Get`/`GetFlat`/`SetFlat` either; filed H-005 (locate accessor via xref from `game::data::TweakDBID` RTTI).
+
+H-001 itself remains untested (no dispatch-table dump in this run). Recommended T-002b = Option C (validate slide formula by byte-comparing a known exported function at static+slide before hunting TweakDB). Handoff: hook-engineer for the probe change, researcher to verify the byte-compare.
+
+## 2026-05-29 — H-001 probe ran + Scope analysis on Opus 4.7 (Claude as Conductor)
+
+- **Goal:** Lucas ran the H-001 probe via `tools/run-h001-probe.sh`. Scope analyzed the log on Opus 4.7.
+- **Probe run outcome:** Injection succeeded on stock 2.3.1 binary — empirically validates F-001. Image base 0x10285c000, slide 0x285c000, __TEXT span 112,512K. Four mangled `RED4ext::TweakDB::Get*` candidates failed dlsym.
+- **Scope's analysis (Opus 4.7, ~5 min turn):**
+  - F-003 — DYLD injection works on stock 2.3.1 (empirical)
+  - F-004 — Mach-O arm64 static base 0x100000000, slide formula `runtime = static + slide`
+  - F-005 — Main `__TEXT` 0x6de0000 bytes (112,512 KB)
+  - F-006 — **CORRECTION:** binary is NOT export-stripped. 67,928 dynamic symbols, 136 `Tweak*` named functions. The TweakDB accessors are unnamed (`FUN_*` in Ghidra) but the binary itself isn't stripped.
+  - FA-009 — dlsym for `RED4ext::TweakDB::Get*` fails. Root cause: `RED4ext::*` is a Windows-SDK wrapper namespace that doesn't exist in CDPR's binary; the engine uses `game::data::TweakDB*`.
+  - H-005 — Real TweakDB accessor exists as unnamed `FUN_*`, reachable via xref from the exported `game::data::TweakDBID` RTTI type-objects.
+- **Recommendation:** T-002b — empirical slide-formula validation via byte-compare on an exported function (Scope suggested `_AlignedMalloc` @ static 0x100fa6e08). Zero Ghidra dependency for this validation. Once F-004 confirmed, T-002c (Ghidra xref hunt for the real accessor) becomes the natural next step.
+- **Wrinkle — probe source enhanced mid-flight:** `src/red4ext-mac/src/probes/h001_probe.cpp` grew from 8577 → 14961 bytes between Lucas's run (08:27) and Scope's analysis (08:30). The new source has LC_SYMTAB scan + __DATA/__DATA_CONST dumps that Lucas's log doesn't show. Unable to determine without git whether Hookline kept iterating after his shell wrapper exited or whether Scope edited the source (would be a role violation). Future: set up git in this repo to track this cleanly. Not blocking — Lucas can simply re-run for the enhanced data.
+- **Tasks closed:** T-002 (probe built + ran + analyzed).
+- **Tasks added:** T-002b (slide validation, Hookline owns), T-002c (xref hunt for real accessor, Scope owns, depends on T-002b).
+- **Status:** progress 40% → 55%. `next_action.task_id` = T-002b.
+- **Files changed:** docs/FACTS.md (F-003..F-006); docs/FAILED_APPROACHES.md (FA-009); docs/HYPOTHESES.md (H-005); state/tasks.yaml (T-002 done, T-002b/T-002c added); state/status.yaml; this log.
+- **FACTS added:** F-003, F-004, F-005, F-006.
+- **FAILED_APPROACHES added:** FA-009.
+- **HYPOTHESES added:** H-005.
+- **Blockers:** none.
+- **Next:** Lucas chooses: re-run enhanced probe for more data first, OR delegate T-002b directly. Both are valid; the enhanced probe is a 60-second run and gives more data.
+
+---

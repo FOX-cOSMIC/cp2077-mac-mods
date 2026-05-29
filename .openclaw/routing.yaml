@@ -1,0 +1,88 @@
+# Routing rules — map task categories to agent roles.
+#
+# When the OpenClaw gateway picks up an open task from state/tasks.yaml,
+# it routes by category to the agent whose role file matches.
+
+routes:
+  # Reverse engineering, web research, runtime probing
+  - match: { category: research }
+    agent: researcher
+
+  - match: { category: ghidra-analysis }
+    agent: researcher
+
+  - match: { category: web-research }
+    agent: researcher
+
+  # Hooking primitives (GOT, VTable, function-pointer-table, trampolines)
+  - match: { category: hook }
+    agent: hook-engineer
+
+  - match: { category: symbol-resolution }
+    agent: hook-engineer
+
+  - match: { category: arm64 }
+    agent: hook-engineer
+
+  # TweakDB-specific work (binary parsing + runtime memory layout)
+  - match: { category: tweakdb }
+    agent: tweakdb-engineer
+
+  - match: { category: tweakdb-format }
+    agent: tweakdb-engineer
+
+  # Mod file parsing + applicator
+  - match: { category: yaml-parser }
+    agent: mod-loader
+
+  - match: { category: tweak-parser }
+    agent: mod-loader
+
+  - match: { category: applicator }
+    agent: mod-loader
+
+  # Code review (sanity checks before merge)
+  - match: { category: review }
+    agent: reviewer
+
+  - match: { category: pre-merge }
+    agent: reviewer
+
+  # In-game validation
+  - match: { category: test-ingame }
+    agent: tester
+
+  - match: { category: crash-analysis }
+    agent: tester
+
+  # Orchestration / project management
+  - match: { category: orchestration }
+    agent: lead
+
+  - match: { category: delegation }
+    agent: lead
+
+  - match: { category: user-facing }
+    agent: lead
+
+  # Documentation maintenance
+  - match: { category: docs }
+    agent: doc-keeper
+
+  - match: { category: status-update }
+    agent: doc-keeper
+
+  - match: { category: fact-validation }
+    agent: doc-keeper
+
+# Fallback when no category matches — route to the lead so they can dispatch.
+default_agent: lead
+
+# Escalation: if an agent reports a blocker, the gateway notifies the user
+# and pauses the agent. The user can re-route to a different agent.
+escalation:
+  on_blocker: pause_and_notify
+  on_contradicted_facts:
+    action: route_to
+    target_agent: doc-keeper
+  on_failed_3x: pause_and_notify

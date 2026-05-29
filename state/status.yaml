@@ -1,0 +1,81 @@
+# Single source of truth for current project state.
+# Owner: doc-keeper agent only. Other agents read but do not write.
+# Must remain valid YAML at all times.
+
+project: cp2077-mac-mods
+version: 0.1.0
+last_updated: 2026-05-29
+
+current_phase:
+  id: 0
+  name: bootstrap-and-revalidation
+  progress_pct: 55
+  description: >
+    H-001 probe ran. F-003 (injection works), F-004 (slide formula),
+    F-005 (__TEXT bounds), F-006 (binary NOT export-stripped — important
+    correction) all landed. FA-009 documents the dlsym namespace mistake
+    (game::data::* not RED4ext::*). H-005 proposed: real accessor exists as
+    unnamed FUN_* in Ghidra, locatable via xref from exported
+    game::data::TweakDBID type-objects. Next: T-002b validates slide formula
+    empirically (byte-compare via exported _AlignedMalloc), then T-002c
+    hunts the real accessor via Ghidra xrefs.
+
+blockers: []
+
+pending_decisions: []
+
+next_action:
+  agent: lead
+  task_id: T-002b
+  description: >
+    Conductor presents the path forward: re-run the (already enhanced) probe
+    to get symtab + __DATA dumps, then delegate T-002b to Hookline for the
+    byte-compare validation. Or delegate T-002b directly. Lucas's call.
+
+recent_facts_added:
+  - F-001
+  - F-002
+  - F-003
+  - F-004
+  - F-005
+  - F-006
+recent_failed_added:
+  - FA-001
+  - FA-002
+  - FA-003
+  - FA-004
+  - FA-005
+  - FA-006
+  - FA-007
+  - FA-008
+  - FA-009
+
+# Long-term goal — the destination, not v1.0. See D-006 + ARCHITECTURE.md.
+long_term_vision: >
+  Every gameplay-changing Windows Cyberpunk 2077 mod works on macOS unchanged.
+  Full ecosystem: TweakXL, ArchiveXL, CET, Codeware, redscript.
+
+version_roadmap:
+  v1.0:
+    name: Foundation
+    scope: RED4ext-mac framework + TweakXL working
+    status: in-progress (current focus)
+  v1.x:
+    name: Assets
+    scope: ArchiveXL parity (custom archives, mesh/texture/sound replacement)
+    status: planned
+  v2.0:
+    name: Scripting
+    scope: CET (Lua + ImGui-on-Metal), redscript runtime, Codeware
+    status: planned
+
+# High-level progress against v1.0 success criteria.
+v1_progress:
+  red4ext_loads_into_game: 0
+  hooks_work: 0
+  tweakxl_plugin_loads: 0
+  yaml_mods_parse: 0
+  mods_apply_ingame: 0
+  five_nexus_mods_validated: 0
+  one_hour_stability: 0
+  user_install_guide: 0

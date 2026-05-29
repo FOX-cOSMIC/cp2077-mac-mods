@@ -687,3 +687,37 @@ Phase 0 essentially DONE: injection, slide formula, struct layout, singleton pat
 - **Next:** Lucas's call. Options: (a) celebrate + pause, (b) P1.10b for richer ops, (c) Scope finds real flat names for a "visible change in game" demo, (d) Ledger writes user install guide.
 
 ---
+
+---
+
+**2026-05-29 — Scope (researcher) — Cinema-demo flat hunt**
+
+Found that tweakdb.bin stores record names (12,951) but not flat property names (hash-keyed) — F-020. Sourced scalar property names + types from psiberx ExtraFlats.yaml (keys = record TYPE names, verified via MetadataImporter::IsRecordType). Confirmed candidate records exist by exact strings match. Picked 3 scalar Float demo flats: Items.Preset_Nova_Default.weaponVignetteIntensity (HIGH, screen vignette), Attacks.MissileProjectile.explosionRadius (MED-HIGH, giant explosions), Items.GrenadeSmokeRegular.smokeEffectRadius (MED, bigger smoke). Wrote docs/CINEMA_DEMO_FLATS.md + tools/test-cinema.sh (drops each flat in its own file — apply is atomic per file; PASS if any '[applicator] mod applied: applied=N>0'). Honest caveat: record↔type binding only runtime-confirmable; the cinema test is that confirmation (reject op: flat not found if a binding is wrong). Did not run the test (Lucas's call).
+
+## 2026-05-29 — Cinema-demo attempt 1: framework works, picks didn't land (Claude as Conductor)
+
+- **Goal:** find 2-3 real flats that produce visible in-game changes; prove the framework end-to-end with an actual mutation, not just structural wiring.
+- **Scope's run (Opus 4.7, ~7 min):**
+  - Created docs/CINEMA_DEMO_FLATS.md with three Float-valued targets:
+    - `Items.Preset_Nova_Default.weaponVignetteIntensity`
+    - `Attacks.MissileProjectile.explosionRadius` + `.explosionRange`
+    - `Items.GrenadeSmokeRegular.smokeEffectRadius`
+  - Created tools/test-cinema.sh — drops each flat in its own YAML, atomically tests
+  - Added F-020 to FACTS.md — important methodology fact: **tweakdb.bin's string pool contains record names (12,951) but NOT flat names**. Flats are keyed by TweakDBID hash; the property name component is reconstructed at runtime from RTTI. You can't `strings` your way to a working flat name.
+- **In-game test result: framework PASS, demo FAIL:**
+  - 3 mods scanned, parsed, ops attempted
+  - All 5 ops rejected ("flat not found")
+  - Framework behaved perfectly — zero writes, zero rollbacks, no crashes
+  - Scope's offline inference of record↔type bindings didn't match the live TweakDB
+- **Honest takeaway:** Offline analysis hits a ceiling. The on-disk binary tells us records exist; it doesn't tell us which TYPE each record is, and the type determines which flats exist on it. The bindings are reconstructed at game-init time via RTTI, which is only observable from the injected dylib.
+- **Three paths forward (Lucas's call):**
+  - **(a) Runtime RTTI dump task** — enhance the probe to walk the live flats map, dump entry hashes + which type-tag they have; cross-reference with ExtraFlats.yaml. ~1 Schema+Scope session pair.
+  - **(b) P1.10b first** — add Append/Clone/etc. Clone is a structural op (just record-copy) that's very likely to succeed since it doesn't depend on knowing flat names. Would produce a "mod applied: 1" log line, proving end-to-end mutation works, even if not visibly cinematic.
+  - **(c) Find a real Nexus mod and use its flat targets verbatim.** A popular TweakXL Nexus mod has been tested in production on Windows; its targets are real.
+  - **(d) Move on** — Phase 1's main goal (framework works end-to-end) is achieved at P1.11. The cinema demo is post-v1.0 polish. Better to ship v1.0 with documented limitations than chase a single demo target.
+- **Status:** Phase 1 still 95%. The cinema attempt is research, not core feature work.
+- **Files changed:** docs/CINEMA_DEMO_FLATS.md (new), tools/test-cinema.sh (new), docs/FACTS.md (F-020 added by Scope), docs/probes/logs/red4ext-mac-2026-05-29-cinema-attempt-1.log (evidence), state/tasks.yaml, state/status.yaml, this log.
+- **Blockers:** none. Cinema demo is a "nice to have", not a Phase 1 gate.
+- **Next:** Lucas's call between (a)/(b)/(c)/(d).
+
+---

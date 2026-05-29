@@ -451,3 +451,24 @@ No additional stubs or changes are needed for the `.tweak` parser layer itself. 
 - **Invalidates:** none
 
 ---
+
+### F-020: On-disk tweakdb.bin stores record names but NOT flat property names (flats keyed by TweakDBID hash)
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1 (build 5314028); file `r6/cache/tweakdb.bin`, 42,028,033 bytes, mtime 2026-05-29
+- **Evidence:** `strings -8 tweakdb.bin`:
+  - 12,951 two-part dotted IDs (record names) — e.g. `Items.Preset_Nova_Default`, `Attacks.MissileProjectile`, `Character.Player_Puppet_Base`, `Vehicle.RotationLimiter`.
+  - Only **11** three-part dotted strings, and those are vehicle sub-names (`quadra.type66.avenger`), not flats.
+  - **Zero** `Constants.*` strings; no `Player.maxHealth`-style flat paths.
+  - So full flat names (`Record.property`) are **not** present as ASCII — flats are stored/keyed by TweakDBID hash, and the `.property` component is reconstructed at runtime from record-type RTTI (+ TweakXL's `ExtraFlats` for non-reflected flats).
+- **Consequence:** you cannot enumerate moddable flat names by scanning the binary. To target a flat: (1) confirm the **record** exists via `strings -8 tweakdb.bin | grep -xF '<Record>'`; (2) get a valid **property** from the record's type block in `reference/windows-tweakxl/data/ExtraFlats.yaml` (keys are record TYPE names, verified by `MetadataImporter::ImportExtraFlats` → `IsRecordType()`) or from RTTI; (3) the runtime TweakDB resolves `Record.property` by hash. Whether a specific record↔type binding holds is only confirmable at runtime (apply → `[applicator] mod applied:` vs `reject op: flat not found`).
+- **How to re-verify:**
+  ```bash
+  BIN="$HOME/Library/Application Support/Steam/steamapps/common/Cyberpunk 2077/r6/cache/tweakdb.bin"
+  strings -8 "$BIN" | grep -cE '^[A-Za-z][A-Za-z0-9_]+\.[A-Za-z][A-Za-z0-9_]+$'   # ~12951 record names
+  strings -8 "$BIN" | grep -cE '^[A-Za-z][A-Za-z0-9_]+\.[A-Za-z0-9_]+\.[A-Za-z][A-Za-z0-9_]+$'  # 11 (not flats)
+  strings -8 "$BIN" | grep -c 'Constants'   # 0
+  ```
+- **Invalidates:** none
+
+---

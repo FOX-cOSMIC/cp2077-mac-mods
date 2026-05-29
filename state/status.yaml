@@ -9,18 +9,14 @@ last_updated: 2026-05-29
 current_phase:
   id: 1
   name: foundation-engineering
-  progress_pct: 0
+  progress_pct: 5
   description: >
-    Phase 0 CLOSED 2026-05-29. All load-bearing FACTS validated (F-001..F-019),
-    11 FAILED_APPROACHES documented (FA-001..FA-011), 6 hypotheses resolved
-    (H-001/H-002 failed; H-005/H-006/H-007 fact; H-008 deferred to runtime
-    confirmation in Phase 1). Architecture for v1.0 confirmed simple: read
-    singleton pointer, walk hash map, write value buffer — zero code hooks.
-    Apply-trigger = FUN_102b75744 @ 0x102b75744 (DB-populate orchestrator,
-    single caller, polls cleanly).
-    Phase 1 starts: Sprint 1 primitives (P1.1 slide capture, P1.2 singleton
-    access, P1.7 mod scanner, P1.9 psiberx integration) — all unblocked,
-    parallel-eligible across Hookline + Patchwork.
+    Phase 1 Sprint 1 in flight. P1.1 (slide capture) shipped by Hookline:
+    Symbols.{hpp,cpp} + Loader.cpp + CMake wiring + tools/test-slide-capture.sh.
+    Built clean as libred4ext.dylib (arm64). Pre-validated on-host via
+    renamed-binary positive path (base 0x1005f0000, slide 0x5f0000, matches
+    F-004). Next: Hookline on P1.2 (singleton access via StaticToRuntime),
+    or Patchwork on P1.7 (mod scanner) in parallel.
 
 phase_0_summary:
   closed_at: 2026-05-29
@@ -44,13 +40,12 @@ pending_decisions: []
 
 next_action:
   agent: lead
-  task_id: P1.1
+  task_id: P1.2
   description: >
-    Phase 1 Sprint 1 kickoff. Conductor delegates the parallel-eligible
-    Sprint 1 work: P1.1 (slide capture) to Hookline; P1.7+P1.9 (mod scanner
-    + psiberx integration) to Patchwork. H-008 confirmation folds into
-    P1.4 as a single startup-time entry-count check.
-    See docs/PHASE_1_PLAN.md.
+    P1.1 done. Sprint 1 continues with P1.2 (Hookline, singleton accessor
+    consuming StaticToRuntime(0x1080c92d0)) and P1.7/P1.9 (Patchwork, mod
+    scanner + psiberx integration). All independent; pick order by what
+    informs subsequent work fastest.
 
 recent_facts_added:
   - F-014

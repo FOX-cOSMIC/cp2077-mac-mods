@@ -355,3 +355,28 @@ Phase 0 essentially DONE: injection, slide formula, struct layout, singleton pat
 - **Next:** Sprint 1 of Phase 1. Conductor delegates P1.1 (slide capture) to Hookline AND P1.7+P1.9 (mod scanner + psiberx integration) to Patchwork. These don't conflict — same agent CLI serializes but conceptually parallel.
 
 ---
+
+## 2026-05-29 — P1.1 shipped: slide capture primitive (Claude as Conductor)
+
+- **Goal:** First Phase 1 implementation task. Capture image base + ASLR slide for downstream primitives.
+- **Hookline's run (Opus 4.7, 197s ≈ 3 min, 473 raw output lines):**
+  - Created src/red4ext-mac/src/runtime/Symbols.{hpp,cpp}, src/red4ext-mac/src/loader/Loader.cpp, src/red4ext-mac/src/runtime/slide_test.cpp
+  - Wired src/red4ext-mac/CMakeLists.txt — `red4ext` SHARED library + `slide_test` standalone test target
+  - Wrote tools/test-slide-capture.sh — game-launch smoke test
+  - Built clean: zero warnings on -Wall -Wextra, libred4ext.dylib is arm64
+  - **On-host pre-validation (no game launch needed):**
+    - Negative path: `slide_test` binary doesn't match → API returns 0, safe degradation
+    - Positive path: renamed binary to `Cyberpunk2077` → base 0x1005f0000, slide 0x5f0000, base-slide == 0x100000000 ✓ (validates F-004)
+    - StaticToRuntime(0x1080c92d0) = 0x1086b92d0 = 0x1080c92d0 + 0x5f0000 ✓
+- **Engineering quality:** thread-safe via std::atomic + std::call_once; first-image-wins semantics; exact-basename matching (fixes T-018/F-010 over-matching); idempotent EnsureInit() callable from multiple constructor priorities.
+- **Hookline's flagged follow-ups:**
+  - Switch CMake to GLOB once more primitives land (exclude slide_test.cpp's main())
+  - Relocate accessor headers to include/RED4macOS/ per PHASE_1_PLAN tree
+  - Remove slide_test target before v1.0
+- **Status:** Phase 1 progress 0% → 5%. Sprint 1 first task complete.
+- **Files changed:** 4 new source files in src/red4ext-mac/, 1 new tools script, CMakeLists.txt updated; state/tasks.yaml, state/status.yaml, this log.
+- **FACTS / FAILED_APPROACHES:** none (implementation phase).
+- **Blockers:** none.
+- **Next:** Run smoke test against live game to validate end-to-end. Then P1.2 (singleton accessor) or P1.7 (mod scanner) in parallel.
+
+---

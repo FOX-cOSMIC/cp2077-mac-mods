@@ -1,0 +1,196 @@
+#pragma once
+//
+// TweakDB.hpp — P1.4 typed TweakDB struct + read-only accessor.
+//
+// Models the macOS-runtime `game::data::TweakDB` instance whose live pointer is
+// read from the global singleton (F-011, via SingletonAccess.hpp). The layout
+// here is transcribed *exactly* from F-015 (constructor FUN_102b73db8), with
+// every offset accounted for and each field annotated with the F-### row it
+// came from. Where F-015 describes an embedded sub-object/container we don't
+// need typed access to in v1.0, an opaque byte array preserves the offset
+// without guessing internal structure (per the P1.4 "prefer opaque over guess"
+// constraint).
+//
+// READ-ONLY at this layer. No mutation helpers — value-buffer writes land in
+// P1.6, real mutation in P1.10. (AGENTS.md: "No partial-state mutations.")
+//
+// All offsets are in-struct byte offsets. Static (Ghidra) addresses cited in
+// comments are base 0x100000000; runtime = static + slide (F-004/F-007).
+//
+#include <cstddef>
+#include <cstdint>
+
+namespace red4ext_mac {
+
+// ───────────────────────────────────────────────────────────────────────────
+// HashMap — one of the three structurally-identical TweakDBID-keyed hash maps
+// (F-017: "three structurally-identical hash maps"). Sub-layout confirmed two
+// ways: F-012 disassembled the records map (+0x88) and F-019 disassembled the
+// +0x58 map's destructor (FUN_100ad1df0). Both agree:
+//
+//   block+0x00  bucketArray  uint32* — bucket-index array, empty bucket = 0xffffffff
+//   block+0x08  count        uint32  — populated entry count   (F-012 +0x90; F-019 +0x08)
+//   block+0x0c  bucketCount  uint32  — modulus for the hash    (F-012 +0x94; F-019 +0x0c)
+//   block+0x10  entries      uint8*  — entries array (typed by 'stride')
+//   block+0x18  field18      uint32  — unannotated in F-015 (capacity/used?); kept explicit
+//   block+0x1c  stride       uint32  — bytes per entry         (F-012 +0xa4; F-019 +0x1c)
+//   block+0x20  sentinel     uint32  — empty-bucket template = 0xffffffff (F-015 +0xa8)
+//   block+0x24  field24      uint32  — alignment/unannotated padding
+//   block+0x28  allocator    void*   — backing allocator       (F-015 +0xb0)
+//
+// Map stride in the parent struct is 0x30 (0x88 records − 0x58 mapA), so the
+// whole HashMap is exactly 0x30 bytes.
+//
+// Entry shape (F-012 @ 0x10121f328), for downstream P1.5: +0x00 next-index,
+// +0x04 stored hash (uint32), +0x08 key/TweakDBID (8 bytes), payload follows.
+struct HashMap {
+    uint32_t* bucketArray;   // +0x00 — bucket-index array (F-012/F-019)
+    uint32_t  count;         // +0x08 — populated entry count (F-012/F-019)
+    uint32_t  bucketCount;   // +0x0c — modulus (F-012/F-019)
+    uint8_t*  entries;       // +0x10 — entries array (F-012/F-019)
+    uint32_t  field18;       // +0x18 — unannotated in F-015; held explicit
+    uint32_t  stride;        // +0x1c — entry size in bytes (F-012/F-019)
+    uint32_t  sentinel;      // +0x20 — 0xffffffff empty-bucket template (F-015)
+    uint32_t  field24;       // +0x24 — alignment/unannotated
+    void*     allocator;     // +0x28 — backing allocator (F-015)
+};
+static_assert(sizeof(HashMap) == 0x30, "HashMap must be 0x30 (map stride 0x88-0x58)");
+static_assert(offsetof(HashMap, count)       == 0x08, "F-012/F-019: count @ +0x08");
+static_assert(offsetof(HashMap, bucketCount) == 0x0c, "F-012/F-019: bucketCount @ +0x0c");
+static_assert(offsetof(HashMap, entries)     == 0x10, "F-012/F-019: entries @ +0x10");
+static_assert(offsetof(HashMap, stride)      == 0x1c, "F-012/F-019: stride @ +0x1c");
+static_assert(offsetof(HashMap, allocator)   == 0x28, "F-015: allocator @ block+0x28");
+
+// ───────────────────────────────────────────────────────────────────────────
+// TweakDB — the 0x168-byte heap instance (F-013).
+//
+// Per F-016: NO vtable. this+0x00 is plain zeroed data (constructor's first op
+// is `stp q0,q0,[x0]` with q0=0). So there is nothing polymorphic here.
+//
+// Three structurally-identical hash maps (F-017):
+//   +0x58  — hashMapA          flats candidate  (H-008 pending runtime verify)
+//   +0x88  — hashMapB_records  records          (F-012 CONFIRMED)
+//   +0x108 — hashMapC          queries candidate (H-008 inference)
+// The flats-vs-queries label for A/C is INFERENCE only (F-019); do not treat
+// it as fact. VerifyH008() resolves it at runtime from the live entry counts.
+struct TweakDB {
+    // +0x00..0x1F — zeroed 32 bytes; vtable slot is 0 (F-015 / F-016).
+    uint8_t   pad00[0x20];
+    // +0x20 — u16 atomic/refcount (F-015: dtor touches +0x20/+0x21).
+    uint16_t  refcount;
+    uint8_t   pad22[0x28 - 0x22];          // +0x22..0x27
+    // +0x28 — ptr → 0x158-byte heap sub-object (F-015: flat-value pool/manager candidate).
+    void*     subObjA;
+    // +0x30 — ptr → 0xf8-byte heap sub-object (F-015: secondary manager).
+    void*     subObjB;
+    // +0x38 — u8 = 1: owns/initialized flag (F-015).
+    uint8_t   flagInit;
+    uint8_t   pad39[0x40 - 0x39];          // +0x39..0x3F
+    // +0x40..0x4B — embedded lock/small container (F-015); opaque.
+    uint8_t   embedded40[0x4c - 0x40];
+    // +0x4c..0x57 — F-015 "+0x4c 8 bytes = 0" (`stur d0,[x19,#0x4c]`) plus the
+    // 4-byte gap to +0x58. Kept as opaque bytes: a uint64_t here would land at
+    // the unaligned offset 0x4c and force the compiler to pad-shift the whole
+    // tail of the struct (caught by the offsetof asserts during bring-up).
+    uint8_t   pad4c[0x58 - 0x4c];
+    // +0x58 — HASH MAP A: flats candidate (F-015 / F-019 / H-008).
+    HashMap   hashMapA;
+    // +0x88 — RECORDS map (F-012 CONFIRMED).
+    HashMap   hashMapB_records;
+    // +0xB8..0xC3 — embedded sub-object (F-015); opaque.
+    uint8_t   embedded_b8[0xc4 - 0xb8];
+    // +0xC4 — u32 = 0 (F-015).
+    uint32_t  pad_c4;
+    // +0xC8..0xDF — embedded small hash map (F-015; count @ +0xd4); opaque.
+    uint8_t   smallMap_c8[0xe0 - 0xc8];
+    // +0xE0..0xEB — embedded sub-object (F-015); opaque.
+    uint8_t   embedded_e0[0xec - 0xe0];
+    // +0xEC — u32 = 0 (F-015).
+    uint32_t  pad_ec;
+    // +0xF0..0x107 — embedded container (F-015; +0xfc = 0); opaque.
+    uint8_t   container_f0[0x108 - 0xf0];
+    // +0x108 — HASH MAP C: queries candidate (F-015 / H-008).
+    HashMap   hashMapC;
+    // +0x138..0x147 — embedded container (F-015; count @ +0x144); opaque.
+    uint8_t   container_138[0x148 - 0x138];
+    // +0x148 — flat-data-buffer pointer (F-015: mirrors Windows flatDataBuffer@0x148;
+    //          zeroed in ctor, populated at load time per F-018).
+    const uint8_t* flatDataBuffer;
+    // +0x150 — u32 buffer size/end (F-015).
+    uint32_t  flatDataBufferSize;
+    // +0x154..0x157 — 4-byte gap before the 8-byte capacity field (align).
+    uint32_t  pad154;
+    // +0x158 — 8 bytes = 0 in ctor: buffer capacity/ptr, populated at load (F-015).
+    uint64_t  flatDataBufferCapacity;
+    // +0x160 — u8 = 0 (F-015).
+    uint8_t   field160;
+    uint8_t   pad161[0x164 - 0x161];       // +0x161..0x163
+    // +0x164 — u32, last field; struct ends at 0x168 (F-015).
+    uint32_t  field164;
+};
+
+// ── Layout assertions: catch any drift from F-015 at compile time ────────────
+static_assert(sizeof(TweakDB) == 0x168, "F-013: TweakDB must be exactly 0x168 bytes");
+static_assert(offsetof(TweakDB, refcount)               == 0x20,  "F-015: refcount @ +0x20");
+static_assert(offsetof(TweakDB, subObjA)                == 0x28,  "F-015: subObjA @ +0x28");
+static_assert(offsetof(TweakDB, subObjB)                == 0x30,  "F-015: subObjB @ +0x30");
+static_assert(offsetof(TweakDB, flagInit)               == 0x38,  "F-015: flagInit @ +0x38");
+static_assert(offsetof(TweakDB, hashMapA)               == 0x58,  "F-015: hashMapA @ +0x58");
+static_assert(offsetof(TweakDB, hashMapB_records)       == 0x88,  "F-012: records map @ +0x88");
+// Spot-check that the records map's count lands at the F-012 absolute offset +0x90.
+static_assert(offsetof(TweakDB, hashMapB_records) + offsetof(HashMap, count) == 0x90,
+              "F-012: records count @ +0x90");
+static_assert(offsetof(TweakDB, hashMapC)               == 0x108, "F-015: hashMapC @ +0x108");
+static_assert(offsetof(TweakDB, flatDataBuffer)         == 0x148, "F-015: flat buffer ptr @ +0x148");
+static_assert(offsetof(TweakDB, flatDataBufferSize)     == 0x150, "F-015: flat buffer size @ +0x150");
+static_assert(offsetof(TweakDB, flatDataBufferCapacity) == 0x158, "F-015: flat buffer cap @ +0x158");
+
+// ───────────────────────────────────────────────────────────────────────────
+// Read-only accessor helpers (consumed by P1.5/P1.6/P1.10).
+//
+// These exist so downstream callers never hardcode offsets — they ask the
+// accessor. The flats/queries *labels* on A/C are still candidates until
+// VerifyH008() resolves H-008 at runtime; the helper names say "Candidate" to
+// keep that honest.
+inline const HashMap* GetRecordsMap(const TweakDB* db) {
+    return db ? &db->hashMapB_records : nullptr;
+}
+inline const HashMap* GetFlatsMapCandidate(const TweakDB* db) {
+    return db ? &db->hashMapA : nullptr;          // +0x58 (H-008: likely flats)
+}
+inline const HashMap* GetQueriesMapCandidate(const TweakDB* db) {
+    return db ? &db->hashMapC : nullptr;          // +0x108 (H-008: likely queries)
+}
+inline const uint8_t* GetValueBuffer(const TweakDB* db) {
+    return db ? db->flatDataBuffer : nullptr;     // +0x148
+}
+inline uint32_t GetValueBufferSize(const TweakDB* db) {
+    return db ? db->flatDataBufferSize : 0u;      // +0x150
+}
+inline uint64_t GetValueBufferCapacity(const TweakDB* db) {
+    return db ? db->flatDataBufferCapacity : 0ull; // +0x158
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// H-008 verification.
+//
+// Logs the live entry counts of map A (+0x58) and map C (+0x108) exactly once
+// per process to /tmp/red4ext-mac.log. Whichever map holds vastly more entries
+// is flats; the other is queries (flats outnumber queries by orders of
+// magnitude — F-019 / H-008).
+//
+// Call on first successful access — e.g. the P1.2 deferred sample or the P1.3
+// polling loop, once the singleton is non-null and populated. Idempotent: the
+// function records that it ran and is a no-op on subsequent calls.
+//
+// Emits (machine-parseable):
+//   [tweakdb] H-008 verification: mapA(+0x58).count=N1 mapC(+0x108).count=N2 verdict=<v>
+//     verdict ∈ { flats-is-A | flats-is-C | indeterminate }
+// plus a raw diagnostic line cross-checking the F-015 map-C count-offset
+// discrepancy (see TweakDB.cpp).
+//
+// Reads are done through mach_vm_read_overwrite so a partially-constructed or
+// unmapped struct can never crash the game (same safety model as P1.2).
+void VerifyH008(const TweakDB* db);
+
+} // namespace red4ext_mac

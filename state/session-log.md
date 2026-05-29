@@ -441,3 +441,31 @@ Phase 0 essentially DONE: injection, slide formula, struct layout, singleton pat
 - **Next:** Sprint 2. Recommended: P1.4 (Schema, TweakDB struct accessor + H-008 verification) — this is the linchpin that unblocks P1.5/P1.6/P1.10. P1.8 (YAML parser, Patchwork) parallel-eligible.
 
 ---
+
+## 2026-05-29 — P1.4 shipped + H-008 RESOLVED via in-game smoke test (Claude as Conductor)
+
+- **Goal:** Schema delivers TweakDB struct accessor + H-008 verification. Sprint 2 kickoff.
+- **Schema's run (Opus 4.7, 404s ≈ 6.7 min, 1036 raw output lines):**
+  - Created src/red4ext-mac/src/runtime/TweakDB.{hpp,cpp} + tweakdb_test.cpp; modified Loader.cpp; updated CMakeLists.txt; created tools/test-tweakdb-access.sh
+  - Built clean, -Wall -Wextra, zero warnings
+  - **Critical engineering catch (static_assert paid off):** First build failed because `uint64_t pad4c` at unaligned offset 0x4c forced compiler to pad-shift the entire struct tail (records ended up at 0x90 instead of 0x88). Fixed with opaque byte array. Without the static_assert this would have been a silent latent bug.
+  - F-015 ambiguity flagged: hashMapC.count listed at +0x114 (block +0x0c, the bucketCount slot) while F-012/F-019 use +0x08. Schema's H-008 raw output logs BOTH so it can be resolved at runtime.
+- **🎯 In-game smoke test PASS (game build 2.3.1, T+~7s post-launch):**
+  - `mapA(+0x58).count = 193,354` ← FLATS
+  - `mapC(+0x108).count = 12` ← QUERIES
+  - `records.count = 843`
+  - `valueBufferSize = 4,291,664 bytes (~4 MB)`
+  - **Verdict: flats-is-A → H-008 CONFIRMED.** 16,000:1 ratio between map counts is decisive.
+  - Raw log: `mapC{@08=12,@0c=13}` → count is at +0x08 in all three maps; the F-015 +0x114 annotation was likely a misreading. Schema's logging strategy resolved the ambiguity without a rebuild.
+- **H-008 → resolved-fact** in HYPOTHESES.md.
+- **What this means for downstream:** Schema's `GetFlatsMapCandidate(db)` → +0x58 is now the canonical flats accessor. No swap needed. P1.5 (hash walker), P1.6 (value buffer R/W), P1.10 (applicator) all unblocked.
+- **Live database stats discovered:** TweakDB v2.3.1 has 193,354 flats + 843 records + 12 queries, with a 4MB flat-value buffer at +0x148. This is what our applicator will mutate.
+- **Recommendation:** Scope should formalize the H-008 confirmation and the F-015 count-offset detail as F-020 when next fired. Doesn't block progress.
+- **Status:** Phase 1 progress 25% → 35%. Sprint 2 P1.4 done.
+- **Files changed:** TweakDB.hpp/cpp/tweakdb_test.cpp new; Loader.cpp/CMakeLists.txt modified; tools/test-tweakdb-access.sh new; docs/probes/logs/red4ext-mac-2026-05-29-p1-4.log (evidence); docs/HYPOTHESES.md (H-008 resolved); state/tasks.yaml, state/status.yaml; this log.
+- **FACTS added:** none (H-008 evidence supports a future F-020).
+- **HYPOTHESES resolved:** H-008 (fact).
+- **Blockers:** none.
+- **Next:** P1.5 (hash walker by Schema) — natural next, momentum on TweakDB primitives. Then P1.6 (value buffer R/W). After Sprint 2 hash + buffer primitives, P1.10 (applicator) is unblocked.
+
+---

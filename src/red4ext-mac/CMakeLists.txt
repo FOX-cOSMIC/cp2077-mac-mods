@@ -22,6 +22,7 @@ add_library(red4ext SHARED
     src/loader/Loader.cpp
     src/runtime/Symbols.cpp
     src/runtime/SingletonAccess.cpp
+    src/runtime/TweakDB.cpp
 )
 
 target_compile_features(red4ext PRIVATE cxx_std_17)
@@ -45,6 +46,18 @@ set_target_properties(red4ext PROPERTIES
 add_executable(slide_test src/runtime/slide_test.cpp)
 target_link_libraries(slide_test PRIVATE red4ext)
 set_target_properties(slide_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src/red4ext-mac"
+)
+
+# ── tweakdb_test — P1.4 standalone layout/offset exerciser ───────────────────
+# Pure compile-time layout checks (static_asserts) + offset dump. Does not link
+# the dylib: it needs only TweakDB.hpp (header-only accessors). If F-015 drift
+# breaks the layout, this target fails to COMPILE — the cheapest possible guard.
+add_executable(tweakdb_test src/runtime/tweakdb_test.cpp)
+target_compile_features(tweakdb_test PRIVATE cxx_std_17)
+target_compile_options(tweakdb_test PRIVATE -Wall -Wextra)
+target_include_directories(tweakdb_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set_target_properties(tweakdb_test PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src/red4ext-mac"
 )
 

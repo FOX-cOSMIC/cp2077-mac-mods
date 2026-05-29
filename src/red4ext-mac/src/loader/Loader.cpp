@@ -8,6 +8,7 @@
 
 #include "../runtime/Symbols.hpp"
 #include "../runtime/SingletonAccess.hpp"
+#include "../runtime/TweakDB.hpp"
 
 #include <cstdarg>
 #include <cstdio>
@@ -86,8 +87,15 @@ static void red4ext_mac_loader_init() {
     // exits. P1.3 replaces it with the real polling loop; remove this then.
     std::thread([] {
         std::this_thread::sleep_for(std::chrono::seconds(6));
-        void* db = (void*)red4ext_mac::GetTweakDBUncached();
-        log_line("[singleton-access] deferred sample: %p%s", db,
+        red4ext_mac::TweakDB* db = red4ext_mac::GetTweakDBUncached();
+        log_line("[singleton-access] deferred sample: %p%s", (void*)db,
                  db ? "" : " (still null after delay)");
+
+        // P1.4: fold in the H-008 verification. On the first non-null sample,
+        // log the +0x58 vs +0x108 entry counts so the runtime learns which map
+        // is flats. VerifyH008 is once-only and reads via mach_vm so it can
+        // never crash even if the DB is still mid-populate at this point.
+        if (db)
+            red4ext_mac::VerifyH008(db);
     }).detach();
 }

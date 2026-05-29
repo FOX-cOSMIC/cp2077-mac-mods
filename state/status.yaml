@@ -1,80 +1,69 @@
-# Single source of truth for current project state.
-# Owner: doc-keeper agent only. Other agents read but do not write.
-# Must remain valid YAML at all times.
-
+---
 project: cp2077-mac-mods
 version: 0.1.0
 last_updated: 2026-05-29
-
 current_phase:
   id: 1
   name: foundation-engineering
-  progress_pct: 25
-  description: >
-    Phase 1 Sprint 1 COMPLETE. P1.1 (slide capture), P1.2 (singleton access),
-    P1.7 (mod scanner), P1.9 (.tweak parser via psiberx + TWEAKXL_MAC_OFFLINE)
-    all shipped and passing smoke tests. Two dylibs built clean:
-    libred4ext.dylib (Hookline), libtweakxl.dylib (Patchwork, 2.1MB inc.
-    psiberx parser source). Sprint 2 unblocked: P1.4-P1.6 (Schema's TweakDB
-    struct accessors), P1.8 (YAML parser), P1.3 (apply-trigger polling).
-    Notable mid-flight discovery: F-002 was incomplete (missed CName shim,
-    std::exception remap, C++20, mac-13.3 reqs); T-020 filed for Scope to
-    document the actual integration requirements as F-020.
+  progress_pct: 35
+  description: 'Phase 1 Sprint 1 COMPLETE. P1.1 (slide capture), P1.2 (singleton access),
+    P1.7 (mod scanner), P1.9 (.tweak parser via psiberx + TWEAKXL_MAC_OFFLINE) all
+    shipped and passing smoke tests. Two dylibs built clean: libred4ext.dylib (Hookline),
+    libtweakxl.dylib (Patchwork, 2.1MB inc. psiberx parser source). Sprint 2 unblocked:
+    P1.4-P1.6 (Schema''s TweakDB struct accessors), P1.8 (YAML parser), P1.3 (apply-trigger
+    polling). Notable mid-flight discovery: F-002 was incomplete (missed CName shim,
+    std::exception remap, C++20, mac-13.3 reqs); T-020 filed for Scope to document
+    the actual integration requirements as F-020.
 
+'
 phase_0_summary:
   closed_at: 2026-05-29
-  duration_days: 1   # single Lucas-session
+  duration_days: 1
   facts_validated: 19
   failed_approaches_documented: 11
-  hypotheses_resolved_fact: 4   # H-005, H-006, H-007
-  hypotheses_resolved_failed: 2   # H-001, H-002
-  hypotheses_still_open: 3        # H-003 (moot per F-016), H-004 (presumed), H-008 (runtime-resolvable)
+  hypotheses_resolved_fact: 4
+  hypotheses_resolved_failed: 2
+  hypotheses_still_open: 3
   key_discoveries:
-    - TweakDB struct = 0x168 bytes (same as Windows, NOT 0x198)
-    - No vtable, no fn-ptr dispatch — pure data layout
-    - Singleton at 0x1080c92d0, slide-adjusted
-    - Apply-trigger at FUN_102b75744 — single-caller orchestrator
-    - Re-signing NOT required for v1.0 (stock 2.3.1 has needed entitlements)
-    - psiberx .tweak parser reusable via TWEAKXL_MAC_OFFLINE flag
-
+  - TweakDB struct = 0x168 bytes (same as Windows, NOT 0x198)
+  - No vtable, no fn-ptr dispatch — pure data layout
+  - Singleton at 0x1080c92d0, slide-adjusted
+  - Apply-trigger at FUN_102b75744 — single-caller orchestrator
+  - Re-signing NOT required for v1.0 (stock 2.3.1 has needed entitlements)
+  - psiberx .tweak parser reusable via TWEAKXL_MAC_OFFLINE flag
 blockers: []
-
 pending_decisions: []
-
 next_action:
   agent: lead
   task_id: P1.4
-  description: >
-    Sprint 2 kickoff. Schema (tweakdb-engineer) on P1.4 — TweakDB struct
-    accessor at F-015 offsets. Includes the H-008 entry-count verification
-    (first-access sanity check on +0x58 vs +0x108 entry counts). After P1.4,
-    P1.5 (hash walker) and P1.6 (value buffer R/W) follow.
-    In parallel-eligible: P1.8 (YAML parser) by Patchwork. P1.3 (apply-trigger
-    poll) by Hookline once Schema's primitives exist.
+  description: 'Sprint 2 kickoff. Schema (tweakdb-engineer) on P1.4 — TweakDB struct
+    accessor at F-015 offsets. Includes the H-008 entry-count verification (first-access
+    sanity check on +0x58 vs +0x108 entry counts). After P1.4, P1.5 (hash walker)
+    and P1.6 (value buffer R/W) follow. In parallel-eligible: P1.8 (YAML parser) by
+    Patchwork. P1.3 (apply-trigger poll) by Hookline once Schema''s primitives exist.
 
+'
 recent_facts_added:
-  - F-014
-  - F-015
-  - F-016
-  - F-017
-  - F-018
-  - F-019
+- F-014
+- F-015
+- F-016
+- F-017
+- F-018
+- F-019
 recent_failed_added:
-  - FA-001
-  - FA-002
-  - FA-003
-  - FA-004
-  - FA-005
-  - FA-006
-  - FA-007
-  - FA-008
-  - FA-009
+- FA-001
+- FA-002
+- FA-003
+- FA-004
+- FA-005
+- FA-006
+- FA-007
+- FA-008
+- FA-009
+long_term_vision: 'Every gameplay-changing Windows Cyberpunk 2077 mod works on macOS
+  unchanged. Full ecosystem: TweakXL, ArchiveXL, CET, Codeware, redscript.
 
-# Long-term goal — the destination, not v1.0. See D-006 + ARCHITECTURE.md.
-long_term_vision: >
-  Every gameplay-changing Windows Cyberpunk 2077 mod works on macOS unchanged.
-  Full ecosystem: TweakXL, ArchiveXL, CET, Codeware, redscript.
-
+'
 version_roadmap:
   v1.0:
     name: Foundation
@@ -88,8 +77,6 @@ version_roadmap:
     name: Scripting
     scope: CET (Lua + ImGui-on-Metal), redscript runtime, Codeware
     status: planned
-
-# High-level progress against v1.0 success criteria.
 v1_progress:
   red4ext_loads_into_game: 0
   hooks_work: 0

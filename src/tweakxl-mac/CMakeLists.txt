@@ -39,6 +39,7 @@ set(TWEAKXL_SOURCES
     src/parsers/PsiberxParser.cpp   # wraps reference Source/Parser.cpp
     src/parsers/YAML.cpp            # P1.8 YAML → Op AST
     src/applicator/Applicator.cpp   # P1.10a Op AST → TweakDB (scalar Assign)
+    src/plugin/Plugin.cpp           # P1.11 orchestrator (constructor + apply cb)
 )
 
 add_library(tweakxl SHARED ${TWEAKXL_SOURCES})

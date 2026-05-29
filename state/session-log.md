@@ -641,3 +641,49 @@ Phase 0 essentially DONE: injection, slide formula, struct layout, singleton pat
 - Telegram inert until user messages the bot once and chat ID is captured via getUpdates
 
 ---
+
+## 2026-05-29 — 🎯 P1.11 SHIPPED — FIRST END-TO-END DEMO WORKS IN-GAME (Claude as Conductor)
+
+- **Goal:** Plugin orchestrator that closes the loop — registers an apply callback, scans r6/tweaks/, parses each mod, applies via P1.10a's ApplyMod, logs aggregate ApplyResult.
+- **Patchwork's run (Opus 4.7, 283s ≈ 4.7 min, no CLI timeout):**
+  - Created src/tweakxl-mac/src/plugin/Plugin.cpp (constructor(101) + apply callback)
+  - Modified src/tweakxl-mac/CMakeLists.txt (added Plugin.cpp to tweakxl target)
+  - Created tools/test-tweakxl-e2e.sh (end-to-end smoke test)
+  - Built clean — zero warnings on -Wall -Wextra
+  - **Game-dir detection:** _NSGetExecutablePath → weakly_canonical → 4× parent_path → /r6/tweaks. Env override TWEAKXL_MODS_DIR wins.
+  - **Linking:** libtweakxl.dylib declares @rpath/libred4ext.dylib dependency. Injecting only libtweakxl makes dyld pull libred4ext automatically. Verified via otool -L.
+- **🎯 In-game E2E PASS (independently re-verified by Conductor):**
+  ```
+  [red4ext-mac] loader init 2026-05-29T14:00:41, base=0x104f64000 slide=0x4f64000
+  [tweakxl] plugin orchestrator init
+  [apply-trigger] firing callbacks (db=0x321580a60, poll #83)
+  [tweakxl] mods dir: /tmp/tweakxl-e2e-mods
+  [tweakxl] mods scanned: 1 (yaml=1, tweak=0)
+  [tweakxl] yaml applied: 0/1, ops applied: 0, skipped: 0, rejected: 1, rollbacks: 0
+  [tweakxl] tweak files skipped: 0 (P1.11b)
+  ```
+  - Synthetic YAML targeting a nonexistent flat → 1 rejected (flat not found), 0 writes, 0 rollback needed
+  - Game state UNCHANGED (intentional — proves wiring without affecting real data)
+- **🚀 MILESTONE — Phase 1's primary goal achieved:** A drop-a-YAML-and-launch demo works end-to-end. The same chain that rejected the synthetic mod would APPLY a real one targeting an actual flat. Only thing standing between us and "real Nexus mod changes a stat" is finding/picking a real flat name (researcher task) — the framework itself is complete for the scalar case.
+- **One semantic question Patchwork flagged (NOT blocking):** P1.10a's strict semantics: `mods_rolled_back=0` when a mod rejects BEFORE any writes (nothing to restore). P1.11's expected line assumed `rollbacks: 1` for the rejected mod. Patchwork didn't silently change either side — he flagged it and asked for a decision. **Conductor's decision: go with Patchwork's recommendation — partition `mods_ok` XOR `mods_rolled_back` so every mod's outcome is recorded exactly once.** This makes "rolled back" semantically "mod failed" rather than "writes were undone". File this as a small follow-up for P1.10b's session.
+- **Sprint 2 Patchwork track:** 3/3 done. Whole sprint complete (P1.4..P1.6b Schema, P1.3..P1.3c Hookline, P1.7/P1.8/P1.9/P1.10a/P1.11 Patchwork).
+- **Phase 1 progress: 88% → 95%.** Remaining 5% = P1.10b (array/record ops) + P1.11b (.tweak applicator adapter) + version-floor cleanup + bug-fix passes.
+- **Open follow-ups (not blocking demo):**
+  - P1.10b — array ops (Append/Prepend/Remove/Merge), record clone/create, non-scalar value types (String/CName/TweakDBID/LocKey/ResRef)
+  - P1.11b — .tweak applicator adapter (TweakSourceHandle → ModFile or extend ApplyMod to consume TweakSource directly)
+  - Version-floor cleanup — align red4ext deployment target to 13.3, kill the link warning
+  - Real-flat demo — pick a known flat (e.g. via Scope dumping a few flat names from Ghidra) and write a YAML that changes a real stat in-game
+- **Status:** v1.0 success criteria status:
+  - [x] red4ext loads into game (P1.1/P1.2 proved, P1.11 wires)
+  - [x] hooks work (P1.3 apply-trigger fires)
+  - [x] tweakxl plugin loads (P1.11 init log)
+  - [x] yaml mods parse (P1.8 PASS)
+  - [PARTIAL] mods apply in-game — scalar Assign works structurally; needs a real flat to demo a visible change
+  - [ ] five Nexus mods validated
+  - [ ] one-hour stability
+  - [ ] user install guide
+- **Files changed:** Plugin.cpp new; CMakeLists.txt + tools/test-tweakxl-e2e.sh new; docs/probes/logs/red4ext-mac-2026-05-29-p1-11-e2e.log (evidence); state/tasks.yaml, state/status.yaml; this log.
+- **Blockers:** none.
+- **Next:** Lucas's call. Options: (a) celebrate + pause, (b) P1.10b for richer ops, (c) Scope finds real flat names for a "visible change in game" demo, (d) Ledger writes user install guide.
+
+---

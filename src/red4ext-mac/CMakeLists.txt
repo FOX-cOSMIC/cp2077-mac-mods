@@ -23,6 +23,7 @@ add_library(red4ext SHARED
     src/runtime/Symbols.cpp
     src/runtime/SingletonAccess.cpp
     src/runtime/TweakDB.cpp
+    src/runtime/HashMap.cpp
 )
 
 target_compile_features(red4ext PRIVATE cxx_std_17)
@@ -58,6 +59,15 @@ target_compile_features(tweakdb_test PRIVATE cxx_std_17)
 target_compile_options(tweakdb_test PRIVATE -Wall -Wextra)
 target_include_directories(tweakdb_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set_target_properties(tweakdb_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src/red4ext-mac"
+)
+
+# ── hashmap_test — P1.5 hash-primitive unit test ────────────────────────────
+# Verifies Fnv1a32/Crc32 against published vectors + TweakDBID packing. Links
+# the dylib for the hash symbols (HashMap.cpp), same pattern as slide_test.
+add_executable(hashmap_test src/runtime/hashmap_test.cpp)
+target_link_libraries(hashmap_test PRIVATE red4ext)
+set_target_properties(hashmap_test PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src/red4ext-mac"
 )
 

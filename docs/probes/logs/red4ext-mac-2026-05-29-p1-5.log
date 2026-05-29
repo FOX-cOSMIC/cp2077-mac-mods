@@ -1,0 +1,8 @@
+[red4ext-mac] loader init 2026-05-29T11:02:31, base=0x104c14000 slide=0x4c14000
+[singleton-access] initial poll: 0x0 (null — expected at load time; DB built later)
+[singleton-access] deferred sample: 0x323140bd0
+[tweakdb] H-008 verification: mapA(+0x58).count=193354 mapC(+0x108).count=12 verdict=flats-is-A
+[tweakdb] H-008 raw: mapA{@08=193354,@0c=193354} records{@08=843,@0c=843} mapC{@08=12,@0c=13} (F-015 lists mapC.count@0c=+0x114; F-012/F-019 use @08)
+[tweakdb] state: records.count=843 valueBufferSize=4291664
+[hashmap] hash-function: fnv1a-8B stored=0x996f5e0c computed=0x996f5e0c key=<TweakDBID(0x0ccc10d0,len=1,off=0x000000)> bucket=1/843
+[hashmap] lookup-test: pass key=<TweakDBID(0x0ccc10d0,len=1)> entry=0x701c5fc430 expected=0x701c5fc430

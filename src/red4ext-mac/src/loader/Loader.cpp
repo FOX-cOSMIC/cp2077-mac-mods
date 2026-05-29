@@ -9,6 +9,7 @@
 #include "../runtime/Symbols.hpp"
 #include "../runtime/SingletonAccess.hpp"
 #include "../runtime/TweakDB.hpp"
+#include "../runtime/HashMap.hpp"
 
 #include <cstdarg>
 #include <cstdio>
@@ -95,7 +96,12 @@ static void red4ext_mac_loader_init() {
         // log the +0x58 vs +0x108 entry counts so the runtime learns which map
         // is flats. VerifyH008 is once-only and reads via mach_vm so it can
         // never crash even if the DB is still mid-populate at this point.
-        if (db)
+        if (db) {
             red4ext_mac::VerifyH008(db);
+            // P1.5: identify the bucket-hash function against a live records
+            // entry and round-trip a known key. Runs after VerifyH008 so the
+            // log reads top-down: which-map-is-flats, then how-to-hash-keys.
+            red4ext_mac::VerifyHashFunction(db);
+        }
     }).detach();
 }

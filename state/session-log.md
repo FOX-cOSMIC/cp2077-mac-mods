@@ -469,3 +469,30 @@ Phase 0 essentially DONE: injection, slide formula, struct layout, singleton pat
 - **Next:** P1.5 (hash walker by Schema) — natural next, momentum on TweakDB primitives. Then P1.6 (value buffer R/W). After Sprint 2 hash + buffer primitives, P1.10 (applicator) is unblocked.
 
 ---
+
+## 2026-05-29 — P1.5 shipped + hash function identified in-game (Claude as Conductor)
+
+- **Goal:** Schema delivers the hash map walker. Discovers actual hash function used by game empirically (not assumed).
+- **Schema's run (Opus 4.7, 567s ≈ 9.4 min, 861 raw output lines):**
+  - Created src/red4ext-mac/src/runtime/HashMap.{hpp,cpp} + hashmap_test.cpp
+  - Modified Loader.cpp (now also calls VerifyHashFunction after VerifyH008)
+  - Built clean, unit tests pass (FNV-1a known vectors match, CRC32 known vector matches, TweakDBID packing OK)
+  - Engineering notes: cycle guard bounds chain walk at count+8 to prevent hangs on corrupt data; all reads via mach_vm_read_overwrite for safety
+- **🎯 In-game smoke test PASS (game build 2.3.1, T+~15s):**
+  - **Hash function: fnv1a-8B** (FNV-1a 32-bit on all 8 bytes of TweakDBID)
+  - stored=0x996f5e0c, computed=0x996f5e0c → perfect match
+  - key=TweakDBID(0x0ccc10d0, len=1, off=0x000000) — entry has zero tdbOffset
+  - bucket=1/843 (records map: 843 buckets for 843 entries, sparse 1:1)
+  - **Round-trip lookup PASS:** lookup returned the same entry pointer (0x701c5fc430) we found via bucket walk
+- **Important nuance (Schema's flagged follow-up):** Records map had off=0x000000, so fnv1a-8B is indistinguishable from fnv1a-5B for this entry. For FLATS, the tdbOffset is likely non-zero (it indexes into +0x148 buffer). The flats map's actual hash byte-count needs re-verification when P1.6 / P1.10 first build a name-based lookup. Schema's design captures this — the probe runs again per-map at first lookup if needed.
+- **What this unlocks:**
+  - P1.6 (value buffer R/W) — now has Lookup + TweakDBID struct + safe read primitives
+  - Per Schema's follow-up: P1.6 needs to confirm whether tdbOffset is a byte offset into the buffer (Windows model) or something else on macOS. Binary-format spec marks this hypothesized; needs validation
+  - The flats entry payload layout (type tag location, value encoding) is still TBD; may need a brief Scope dive to dump a real flats entry
+- **Status:** Phase 1 progress 35% → 45%. Sprint 2 P1.5 done.
+- **Files changed:** HashMap.{hpp,cpp}/hashmap_test.cpp new; Loader.cpp/CMakeLists.txt modified; tools/test-hashmap-lookup.sh new; docs/probes/logs/red4ext-mac-2026-05-29-p1-5.log (evidence); state/tasks.yaml, state/status.yaml; this log.
+- **FACTS / FAILED_APPROACHES added:** none yet (in-game hash discovery is excellent F-NNN material for Scope's next fire).
+- **Blockers:** none.
+- **Next:** P1.6 (value buffer R/W) — Schema again. Then we've got the full read+write primitive chain ready for P1.10 (applicator).
+
+---

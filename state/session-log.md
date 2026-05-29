@@ -416,3 +416,28 @@ Phase 0 essentially DONE: injection, slide formula, struct layout, singleton pat
 - **Next:** Fire Patchwork P1.7 + P1.9 (mod scanner + psiberx integration) — Hookline rests, Patchwork picks up the parallel-conceptual work.
 
 ---
+
+## 2026-05-29 — P1.7 + P1.9 shipped + F-002 correction surfaced (Claude as Conductor)
+
+- **Goal:** Patchwork delivers Sprint 1's mod-loader half — mod scanner + psiberx .tweak parser integration.
+- **Patchwork's run (Opus 4.7, 520s ≈ 8.7 min, 1304 raw output lines):**
+  - **P1.7 (mod scanner):** Faithful port of Windows TweakImporter::ImportTweaks. Recursive walk, follow-symlinks, case-insensitive extension filter, 3-tier priority by first char of FILENAME (_#$! → 0, ^ → 2, else 1), stable-sorted within tier. Silent skip on filesystem errors. Verified with synthetic 4-file tree.
+  - **P1.9 (psiberx parser):** Reuses Red::TweakParser::Parse via TWEAKXL_MAC_OFFLINE per D-005. Wrapper-include strategy keeps vendored mirror pristine (Patchwork did NOT patch psiberx source). Good input → parse tree; malformed → null + log.
+  - **Files created (7):** ModScanner.{hpp,cpp}, scanner_test.cpp, Tweak.{hpp,cpp}, TweakInternal.hpp, PsiberxParser.cpp, tools/test-tweak-parser.sh; tweakxl-mac/CMakeLists.txt rewritten.
+  - **Build:** libtweakxl.dylib (arm64, 2.1MB) clean — zero warnings, zero errors.
+- **Live smoke test PASS:** Scanner returns 4 files in correct tier order; bad input correctly rejected with `bad.tweak:2:3: Expected group name` log; good input parses to non-null source.
+- **F-002 correction discovered (filed as T-020):** F-002 claimed offline path needs "only C++20 stdlib + PEGTL". P1.9 integration found it actually needs:
+  1. A CName shim backed by RED4ext::FNV1a64 (RED4ext SDK include path required)
+  2. std::exception(const char*) → std::runtime_error remap (libc++ vs MSVC)
+  3. C++20 standard (not C++17) for std::format
+  4. macOS deployment target ≥13.3 (std::format availability gate)
+  5. Two documented warning waivers
+  Filed T-020 for Scope to append an F-020 with the actual requirements. Doesn't block Phase 1 progress.
+- **Sprint 1 COMPLETE.** Both halves shipped: red4ext-mac (Hookline) + tweakxl-mac (Patchwork). Two clean dylibs. All smoke tests pass.
+- **Status:** Phase 1 progress 10% → 25%. Sprint 2 unblocked.
+- **Files changed:** 7 new src/tweakxl-mac/ files, 1 CMakeLists.txt rewrite, 1 new tools script, state/tasks.yaml (T-020 added), state/status.yaml (Sprint 1 complete), this log.
+- **FACTS / FAILED_APPROACHES added:** none yet — T-020 will add F-020 when Scope is fired.
+- **Blockers:** none.
+- **Next:** Sprint 2. Recommended: P1.4 (Schema, TweakDB struct accessor + H-008 verification) — this is the linchpin that unblocks P1.5/P1.6/P1.10. P1.8 (YAML parser, Patchwork) parallel-eligible.
+
+---

@@ -9,14 +9,17 @@ last_updated: 2026-05-29
 current_phase:
   id: 1
   name: foundation-engineering
-  progress_pct: 5
+  progress_pct: 25
   description: >
-    Phase 1 Sprint 1 in flight. P1.1 (slide capture) shipped by Hookline:
-    Symbols.{hpp,cpp} + Loader.cpp + CMake wiring + tools/test-slide-capture.sh.
-    Built clean as libred4ext.dylib (arm64). Pre-validated on-host via
-    renamed-binary positive path (base 0x1005f0000, slide 0x5f0000, matches
-    F-004). Next: Hookline on P1.2 (singleton access via StaticToRuntime),
-    or Patchwork on P1.7 (mod scanner) in parallel.
+    Phase 1 Sprint 1 COMPLETE. P1.1 (slide capture), P1.2 (singleton access),
+    P1.7 (mod scanner), P1.9 (.tweak parser via psiberx + TWEAKXL_MAC_OFFLINE)
+    all shipped and passing smoke tests. Two dylibs built clean:
+    libred4ext.dylib (Hookline), libtweakxl.dylib (Patchwork, 2.1MB inc.
+    psiberx parser source). Sprint 2 unblocked: P1.4-P1.6 (Schema's TweakDB
+    struct accessors), P1.8 (YAML parser), P1.3 (apply-trigger polling).
+    Notable mid-flight discovery: F-002 was incomplete (missed CName shim,
+    std::exception remap, C++20, mac-13.3 reqs); T-020 filed for Scope to
+    document the actual integration requirements as F-020.
 
 phase_0_summary:
   closed_at: 2026-05-29
@@ -40,12 +43,14 @@ pending_decisions: []
 
 next_action:
   agent: lead
-  task_id: P1.2
+  task_id: P1.4
   description: >
-    P1.1 done. Sprint 1 continues with P1.2 (Hookline, singleton accessor
-    consuming StaticToRuntime(0x1080c92d0)) and P1.7/P1.9 (Patchwork, mod
-    scanner + psiberx integration). All independent; pick order by what
-    informs subsequent work fastest.
+    Sprint 2 kickoff. Schema (tweakdb-engineer) on P1.4 — TweakDB struct
+    accessor at F-015 offsets. Includes the H-008 entry-count verification
+    (first-access sanity check on +0x58 vs +0x108 entry counts). After P1.4,
+    P1.5 (hash walker) and P1.6 (value buffer R/W) follow.
+    In parallel-eligible: P1.8 (YAML parser) by Patchwork. P1.3 (apply-trigger
+    poll) by Hookline once Schema's primitives exist.
 
 recent_facts_added:
   - F-014

@@ -462,6 +462,40 @@ tasks:
       Acceptance: F-NNN confirming F-011/F-012/F-013 against runtime data,
       OR FA-NNN with the discrepancy.
 
+  - id: T-020
+    category: research
+    status: pending
+    priority: P2
+    owner: researcher
+    subject: Correct/extend F-002 with the shim requirements discovered during P1.9 integration
+    description: |
+      F-002 claimed the offline path needs "only C++20 stdlib + PEGTL". During
+      P1.9, Patchwork discovered psiberx's Parser.cpp actually requires:
+
+      1. **CName shim** — Parser.cpp uses unqualified `CName` (RED4ext type
+         via pch.hpp on Windows). Offline needs a minimal constexpr Red::CName
+         backed by RED4ext::FNV1a64 (which means RED4ext SDK include path
+         must also be added, contradicting F-002's "no RED4ext dep" claim).
+      2. **`std::exception(const char*)` MSVC-ism** — libc++ rejects this
+         constructor. Needs to be remapped to std::runtime_error (Patchwork
+         used a function-like macro confined to the wrapper TU).
+      3. **C++20 required** — psiberx uses `std::format` in FormatError.
+         Project default is C++17; tweakxl target needs cxx_std_20.
+      4. **macOS deployment target ≥13.3** — `std::format` is gated behind
+         this version in libc++'s availability annotations. Project default
+         is 12.0; tweakxl target needs -mmacosx-version-min=13.3.
+      5. **Two warning waivers**:
+         - -Wno-explicit-specialization-storage-class (Errors.hpp)
+         - -Wno-unused-parameter (Parser.cpp ParseAction specializations)
+
+      Action: append an F-020 to FACTS.md (don't rewrite F-002 — that
+      preserves the historical reasoning chain) documenting the actual
+      integration requirements as proven by P1.9.
+
+      Acceptance: F-020 exists, references P1.9 + the relevant source files
+      and CMake config that demonstrate the requirement.
+    depends_on: []
+
   - id: T-018
     category: hook
     status: pending

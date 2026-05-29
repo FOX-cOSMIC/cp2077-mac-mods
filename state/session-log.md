@@ -613,3 +613,31 @@ Phase 0 essentially DONE: injection, slide formula, struct layout, singleton pat
 - **Next:** P1.10 (applicator) — Patchwork's big one. Takes op AST + ApplyCallback's TweakDB* → ReadFlat/WriteFlat. After P1.10 + P1.11, end-to-end mod application demo possible.
 
 ---
+
+## 2026-05-29 — P1.10a shipped: scalar Assign applicator (Claude as Conductor)
+
+- **Goal:** Bridge Patchwork's Op AST → Schema's ReadFlat/WriteFlat for the scalar case.
+- **Patchwork's run (Opus 4.7, no CLI timeout this time):**
+  - Created Applicator.hpp (ApplyMod + ApplyResult + RestoreValue), Applicator.cpp, applicator_test.cpp, tools/test-applicator.sh
+  - Handles `OpKind::Assign` for Int32/Float/Bool scalar value types
+  - Other op kinds + non-scalar value types → skipped++ + "P1.10b" log message
+  - Atomic per-mod: ReadFlat snapshot before each Assign; on any rejection, restore writes in reverse
+- **Smart engineering detail Patchwork caught:** Schema's `ReadFlat` returns `FlatType::Unknown` + raw uint32, but `WriteFlat` *rejects* `Unknown`. So passing the snapshot back verbatim doesn't work. Solution: `RestoreValue()` re-clothes the raw bytes in the originally-written scalar type (which we know — we only ever wrote that flat as that type). Authoritative because of our own write log. Needs in-game confirmation in P1.11.
+- **on-host applicator_test 16/16 PASS** with three scenarios:
+  1. Scalar reject + 2 skips, empty rollback ✓
+  2. All-skip mod → mods_ok (no rejection = clean) ✓
+  3. Float/Bool both classified as scalar (reject path), not skip ✓
+- **Linker note (Patchwork flagged, not blocking):** red4ext is built without an explicit deployment target floor; tweakxl is built at macOS 13.3 (for std::format). The link emits one benign version-floor warning. Both run on 15.5 in practice. Could be addressed by raising red4ext's floor too, but out of Patchwork's write-scope.
+- **Status:** Phase 1 progress 82% → 88%. Sprint 2 Patchwork progress: 2/3 done.
+- **Files changed:** Applicator.{hpp,cpp,test.cpp} + tools/test-applicator.sh new; state/tasks.yaml, state/status.yaml, this log.
+- **Blockers:** none.
+- **Next:** P1.10b (arrays + records + non-scalar types) OR P1.11 (plugin orchestrator). My recommendation: **P1.11 first** — it stitches everything together for the FIRST END-TO-END DEMO. The scalar Assign path alone is enough to prove the chain works in-game. Arrays/records are a richer feature set that P1.10b adds, but the demo can land without them.
+
+## 2026-05-29 — Sound notification hooks added (Claude, side task)
+
+- ~/.claude/settings.json: Stop hook (Submarine sound) + Notification hook (Glass sound) added; existing keys preserved
+- ~/.claude/notify-telegram.sh: helper script that reads token from openclaw.json + chat_id from env var; silent no-op until TELEGRAM_CHAT_ID is set
+- Sound active immediately on next session (or after /hooks reload)
+- Telegram inert until user messages the bot once and chat ID is captured via getUpdates
+
+---

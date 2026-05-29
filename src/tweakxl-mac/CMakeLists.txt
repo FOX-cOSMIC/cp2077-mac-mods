@@ -38,6 +38,7 @@ set(TWEAKXL_SOURCES
     src/parsers/Tweak.cpp
     src/parsers/PsiberxParser.cpp   # wraps reference Source/Parser.cpp
     src/parsers/YAML.cpp            # P1.8 YAML → Op AST
+    src/applicator/Applicator.cpp   # P1.10a Op AST → TweakDB (scalar Assign)
 )
 
 add_library(tweakxl SHARED ${TWEAKXL_SOURCES})
@@ -61,7 +62,11 @@ target_include_directories(tweakxl PRIVATE
     "${RED4EXT_INC}"    # <RED4ext/Hashing/FNV1a.hpp>
 )
 
-target_link_libraries(tweakxl PRIVATE yaml-cpp::yaml-cpp)
+# red4ext provides Schema's TweakDB primitives (ReadFlat/WriteFlat) that the
+# applicator (P1.10a) calls, and propagates its `src` include dir so we can
+# #include "runtime/TweakDB.hpp". red4ext is added before tweakxl in the
+# top-level CMakeLists, so the target is in scope here.
+target_link_libraries(tweakxl PRIVATE yaml-cpp::yaml-cpp red4ext)
 
 # std::format is gated behind macOS 13.3 in libc++'s availability annotations.
 # The game requires macOS 15.5 (FACTS F-001), so raising this target's floor is
@@ -97,3 +102,18 @@ target_compile_features(yaml_test PRIVATE cxx_std_17)
 target_compile_options(yaml_test PRIVATE -Wall -Wextra)
 target_link_libraries(yaml_test PRIVATE yaml-cpp::yaml-cpp)
 add_test(NAME yaml_test COMMAND yaml_test)
+
+# --- applicator_test: standalone unit tests for P1.10a (temporary) ----------
+# On-host branch-logic test for the scalar-Assign applicator. Compiles
+# Applicator.cpp directly (same pattern as yaml_test) and links red4ext for
+# Schema's ReadFlat/WriteFlat symbols + the runtime/ headers. No game required:
+# against an unconfirmed FlatLayout the primitives reject without touching the
+# fake db, so the test exercises skip/reject/rollback branches deterministically.
+add_executable(applicator_test
+    src/applicator/applicator_test.cpp
+    src/applicator/Applicator.cpp)
+target_include_directories(applicator_test PRIVATE src)
+target_compile_features(applicator_test PRIVATE cxx_std_17)
+target_compile_options(applicator_test PRIVATE -Wall -Wextra)
+target_link_libraries(applicator_test PRIVATE red4ext)
+add_test(NAME applicator_test COMMAND applicator_test)

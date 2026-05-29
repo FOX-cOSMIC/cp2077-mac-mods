@@ -7,40 +7,58 @@ version: 0.1.0
 last_updated: 2026-05-29
 
 current_phase:
-  id: 0
-  name: bootstrap-and-revalidation
-  progress_pct: 90
+  id: 1
+  name: foundation-engineering
+  progress_pct: 0
   description: >
-    T-002d shipped — full TweakDB struct map (F-015), no vtable (F-016),
-    flats use plain hash table + value buffer at +0x148 (F-017, mirrors
-    Windows!). H-001 → resolved-FAILED (no fn-ptr dispatch anywhere).
-    H-006 → resolved-fact. ARCHITECTURE NOW SIMPLE: read singleton
-    pointer, walk hash map by FNV-1a TweakDBID, write flat-value buffer.
-    Zero code hooks needed for the data path. Only T-002e left (flats
-    vs queries +0x58/+0x108 disambiguation + apply-trigger H-007), then
-    Phase 0 is DONE and Phase 1 implementation can begin.
+    Phase 0 CLOSED 2026-05-29. All load-bearing FACTS validated (F-001..F-019),
+    11 FAILED_APPROACHES documented (FA-001..FA-011), 6 hypotheses resolved
+    (H-001/H-002 failed; H-005/H-006/H-007 fact; H-008 deferred to runtime
+    confirmation in Phase 1). Architecture for v1.0 confirmed simple: read
+    singleton pointer, walk hash map, write value buffer — zero code hooks.
+    Apply-trigger = FUN_102b75744 @ 0x102b75744 (DB-populate orchestrator,
+    single caller, polls cleanly).
+    Phase 1 starts: Sprint 1 primitives (P1.1 slide capture, P1.2 singleton
+    access, P1.7 mod scanner, P1.9 psiberx integration) — all unblocked,
+    parallel-eligible across Hookline + Patchwork.
+
+phase_0_summary:
+  closed_at: 2026-05-29
+  duration_days: 1   # single Lucas-session
+  facts_validated: 19
+  failed_approaches_documented: 11
+  hypotheses_resolved_fact: 4   # H-005, H-006, H-007
+  hypotheses_resolved_failed: 2   # H-001, H-002
+  hypotheses_still_open: 3        # H-003 (moot per F-016), H-004 (presumed), H-008 (runtime-resolvable)
+  key_discoveries:
+    - TweakDB struct = 0x168 bytes (same as Windows, NOT 0x198)
+    - No vtable, no fn-ptr dispatch — pure data layout
+    - Singleton at 0x1080c92d0, slide-adjusted
+    - Apply-trigger at FUN_102b75744 — single-caller orchestrator
+    - Re-signing NOT required for v1.0 (stock 2.3.1 has needed entitlements)
+    - psiberx .tweak parser reusable via TWEAKXL_MAC_OFFLINE flag
 
 blockers: []
 
 pending_decisions: []
 
 next_action:
-  agent: researcher
-  task_id: T-002e
+  agent: lead
+  task_id: P1.1
   description: >
-    Phase 0 closer. Scope finds: (A) which non-records hash map (+0x58 or
-    +0x108) is flats — single GetFlat xref settles it. (B) apply-mods
-    trigger function — where the DB populate path completes.
-    After T-002e, Phase 0 is done.
+    Phase 1 Sprint 1 kickoff. Conductor delegates the parallel-eligible
+    Sprint 1 work: P1.1 (slide capture) to Hookline; P1.7+P1.9 (mod scanner
+    + psiberx integration) to Patchwork. H-008 confirmation folds into
+    P1.4 as a single startup-time entry-count check.
+    See docs/PHASE_1_PLAN.md.
 
 recent_facts_added:
-  - F-011
-  - F-012
-  - F-013
   - F-014
   - F-015
   - F-016
   - F-017
+  - F-018
+  - F-019
 recent_failed_added:
   - FA-001
   - FA-002

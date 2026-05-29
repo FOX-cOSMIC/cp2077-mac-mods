@@ -83,13 +83,24 @@ src/
   - Safe: uses `mach_vm_read_overwrite` to never crash if pointer is invalid
 - Acceptance: when the dylib is injected at game launch, polling returns null until populate completes, then returns the live pointer
 
-**P1.3 — Apply-trigger hook** (1-3 hours, depends on T-002e's findings)
+**P1.3 — Apply-trigger via singleton polling** (2-3 hours)
 - File: `src/red4ext-mac/src/runtime/ApplyTrigger.cpp`
-- Approach depends entirely on T-002e:
-  - If T-002e finds a callback registry → register our callback
-  - If T-002e finds an observable side-effect (e.g., a flag flipping) → polling thread
-  - If T-002e finds a vtable-less indirect call → GOT-style hook on it
-- Acceptance: a callback fires exactly once per game session, after TweakDB is fully populated, before any gameplay reads it
+- **Mechanism: poll the singleton.** Per F-018, the apply-trigger is `FUN_102b75744` @ static `0x102b75744` (TweakDB initial-load orchestrator). Single caller at `0x10a42f7de`. Loads `tweakdb.bin`, parses, populates. On return: singleton fully populated.
+- **Why polling (not a code hook):**
+  - No vtable (F-016) → can't VTable-hook
+  - No fn-ptr dispatch (F-017) → can't fn-ptr-table-hook
+  - Direct `bl` intra-image calls → GOT doesn't apply
+  - `__TEXT` immutable (FA-001) → can't inline-patch the `bl`
+  - Polling is FA-001-compliant and adequate (the orchestrator runs once at init)
+- Behavior:
+  - Spawn a background thread or use `dispatch_async` after dylib init
+  - Loop: read `*(0x1080c92d0 + slide)` every ~50ms
+  - When singleton is non-null AND the records map count (TweakDB+0x90) is non-zero AND some N consecutive polls return the same count → DB is populated and stable
+  - Fire registered callbacks once
+  - Exit polling loop
+- Optional optimization: instead of timer-based polling, watch the `records.count` field at TweakDB+0x90 — when it transitions from 0 to non-zero AND stops changing, DB is ready
+- Alternative (future, NOT v1.0): hook `TweakDBReloader` for re-entrant/hot-reload support. Uninvestigated, flagged by Scope as low-priority follow-up.
+- Acceptance: a registered callback fires exactly once per game session, after `*(0x1080c92d0 + slide)` is populated, before any gameplay reads it
 
 ### 🗄️ Schema (cp2077-tweakdb-engineer) — TweakDB Accessor Primitives
 
@@ -100,7 +111,8 @@ src/
   - All offsets per F-015: hash maps at +0x58/+0x88/+0x108, value buffer at +0x148
   - Methods: `GetRecordsMap()`, `GetFlatsMap()`, `GetQueriesMap()`, `GetValueBuffer()`, `GetValueBufferSize()`, `GetValueBufferCapacity()`
 - No mutation methods at this layer — mutation happens in the applicator
-- Acceptance: dump the running TweakDB's records map count and value buffer size; verify both are non-zero after game's TweakDB load
+- **H-008 verification (folded in):** at first successful access after DB-populate, log both +0x58 and +0x108 hash map counts. Per H-008, flats should massively outnumber queries (typically thousands vs tens). The map with the bigger count is flats; if +0x58 wins → H-008 → resolved-fact; if +0x108 wins → H-008 → resolved-failed (and the offsets in this accessor must swap). This must happen before P1.10 enables any flat-write code.
+- Acceptance: dump the running TweakDB's records map count and value buffer size; verify both are non-zero after game's TweakDB load; H-008 resolved with a printed F-NNN-style log line
 
 **P1.5 — Hash map walker** (2 hours)
 - File: `src/red4ext-mac/src/runtime/HashMap.cpp`

@@ -417,3 +417,37 @@ No additional stubs or changes are needed for the `.tweak` parser layer itself. 
 - **Invalidates:** none in FACTS; disproves H-001 (see FA-011)
 
 ---
+
+### F-018: TweakDB initial-load/populate path — orchestrator FUN_102b75744; load completion is the mods-apply point (resolves H-007)
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1 (build 5314028)
+- **Method:** From the `"tweakdb.bin"` string xref in the TweakDB TU (Cyberpunk2077.txt). All addresses static (base 0x100000000; +slide, F-004/F-007).
+- **Call chain (confirmed by string + structure):**
+  - **`FUN_102b75744` @ static `0x102b75744`** — TweakDB initial-load orchestrator. Calls the loader, times the load (`_mach_absolute_time`), then dispatches parse/populate (`bl FUN_102253964` @ `0x102b75908`, plus virtual `blr` calls into the loaded resource at `[obj]+0x20/+0x30/+0x50`). **Single caller: `0x10a42f7de`** (engine init/static-ctor chain). When this function returns, the TweakDB singleton (`0x1080c92d0`, F-011) is populated.
+  - **`FUN_102b75b48` @ static `0x102b75b48`** — path builder + file loader: assembles `{root}/tweakdb.bin` (string `"tweakdb.bin"` @ cstring `0x106d2bd9b`; also a `dlc\` variant via `"dlc"`/`"dlc\\"`), then `bl FUN_1021c90a4` (resource open/read).
+  - **`FUN_102253964`** — parse/insert routine that fills the flats/records/queries maps from the loaded buffer (heavy populate).
+- **Apply-mods trigger (the H-007 answer):** the **completion of `FUN_102b75744`** is the earliest point at which the DB is fully populated and safe to mod. The constructor `FUN_102b73b50`/`FUN_102b73db8` (F-011/F-015) builds an EMPTY DB and must NOT be used as the trigger (confirmed: populate happens here, separately, later).
+- **Recommended hook mechanism for hook-engineer (FA-001-compliant):** these load functions are reached by **direct `bl`** (not GOT-indirected) and TweakDB has **no vtable** (F-016), so neither GOT nor VTable hooking applies, and `__TEXT` is immutable (FA-001). Practical options, in order of robustness:
+  1. **Poll the singleton** from the injected dylib: after launch, wait until `*(0x1080c92d0+slide) != null` and its flats-map entry count is non-zero/stable, then apply mods via direct data manipulation (F-014a). Simple, no hook.
+  2. Investigate the **TweakDBReloader** path (symbols exist, F-008) — designed for hot-reload, it may expose a re-entrant, indirectly-dispatched trigger that is cleaner to intercept. Follow-up.
+- **How to re-verify:**
+  ```bash
+  cd reference/ghidra
+  grep -n -m1 's_tweakdb.bin' Cyberpunk2077.txt            # cstring + xref 0x102b75c44 (inside FUN_102b75b48)
+  L=$(grep -n -m1 '__text:102b75744' Cyberpunk2077.txt|cut -d: -f1); awk -v s=$L -v e=$((L+60)) 'NR>=s&&NR<=e' Cyberpunk2077.txt
+  ```
+- **Invalidates:** none (resolves H-007)
+
+---
+
+### F-019: The +0x58 hash map is a confirmed peer of the records map (flats candidate); flats-vs-queries block label still pending one accessor xref
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1 (build 5314028)
+- **Evidence:** The +0x58 map's dedicated destructor `FUN_100ad1df0` (called from the TweakDB destructor for the +0x58 sub-object) walks a hash table with sub-layout **identical to the records map** (F-012): bucket-index array @ block+0x00, count @ +0x08, bucket-count @ +0x0c, entries @ +0x10, entry stride @ +0x1c; it iterates entries and releases a ref-counted payload at entry+0x18. So +0x58, +0x88 (records), and +0x108 are three structurally-identical TweakDBID-keyed hash maps (F-015), and +0x58/+0x88 hold ref-counted (handle/value) payloads with dedicated complex destructors, while +0x108 is torn down inline.
+- **What is NOT yet proven:** which of +0x58 / +0x108 is specifically **flats** vs **queries**. Convergent structural evidence favors **+0x58 = flats, +0x108 = queries** (records confirmed = +0x88 middle; RED declaration order flats<records<queries; the flat-value buffer sits at +0x148 after all three maps; +0x58 mirrors records' heavyweight payload). **This is high-confidence inference, NOT a confirmed fact** — per FA-006, the Windows-order analogy must not be trusted blindly. See H-008 for the decisive test. Hook-engineer must obtain that confirmation before writing flat-write code against a hardcoded +0x58.
+- **How to re-verify:** `L=$(grep -n -m1 '__text:100ad1df0' reference/ghidra/Cyberpunk2077.txt|cut -d: -f1); awk -v s=$L -v e=$((L+50)) 'NR>=s&&NR<=e' reference/ghidra/Cyberpunk2077.txt`
+- **Invalidates:** none
+
+---

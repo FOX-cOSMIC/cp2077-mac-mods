@@ -96,6 +96,16 @@ Resolved hypotheses can be deleted after 30 days (the source of truth is now in 
 - **Proposed:** 2026-05-29 by Scope (researcher)
 - **Why we think this:** F-011 showed `FUN_102b73b50` constructs an EMPTY TweakDB (allocate + bzero + ctor). The records/flats maps are populated later, from the on-disk TweakDB data (the engine has `TweakDBReloader`/`TweakDBResource` machinery — seen in exported symbols, F-006/F-008). Mods must be applied AFTER that load completes, or they'll be overwritten.
 - **How to test:** Locate the function that fills the records/flats maps (xref the maps' writer sites, or trace `TweakDBResource` text-format resource loader / `TweakDBReloader` symbols). Find the post-load completion point. That is the timing signal for mod application.
-- **Status:** open
+- **Status:** **resolved-fact (2026-05-29)** — CONFIRMED. The populate path is the initial-load orchestrator `FUN_102b75744` (@ static `0x102b75744`): it builds `{root}/tweakdb.bin` (via `FUN_102b75b48` @ `0x102b75b48`, string-confirmed), reads the file, and parses/inserts via `FUN_102253964`. Completion of `FUN_102b75744` = DB populated = the mods-apply point; the constructor (F-011/F-015) is confirmed NOT the trigger (builds an empty DB). See **F-018**.
 - **Owner:** researcher
-- **Note:** Until this is found, Hookline has no validated "apply mods now" trigger. Highest-priority next research step alongside H-006.
+- **Resolved by:** F-018
+
+### H-008: TweakDB flats hash map is the +0x58 block (queries = +0x108)
+
+- **Proposed:** 2026-05-29 by Scope (researcher)
+- **Why we think this:** F-019 confirmed +0x58 is a peer hash map (identical layout to records, holds ref-counted payloads via dedicated destructor `FUN_100ad1df0`). Records = +0x88 (F-012, confirmed). RED declaration order is flats, records, queries → flats=+0x58 (before records), queries=+0x108 (after). The flat-value buffer at +0x148 sits after all three maps, mirroring the Windows layout. **Inference only — not yet confirmed by a macOS accessor (FA-006 caution against trusting Windows-order analogy).**
+- **How to test (two cheap options):**
+  1. **Static:** xref a `GetFlat`/flat-read function that walks one of the maps AND indexes the +0x148 buffer; whichever block it walks (+0x58 vs +0x108) is flats.
+  2. **Runtime (cheapest, decisive):** from the injected dylib, read the live singleton (`*(0x1080c92d0+slide)`) after load (F-018) and compare the entry counts of the +0x58 vs +0x108 maps — flats vastly outnumber queries (tens of thousands vs hundreds), so the larger map is flats.
+- **Status:** open — prerequisite for hook-engineer's flat-write code (F-014a); do not hardcode +0x58=flats until confirmed.
+- **Owner:** researcher

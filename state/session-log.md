@@ -317,3 +317,41 @@ H-001 DISPROVED (FA-011) and H-006 RESOLVED (F-017): flats are plain hash-table 
 - **Next:** Fire T-002e immediately — one Ghidra pass settles the flats/queries ambiguity AND finds the apply-mods trigger. After that, Phase 0 is closed, Phase 1 implementation can start.
 
 ---
+
+---
+
+**2026-05-29 — Scope (researcher) — T-002e (load path + flats/queries disambiguation)**
+
+B (apply-trigger) RESOLVED: traced the "tweakdb.bin" string xref to the TweakDB load path. Orchestrator FUN_102b75744 (@0x102b75744) builds {root}/tweakdb.bin (via FUN_102b75b48 @0x102b75b48, string-confirmed), reads the file, times it, and parses/inserts via FUN_102253964. Completion of FUN_102b75744 = DB populated = mods-apply point; single caller 0x10a42f7de (engine init). Recorded F-018; H-007 → resolved-fact. Recommended apply mechanism for Hookline: poll the singleton (0x1080c92d0) post-load and apply via direct data write (F-014a), since load funcs are direct-bl + no vtable (can't GOT/VTable hook, FA-001 blocks __TEXT). TweakDBReloader path flagged as alt trigger to investigate.
+
+A (flats vs queries) PARTIAL: confirmed +0x58 is a peer hash map identical to records (via its dedicated destructor FUN_100ad1df0: bucket@+0,count@+8,bktcnt@+0xc,entries@+0x10,stride@+0x1c, ref-counted payload). Recorded F-019. BUT did NOT obtain the single decisive GetFlat→+0x148 xref this session — so per FA-006 I did NOT promote +0x58=flats to fact. Filed H-008 (flats=+0x58, queries=+0x108) with two cheap decisive tests (GetFlat xref OR runtime entry-count comparison: flats >> queries). This is the one remaining Phase-0 item; recommend the runtime count check once Hookline can inject.
+
+Phase 0 essentially DONE: injection, slide formula, struct layout, singleton path, storage scheme, no-vtable, load/apply trigger all established. Sole open detail: byte-confirm the flats block (+0x58) — H-008, trivial runtime check.
+
+## 2026-05-29 — 🎉 PHASE 0 CLOSED — T-002e shipped (Claude as Conductor)
+
+- **Goal:** Identify the apply-mods trigger (H-007) and disambiguate flats/queries hash maps (+0x58 vs +0x108).
+- **Scope's run (Opus 4.7, 1177s ≈ 20 min, 1267 raw output lines):**
+  - **F-018** — TweakDB initial-load orchestrator `FUN_102b75744` @ static `0x102b75744`. Builds `tweakdb.bin` path via `FUN_102b75b48` (string-confirmed). Reads + parses + inserts via `FUN_102253964`. Completion = DB populated = apply point. **Single caller at `0x10a42f7de`** — predictable execution path.
+  - **F-019** — +0x58 confirmed as a peer hash map (identical layout to records, ref-counted destructor `FUN_100ad1df0`). Flats-vs-queries block label deferred to runtime check (Scope refused FA-006-style asserting from Windows analogy alone).
+  - **H-007 → resolved-fact** via F-018.
+  - **H-008 (new, open)** — flats = +0x58 inference. Trivially resolvable at runtime by entry-count comparison; folded into Phase 1 P1.4.
+- **Recommended mechanism (Scope):** poll the singleton (`*(0x1080c92d0 + slide)`) from the injected dylib. Justification: no vtable (F-016), no fn-ptr dispatch (F-017), GOT doesn't apply (direct intra-image `bl`), `__TEXT` immutable (FA-001). Polling is the only FA-001-compliant route, and the orchestrator runs only once at init so polling overhead is trivial. Alternative: hook TweakDBReloader for hot-reload (uninvestigated, out of v1.0 scope).
+- **🎉 Phase 0 closure milestone:**
+  - 19 FACTS validated (F-001..F-019)
+  - 11 FAILED_APPROACHES (FA-001..FA-011)
+  - 4 HYPOTHESES resolved as FACT (H-005, H-006, H-007), 2 as FAILED (H-001, H-002), 3 still open: H-003 (moot per F-016), H-004 (presumed, retest deferred), H-008 (runtime-resolvable in P1.4)
+  - Architecture confirmed simple: read singleton + walk hash map + write value buffer — zero code hooks for v1.0
+  - ARCHITECTURE.md updated to reflect the v1.0 simplification
+  - PHASE_1_PLAN.md written with 11 tasks (P1.1..P1.11) across Hookline/Schema/Patchwork
+  - PHASE_1_PLAN.md P1.3 updated with concrete apply-trigger address + polling mechanism
+  - PHASE_1_PLAN.md P1.4 updated with H-008 verification step
+- **Status:** Phase 0 → Phase 1. Progress on Phase 1 = 0% (just kicked off).
+- **Files changed:** docs/FACTS.md (F-018, F-019 by Scope), docs/HYPOTHESES.md (H-007 resolved-fact, H-008 added by Scope), docs/PHASE_1_PLAN.md (P1.3/P1.4 updates by Conductor), state/tasks.yaml (T-002e done), state/status.yaml (phase id 0→1, phase_0_summary added, recent_facts_added updated), this log.
+- **FACTS added:** F-018, F-019.
+- **HYPOTHESES resolved:** H-007 (fact).
+- **HYPOTHESES added:** H-008.
+- **Blockers:** none.
+- **Next:** Sprint 1 of Phase 1. Conductor delegates P1.1 (slide capture) to Hookline AND P1.7+P1.9 (mod scanner + psiberx integration) to Patchwork. These don't conflict — same agent CLI serializes but conceptually parallel.
+
+---

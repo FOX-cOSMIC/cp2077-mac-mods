@@ -387,9 +387,11 @@ tasks:
 
   - id: T-002e
     category: research
-    status: pending
+    status: done
     priority: P0
     owner: researcher
+    completed_at: 2026-05-29
+    completed_by: cp2077-researcher (Scope, Opus 4.7, ~20 min)
     subject: GetFlat xref — disambiguate flats vs queries (+0x58 vs +0x108) + apply-trigger (H-007)
     description: |
       REFINED 2026-05-29 per T-002d follow-up.

@@ -1,77 +1,107 @@
 # ARCHITECTURE.md
 
-## System Overview
+> **Phase 0 simplified the architecture significantly.** The original design assumed a full GOT/VTable/fn-ptr-table hooking framework would be needed. Phase 0 research (F-011..F-017) discovered that for **v1.0 (TweakXL)**, none of that is required — TweakDB on macOS is plain data accessible via a global singleton pointer.
+>
+> The full hooking framework is still required for **v1.x (ArchiveXL)** and **v2.0 (CET/redscript)** — see the Long-Term Roadmap. v1.0 is a much smaller surface than originally planned.
+
+## v1.0 System Overview (Simplified — Post Phase 0)
 
 ```
 ┌─────────────────────────────────────────────────┐
 │              User-Installed Mods                │
-│       (Nexus Mods, .yaml / .tweak files,        │
-│        future: .dylib RED4ext plugins)          │
+│       (Nexus Mods, .yaml / .tweak files)        │
 └──────────────────────┬──────────────────────────┘
                        ↓
 ┌──────────────────────▼──────────────────────────┐
-│              tweakxl-mac (plugin)               │
-│  - Scans r6/tweaks/ for .yaml / .tweak files    │
-│  - Parses mod ops (Assign / Append / Remove)    │
-│  - Applies to TweakDB via red4ext-mac runtime   │
+│              tweakxl-mac (dylib)                │
+│  - Reads global TweakDB* @ 0x1080c92d0 + slide  │
+│  - Hooks DB-populate completion (T-002e finds)  │
+│  - Parses r6/tweaks/ → op AST                   │
+│  - Applies ops: walks hash maps, writes value   │
+│    buffer at TweakDB+0x148                      │
 └──────────────────────┬──────────────────────────┘
                        ↓
 ┌──────────────────────▼──────────────────────────┐
-│         red4ext-mac (core framework)            │
-│  - Mach-O symbol resolution                     │
-│  - GOT / VTable / function-pointer hooking      │
-│  - Plugin lifecycle (load / init / unload)      │
-│  - TweakDB runtime access primitives            │
+│      red4ext-mac (minimal v1.0 runtime)         │
+│  - Mach-O symbol resolution (slide capture)     │
+│  - Singleton-pointer accessor                   │
+│  - Single hook on apply-trigger (approach TBD   │
+│    by T-002e — possibly observed callback)      │
+│  NO GOT hooks, NO VTable hooks, NO fn-ptr-table │
+│  hooks, NO trampolines, NO MAP_JIT for v1.0.    │
 └──────────────────────┬──────────────────────────┘
                        ↓
 ┌──────────────────────▼──────────────────────────┐
-│  Re-signed Cyberpunk 2077.app (macOS native)    │
-│  - disable-library-validation entitlement       │
-│  - DYLD_INSERT_LIBRARIES = libred4ext.dylib     │
+│       Stock Cyberpunk 2077.app (2.3.1)          │
+│  Stock binary already has the two entitlements  │
+│  needed for DYLD injection (F-001, F-003).      │
+│  NO re-signing required for v1.0.               │
 └─────────────────────────────────────────────────┘
 ```
 
-## Runtime Flow
+## v1.0 Runtime Flow
 
-1. User launches game via Steam/GOG/etc. with `DYLD_INSERT_LIBRARIES` set (via a wrapper script in `tools/`).
-2. `dyld` loads `Cyberpunk2077` then `libred4ext.dylib`.
-3. red4ext-mac initializes:
-   - Parses Mach-O of running process for symbol resolution
-   - Sets up hook tables
-   - Scans `plugins/` directory for `.dylib` plugins
-   - Loads each plugin's `RED4MACOS_Load()` entry point
-4. tweakxl-mac plugin loads, registers hooks on TweakDB lifecycle.
-5. When TweakDB initialization runs, tweakxl-mac:
-   - Scans `r6/tweaks/` for mod files
-   - Parses YAML / `.tweak` into internal op representation
-   - Applies ops to the in-memory TweakDB via red4ext-mac primitives
-6. Game runs with modifications active.
+1. User launches game via Steam (no special wrapper needed if `DYLD_INSERT_LIBRARIES` is set in environment, or via a launcher script in `tools/`).
+2. `dyld` loads `Cyberpunk2077` then `libtweakxl-mac.dylib` (the all-in-one v1.0 dylib).
+3. Dylib constructor fires:
+   - Captures slide via `_dyld_register_func_for_add_image`
+   - Records image base for the global pointer computation
+4. Dylib registers a wait/hook for the DB-populate completion (mechanism per T-002e).
+5. Game initializes TweakDB (`FUN_102b73b50`) — populates from `r6/cache/tweakdb.bin`.
+6. On populate complete: our trigger fires.
+   - Read global TweakDB* via `*(0x1080c92d0 + slide)`
+   - Scan `r6/tweaks/` for mod files
+   - Parse each (YAML via yaml-cpp, `.tweak` via psiberx PEGTL grammar per D-005)
+   - Build op AST
+   - For each op: compute FNV-1a hash of TweakDBID, walk appropriate hash map, mutate flat-value buffer at `TweakDB+0x148`
+7. Game continues with modifications applied to the in-memory TweakDB.
+
+**Note:** This is dramatically simpler than the v1.0 plan from Phase 0 startup, when we expected to need a full hooking infrastructure. The actual macOS TweakDB layout (F-013/F-015/F-017) makes direct data manipulation the simplest path.
 
 ## Component Boundaries
 
-### red4ext-mac
+### v1.0 — Minimal red4ext-mac
 
-| Module | Responsibility | Status |
-|--------|----------------|--------|
-| `loader/` | dylib entry point, plugin discovery | not started |
-| `runtime/Symbols` | Mach-O parse, ASLR-aware symbol resolution | not started |
-| `runtime/Memory` | RW→RX page allocation for trampolines | not started |
-| `runtime/Hooks/GOT` | Function pointer hooks in `__DATA` | not started |
-| `runtime/Hooks/VTable` | VTable slot replacement | not started |
-| `runtime/Hooks/FuncPtrTable` | Function-pointer-table entry replacement (macOS-specific) | not started |
-| `runtime/RTTI` | Hook game's type system, allow plugins to register types | not started |
-| `runtime/TweakDB` | Primitives: GetFlat / SetFlat / record ops on macOS layout | not started |
-| `sdk/` | Public headers for plugin authors | not started |
+| Module | v1.0 Required? | Notes |
+|--------|---------------|-------|
+| `loader/` | ✅ Required | dylib entry point. v1.0 = single dylib; plugin discovery deferred. |
+| `runtime/Symbols` | ✅ Required (lite) | Just need image base + slide capture. No general symbol resolution for v1.0. |
+| `runtime/SingletonAccess` | ✅ Required (NEW) | Read `*(0x1080c92d0 + slide)` → `TweakDB*`. Simple primitive. |
+| `runtime/Hooks/ApplyTrigger` | ✅ Required | Single hook on DB-populate completion (per T-002e). Approach depends on what T-002e finds — possibly observer callback, NOT a code hook. |
+| `runtime/TweakDB` | ✅ Required | Direct struct accessors at F-015 offsets. Hash map walk + value buffer write. |
+| `runtime/Memory` | ❌ DEFERRED → v1.x | No trampolines in v1.0. |
+| `runtime/Hooks/GOT` | ❌ DEFERRED → v1.x/v2.0 | Not needed for direct data manipulation. |
+| `runtime/Hooks/VTable` | ❌ RULED OUT | TweakDB has no vtable (F-016). |
+| `runtime/Hooks/FuncPtrTable` | ❌ RULED OUT | No fn-ptr dispatch anywhere (F-017). |
+| `runtime/RTTI` | ❌ DEFERRED → v2.0 | Not needed for TweakXL; CET/redscript will need it. |
+| `sdk/` | ❌ DEFERRED → v1.x | Plugin SDK isn't needed for single-dylib v1.0. |
 
-### tweakxl-mac
+### v1.0 — tweakxl-mac
 
-| Module | Responsibility | Status |
-|--------|----------------|--------|
-| `plugin/Plugin.cpp` | RED4MACOS_Load entry, lifecycle | not started |
-| `parsers/YAML` | yaml-cpp integration, YAML→op AST | not started |
-| `parsers/Tweak` | PEGTL grammar, `.tweak`→op AST | not started |
-| `model/Operation` | In-memory op representation | not started |
-| `applicator/` | Op → TweakDB mutation via red4ext-mac primitives | not started |
+| Module | Status | Notes |
+|--------|--------|-------|
+| `plugin/Plugin.cpp` | not started | Dylib entry, ties components together |
+| `parsers/YAML` | not started | yaml-cpp integration, YAML → op AST |
+| `parsers/Tweak` | not started | psiberx parser via `TWEAKXL_MAC_OFFLINE` (D-005) |
+| `model/Operation` | not started | In-memory op representation |
+| `applicator/` | not started | Op → TweakDB struct mutation (direct memory writes) |
+
+### v1.x — Additional components needed for ArchiveXL
+
+| Module | v1.x Required? | Notes |
+|--------|---------------|-------|
+| `runtime/Hooks/GOT` | ✅ Likely | Asset loader interception |
+| `runtime/Memory` | ✅ Likely | Trampoline pages for original-call preservation |
+| `sdk/` | ✅ Required | Plugin SDK so ArchiveXL-style plugins can build against us |
+
+### v2.0 — Additional components needed for CET/redscript
+
+| Module | v2.0 Required? | Notes |
+|--------|---------------|-------|
+| `runtime/Hooks/VTable` | ✅ Likely | Other game classes likely have vtables |
+| `runtime/Hooks/FuncPtrTable` | ✅ Maybe | Depends on dispatch patterns in scripting paths |
+| `runtime/RTTI` | ✅ Required | CET binds to game type system |
+| MAP_JIT trampolines | ✅ Required | Re-sign for `allow-jit` + `allow-unsigned-executable-memory` |
 
 ## Key Architectural Decisions
 

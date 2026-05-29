@@ -10,6 +10,7 @@
 // The real injection smoke test is tools/test-slide-capture.sh.
 
 #include "Symbols.hpp"
+#include "SingletonAccess.hpp"
 #include <cstdint>
 #include <cstdio>
 
@@ -27,6 +28,12 @@ int main() {
     std::printf("[slide_test] GetSlide          = 0x%lx\n", (unsigned long)slide);
     std::printf("[slide_test] StaticToRuntime(0x%lx) = 0x%lx\n",
                 (unsigned long)kSingletonStatic, (unsigned long)rt);
+
+    // P1.2: exercise the singleton accessor once. Null is valid (no game DB in
+    // this process); the real in-game validation is tools/test-singleton-access.sh.
+    void* db = (void*)red4ext_mac::GetTweakDB();
+    std::printf("[singleton-test] tweakdb=%p%s\n", db,
+                db ? "" : " (null — expected; no TweakDB in this process)");
 
     if (!loaded) {
         std::printf("[slide_test] main image not loaded — expected when run "

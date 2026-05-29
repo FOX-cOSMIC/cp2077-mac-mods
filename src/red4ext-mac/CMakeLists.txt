@@ -21,6 +21,7 @@
 add_library(red4ext SHARED
     src/loader/Loader.cpp
     src/runtime/Symbols.cpp
+    src/runtime/SingletonAccess.cpp
 )
 
 target_compile_features(red4ext PRIVATE cxx_std_17)

@@ -7,10 +7,13 @@
 // No __TEXT writes, no mprotect (FA-001). Read-only slide capture only.
 
 #include "../runtime/Symbols.hpp"
+#include "../runtime/SingletonAccess.hpp"
 
 #include <cstdarg>
 #include <cstdio>
 #include <ctime>
+#include <chrono>
+#include <thread>
 
 // Symbols' init entry — declared here (kept out of the public header, which is
 // the stable accessor API). Registers the dyld add-image callback idempotently.
@@ -65,4 +68,26 @@ static void red4ext_mac_loader_init() {
         log_line("[red4ext-mac] loader init %s, main image NOT detected "
                  "(slide unavailable)", ts);
     }
+
+    // One-shot initial poll of the singleton (P1.2). At dylib-load time the
+    // game has NOT yet constructed TweakDB (F-011: built later in engine init),
+    // so this is expected to be null. It validates the inject→slide→read chain.
+    {
+        void* db = (void*)red4ext_mac::GetTweakDB();
+        log_line("[singleton-access] initial poll: %p%s", db,
+                 db ? "" : " (null — expected at load time; DB built later)");
+    }
+
+    // Deferred single sample (temporary P1.2 validation aid). The smoke test
+    // waits ~10s for the game to construct TweakDB; this thread takes ONE late
+    // reading and logs it so the test can confirm the accessor returns the live
+    // heap pointer in-game. This is NOT the P1.3 apply-trigger: no loop, no
+    // stability/count logic, no callbacks — a single read, then the thread
+    // exits. P1.3 replaces it with the real polling loop; remove this then.
+    std::thread([] {
+        std::this_thread::sleep_for(std::chrono::seconds(6));
+        void* db = (void*)red4ext_mac::GetTweakDBUncached();
+        log_line("[singleton-access] deferred sample: %p%s", db,
+                 db ? "" : " (still null after delay)");
+    }).detach();
 }

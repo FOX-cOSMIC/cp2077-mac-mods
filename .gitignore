@@ -29,6 +29,9 @@ Icon?
 *.tmp
 /tmp/
 
+# But DO commit probe logs as evidence
+!docs/probes/logs/*.log
+
 # Crash reports captured locally
 crash-reports/
 

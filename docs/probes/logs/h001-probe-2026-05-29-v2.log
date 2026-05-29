@@ -1,0 +1,209 @@
+[H001] 1780037068.120594000  dylib loaded
+[H001] log = /tmp/h001-probe.log
+[H001] ========== Cyberpunk2077 binary detected ==========
+[H001]   path    = /Users/lucas_1/Library/Application Support/Steam/steamapps/common/Cyberpunk 2077/Cyberpunk2077.app/Contents/MacOS/Cyberpunk2077
+[H001]   base    = 0x0000000100b10000
+[H001]   slide   = 0x0000000000b10000
+[H001]   __TEXT  = [0x100b10000, 0x1078f0000)  size=112512 KB
+[H001]   __DATA  = vmaddr=0x107394000  size=30192 KB
+[H001]   __DATA_CONST = vmaddr=0x106de0000  size=5840 KB
+[H001] --- symtab scan ---
+[H001]   [symtab] 68655 total symbols; scanning first 20000
+[H001]   [sym] __ZGVZ13GetTypeObjectI7THandleIN3ink17TweakDBIDSelectorEEEPKN4rtti5ITypeEvE8rttiType vmaddr=0x1074ba468  slid=0x107fca468
+[H001]   [sym] __ZGVZ13GetTypeObjectIN3red8DynArrayIN4game4data9TweakDBIDEEEEPKN4rtti5ITypeEvE8rttiType vmaddr=0x1073bc468  slid=0x107ecc468
+[H001]   [sym] __ZGVZ13GetTypeObjectIN4game4data9TweakDBIDEEPKN4rtti5ITypeEvE8rttiType  vmaddr=0x1073af790  slid=0x107ebf790
+[H001]   [sym] __ZGVZ17GetNativeTypeHashI15TweakDBResourceEyvE14nativeTypeHash          vmaddr=0x1073ef028  slid=0x107eff028
+[H001]   [sym] __ZGVZ17GetNativeTypeHashI7THandleIN3ink17TweakDBIDSelectorEEEyvE14nativeTypeHash vmaddr=0x1073a5e20  slid=0x107eb5e20
+[H001]   [sym] __ZGVZ17GetNativeTypeHashIA2_N4game4data9TweakDBIDEEyvE14nativeTypeHash  vmaddr=0x10740ae48  slid=0x107f1ae48
+[H001]   [sym] __ZGVZ17GetNativeTypeHashIN3ink17TweakDBIDSelectorEEyvE14nativeTypeHash  vmaddr=0x1073a5e30  slid=0x107eb5e30
+[H001]   [sym] __ZGVZ17GetNativeTypeHashIN3red11StaticArrayIN4game12stateMachine24ActionParameterTweakDBIDELj128EEEEyvE14nativeTypeHash vmaddr=0x1073c73e8  slid=0x107ed73e8
+[H001]   [sym] __ZGVZ17GetNativeTypeHashIN3red11StaticArrayIN4game12stateMachine28ConsumableParameterTweakDBIDELj128EEEEyvE14nativeTypeHash vmaddr=0x1073c7368  slid=0x107ed7368
+[H001]   [sym] __ZGVZ17GetNativeTypeHashIN3red26PackageTweakDBIDSerializerEEyvE14nativeTypeHash vmaddr=0x1073dc928  slid=0x107eec928
+[H001]   [sym] __ZGVZ17GetNativeTypeHashIN3red8DynArrayIN4game4data9TweakDBIDEEEEyvE14nativeTypeHash vmaddr=0x1073bc478  slid=0x107ecc478
+[H001]   [sym] __ZGVZ17GetNativeTypeHashIN4game12stateMachine24ActionParameterTweakDBIDEEyvE14nativeTypeHash vmaddr=0x1073c7140  slid=0x107ed7140
+[H001]   [sym] __ZGVZ17GetNativeTypeHashIN4game12stateMachine28ConsumableParameterTweakDBIDEEyvE14nativeTypeHash vmaddr=0x1073c71d0  slid=0x107ed71d0
+[H001]   [sym] __ZGVZ17GetNativeTypeHashIN4game2ui20TweakDBIconReferenceEEyvE14nativeTypeHash vmaddr=0x1073e5138  slid=0x107ef5138
+[H001]   [sym] __ZGVZ17GetNativeTypeHashIN4game4data11TweakDBTypeEEyvE14nativeTypeHash  vmaddr=0x1073eee08  slid=0x107efee08
+[H001]   [sym] __ZGVZ17GetNativeTypeHashIN4game4data13TweakDBRecordEEyvE14nativeTypeHash vmaddr=0x1073eef58  slid=0x107efef58
+[H001]   [sym] __ZGVZ17GetNativeTypeHashIN4game4data16TweakDBInterfaceEEyvE14nativeTypeHash vmaddr=0x1073ea7e0  slid=0x107efa7e0
+[H001]   [sym] __ZGVZ17GetNativeTypeHashIN4game4data9TweakDBIDEEyvE14nativeTypeHash     vmaddr=0x1073a5d38  slid=0x107eb5d38
+[H001]   [sym] __ZGVZN3red17FixedSizeFunctionIFvvELj32ELj8EEC1IZ23RegisterGameTweakDBRTTIvEUlvE_S4_LPv0EEEOT_E4s_vt vmaddr=0x1073eeab0  slid=0x107efeab0
+[H001]   [sym] __ZGVZN3red8FunctionIF7THandleI13ISerializableEONS_6StringEELj24ELj8EEC1IRZNK13serialization24TextFormatResourceLoaderI15TweakDBResourceLb0EE21LoadAsyncWithCallbackERKNS_13SharedStorageINS9_12IAsyncSourceENS_8internal19AtomicSharedStorageEvEERKNS9_14Loadi vmaddr=0x1073ef080  slid=0x107eff080
+[H001]   [sym] __ZGVZN3red8FunctionIFvRKN13serialization13LoadingResultEELj24ELj8EEC1IZNKS1_24TextFormatResourceLoaderI15TweakDBResourceLb0EE21LoadAsyncWithCallbackERKNS_13SharedStorageINS1_12IAsyncSourceENS_8internal19AtomicSharedStorageEvEERKNS1_14LoadingContextERKNS1 vmaddr=0x1073ef058  slid=0x107eff058
+[H001]   [sym] __ZGVZN3red8FunctionIFvRN3job7BuilderERKNS_13SharedStorageIN13serialization13LoadingResultENS_8internal19AtomicSharedStorageEvEEELj24ELj8EEC1IRZNKS5_24TextFormatResourceLoaderI15TweakDBResourceLb0EE21LoadAsyncWithCallbackERKNS4_INS5_12IAsyncSourceES8_vEER vmaddr=0x1073ef0a8  slid=0x107eff0a8
+[H001]   [sym] __ZGVZN3rep22ReplicatedTypeResolverIN3red8DynArrayIN4game4data9TweakDBIDEEEE7GetTypeEvE4type vmaddr=0x1073c2918  slid=0x107ed2918
+[H001]   [sym] __ZGVZN3rep22ReplicatedTypeResolverIN3red8DynArrayIN4game4data9TweakDBIDEEEE7GetTypeEvE9innerType vmaddr=0x1073c2908  slid=0x107ed2908
+[H001]   [sym] __ZGVZN9TTypeNameIN3red8DynArrayIN4game4data9TweakDBIDEEEE11GetTypeNameEvE8typeName vmaddr=0x10749e230  slid=0x107fae230
+[H001]   [sym] __ZGVZN9TTypeNameIN4game4data9TweakDBIDEE11GetTypeNameEvE7theName        vmaddr=0x10749e240  slid=0x107fae240
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_14Vehicle_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073bbeb8  slid=0x107ecbeb8
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_15Attitude_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073ffef0  slid=0x107f0fef0
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_15District_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073d9af0  slid=0x107ee9af0
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_15LifePath_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073e5980  slid=0x107ef5980
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_16ActionMap_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1074a1dd0  slid=0x107fb1dd0
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_16Character_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073c0c58  slid=0x107ed0c58
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_16NPCRarity_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x107405e38  slid=0x107f15e38
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_16UIElement_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073a6460  slid=0x107eb6460
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_17BaseObject_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x10749b588  slid=0x107fab588
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_18ChannelData_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073e5c10  slid=0x107ef5c10
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_18EthnicNames_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x107404d78  slid=0x107f14d78
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_18UICondition_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073a64a0  slid=0x107eb64a0
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_19MappinsGroup_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073d9b08  slid=0x107ee9b08
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_19SubCharacter_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073c03d0  slid=0x107ed03d0
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_20AttitudeGroup_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073ffed8  slid=0x107f0fed8
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_20MiniGame_Trap_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073e5f30  slid=0x107ef5f30
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_21AIActionTarget_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073f9f30  slid=0x107f09f30
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_21CPOLoadoutBase_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1074a65e0  slid=0x107fb65e0
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_21OffMeshLinkTag_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073fbde0  slid=0x107f0bde0
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_21RPGDataPackage_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x10749b5a0  slid=0x107fab5a0
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_23LoadingTipsGroup_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073e2ce0  slid=0x107ef2ce0
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_23UIIconCensorship_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073e5b10  slid=0x107ef5b10
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_24VehicleEngineData_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073bbee8  slid=0x107ecbee8
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_25BikeDriveModelData_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073bbed0  slid=0x107ecbed0
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_25VehicleSurfaceType_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073be5c8  slid=0x107ece5c8
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_26MappinUIFilterGroup_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073d9b20  slid=0x107ee9b20
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_27FastTravelScreenData_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073e2ca8  slid=0x107ef2ca8
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_30CompanionDistancePreset_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073f2c10  slid=0x107f02c10
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_30DeviceContentAssignment_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073d16a0  slid=0x107ee16a0
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_31VehicleWheelsFrictionMap_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073be5f8  slid=0x107ece5f8
+[H001]   [sym] __ZGVZNK4game4data7TweakDB10GetRecordsINS0_34VehicleWheelsFrictionPreset_RecordEEERKN3red8DynArrayI7THandleINS0_13TweakDBRecordEEEEvE12emptyRecords vmaddr=0x1073be5e0  slid=0x107ece5e0
+[H001] --- singleton getter probe ---
+[H001]   dlsym(_ZN6RED4ext7TweakDB3GetEv                       ) not found
+[H001]   dlsym(_ZN7TweakDB3GetEv                               ) not found
+[H001]   dlsym(_ZN6RED4ext7TweakDB11GetInstanceEv              ) not found
+[H001]   dlsym(_ZN6RED4ext7TweakDB14GetDefaultInstEv           ) not found
+[H001]   dlsym(_ZN8RED4ext7TweakDB3GetEv                       ) not found
+[H001]   no TweakDB getter exported — binary likely stripped
+[H001] --- __DATA dump (first 64 qwords @ 0x107ea4000) ---
+[H001]   [+0000] 0x0000001300000018
+[H001]   [+0008] 0x00000001078cd92d  CODE vmaddr=0x106dbd92d | 69 73 45 71 75 61 6c 3a 00 69 73 45 71 75 61 6c |
+[H001]   [+0010] 0x00000001078cf5f8  CODE vmaddr=0x106dbf5f8 | 42 32 34 40 30 3a 38 40 31 36 00 23 31 36 40 30 |
+[H001]   [+0018] 0x0000000000000000
+[H001]   [+0020] 0x00000001078ccec4  CODE vmaddr=0x106dbcec4 | 63 6c 61 73 73 00 63 6c 65 61 6e 75 70 46 69 6c |
+[H001]   [+0028] 0x00000001078cf603  CODE vmaddr=0x106dbf603 | 23 31 36 40 30 3a 38 00 40 31 36 40 30 3a 38 00 |
+[H001]   [+0030] 0x0000000000000000
+[H001]   [+0038] 0x00000001078ce368  CODE vmaddr=0x106dbe368 | 73 65 6c 66 00 73 65 6e 64 45 76 65 6e 74 3a 00 |
+[H001]   [+0040] 0x00000001078cf60b  CODE vmaddr=0x106dbf60b | 40 31 36 40 30 3a 38 00 40 32 34 40 30 3a 38 3a |
+[H001]   [+0048] 0x0000000000000000
+[H001]   [+0050] 0x00000001078cdfeb  CODE vmaddr=0x106dbdfeb | 70 65 72 66 6f 72 6d 53 65 6c 65 63 74 6f 72 3a |
+[H001]   [+0058] 0x00000001078cf613  CODE vmaddr=0x106dbf613 | 40 32 34 40 30 3a 38 3a 31 36 00 40 33 32 40 30 |
+[H001]   [+0060] 0x0000000000000000
+[H001]   [+0068] 0x00000001078cdffc  CODE vmaddr=0x106dbdffc | 70 65 72 66 6f 72 6d 53 65 6c 65 63 74 6f 72 3a |
+[H001]   [+0070] 0x00000001078cf61e  CODE vmaddr=0x106dbf61e | 40 33 32 40 30 3a 38 3a 31 36 40 32 34 00 40 34 |
+[H001]   [+0078] 0x0000000000000000
+[H001]   [+0080] 0x00000001078ce018  CODE vmaddr=0x106dbe018 | 70 65 72 66 6f 72 6d 53 65 6c 65 63 74 6f 72 3a |
+[H001]   [+0088] 0x00000001078cf62c  CODE vmaddr=0x106dbf62c | 40 34 30 40 30 3a 38 3a 31 36 40 32 34 40 33 32 |
+[H001]   [+0090] 0x0000000000000000
+[H001]   [+0098] 0x00000001078cbcb5  CODE vmaddr=0x106dbbcb5 | 69 73 50 72 6f 78 79 00 54 40 22 4e 53 53 74 72 |
+[H001]   [+00a0] 0x00000001078cf63d  CODE vmaddr=0x106dbf63d | 42 31 36 40 30 3a 38 00 42 32 34 40 30 3a 38 23 |
+[H001]   [+00a8] 0x0000000000000000
+[H001]   [+00b0] 0x00000001078cd96a  CODE vmaddr=0x106dbd96a | 69 73 4b 69 6e 64 4f 66 43 6c 61 73 73 3a 00 69 |
+[H001]   [+00b8] 0x00000001078cf645  CODE vmaddr=0x106dbf645 | 42 32 34 40 30 3a 38 23 31 36 00 42 32 34 40 30 |
+[H001]   [+00c0] 0x0000000000000000
+[H001]   [+00c8] 0x00000001078cd979  CODE vmaddr=0x106dbd979 | 69 73 4d 65 6d 62 65 72 4f 66 43 6c 61 73 73 3a |
+[H001]   [+00d0] 0x00000001078cf645  CODE vmaddr=0x106dbf645 | 42 32 34 40 30 3a 38 23 31 36 00 42 32 34 40 30 |
+[H001]   [+00d8] 0x0000000000000000
+[H001]   [+00e0] 0x00000001078ccf57  CODE vmaddr=0x106dbcf57 | 63 6f 6e 66 6f 72 6d 73 54 6f 50 72 6f 74 6f 63 |
+[H001]   [+00e8] 0x00000001078cf5f8  CODE vmaddr=0x106dbf5f8 | 42 32 34 40 30 3a 38 40 31 36 00 23 31 36 40 30 |
+[H001]   [+00f0] 0x0000000000000000
+[H001]   [+00f8] 0x00000001078ce228  CODE vmaddr=0x106dbe228 | 72 65 73 70 6f 6e 64 73 54 6f 53 65 6c 65 63 74 |
+[H001]   [+0100] 0x00000001078cf650  CODE vmaddr=0x106dbf650 | 42 32 34 40 30 3a 38 3a 31 36 00 56 76 31 36 40 |
+[H001]   [+0108] 0x0000000000000000
+[H001]   [+0110] 0x00000001078ce243  CODE vmaddr=0x106dbe243 | 72 65 74 61 69 6e 00 72 65 74 61 69 6e 43 6f 75 |
+[H001]   [+0118] 0x00000001078cf60b  CODE vmaddr=0x106dbf60b | 40 31 36 40 30 3a 38 00 40 32 34 40 30 3a 38 3a |
+[H001]   [+0120] 0x0000000000000000
+[H001]   [+0128] 0x00000001078cbd33  CODE vmaddr=0x106dbbd33 | 72 65 6c 65 61 73 65 00 54 42 2c 56 5f 6d 5f 63 |
+[H001]   [+0130] 0x00000001078cf65b  CODE vmaddr=0x106dbf65b | 56 76 31 36 40 30 3a 38 00 51 31 36 40 30 3a 38 |
+[H001]   [+0138] 0x0000000000000000
+[H001]   [+0140] 0x00000001078ccdd2  CODE vmaddr=0x106dbcdd2 | 61 75 74 6f 72 65 6c 65 61 73 65 00 61 75 74 6f |
+[H001]   [+0148] 0x00000001078cf60b  CODE vmaddr=0x106dbf60b | 40 31 36 40 30 3a 38 00 40 32 34 40 30 3a 38 3a |
+[H001]   [+0150] 0x0000000000000000
+[H001]   [+0158] 0x00000001078ce24a  CODE vmaddr=0x106dbe24a | 72 65 74 61 69 6e 43 6f 75 6e 74 00 72 65 76 65 |
+[H001]   [+0160] 0x00000001078cf664  CODE vmaddr=0x106dbf664 | 51 31 36 40 30 3a 38 00 5e 7b 5f 4e 53 5a 6f 6e |
+[H001]   [+0168] 0x0000000000000000
+[H001]   [+0170] 0x00000001078cf4e7  CODE vmaddr=0x106dbf4e7 | 7a 6f 6e 65 00 47 61 6d 65 41 70 70 6c 69 63 61 |
+[H001]   [+0178] 0x00000001078cf66c  CODE vmaddr=0x106dbf66c | 5e 7b 5f 4e 53 5a 6f 6e 65 3d 7d 31 36 40 30 3a |
+[H001]   [+0180] 0x0000000000000000
+[H001]   [+0188] 0x00000001078cd603  CODE vmaddr=0x106dbd603 | 68 61 73 68 00 68 69 64 65 3a 00 68 69 64 65 4f |
+[H001]   [+0190] 0x00000001078cf664  CODE vmaddr=0x106dbf664 | 51 31 36 40 30 3a 38 00 5e 7b 5f 4e 53 5a 6f 6e |
+[H001]   [+0198] 0x0000000000000000
+[H001]   [+01a0] 0x00000001078ced01  CODE vmaddr=0x106dbed01 | 73 75 70 65 72 63 6c 61 73 73 00 73 77 69 74 63 |
+[H001]   [+01a8] 0x00000001078cf603  CODE vmaddr=0x106dbf603 | 23 31 36 40 30 3a 38 00 40 31 36 40 30 3a 38 00 |
+[H001]   [+01b0] 0x0000000000000000
+[H001]   [+01b8] 0x00000001078cd290  CODE vmaddr=0x106dbd290 | 64 65 73 63 72 69 70 74 69 6f 6e 00 64 65 76 69 |
+[H001]   [+01c0] 0x00000001078cf60b  CODE vmaddr=0x106dbf60b | 40 31 36 40 30 3a 38 00 40 32 34 40 30 3a 38 3a |
+[H001]   [+01c8] 0x0000000000000000
+[H001]   [+01d0] 0x0000000100000018
+[H001]   [+01d8] 0x00000001078cd254  CODE vmaddr=0x106dbd254 | 64 65 62 75 67 44 65 73 63 72 69 70 74 69 6f 6e |
+[H001]   [+01e0] 0x00000001078cf60b  CODE vmaddr=0x106dbf60b | 40 31 36 40 30 3a 38 00 40 32 34 40 30 3a 38 3a |
+[H001]   [+01e8] 0x0000000000000000
+[H001]   [+01f0] 0x0000000400000010
+[H001]   [+01f8] 0x00000001078cd603  CODE vmaddr=0x106dbd603 | 68 61 73 68 00 68 69 64 65 3a 00 68 69 64 65 4f |
+[H001]   => 41 code pointer(s) in 64 qwords
+[H001] --- __DATA_CONST dump (first 64 qwords @ 0x1078f0000) ---
+[H001]   [+0000] 0x00000001928b0700
+[H001]   [+0008] 0x00000001928b2204
+[H001]   [+0010] 0x00000001928b145c
+[H001]   [+0018] 0x00000001928b2250
+[H001]   [+0020] 0x00000001928b1274
+[H001]   [+0028] 0x00000001928b21bc
+[H001]   [+0030] 0x00000001928b1614
+[H001]   [+0038] 0x00000001928b22e0
+[H001]   [+0040] 0x00000001928b2348
+[H001]   [+0048] 0x00000001ea1cba60
+[H001]   [+0050] 0x00000001836756d0
+[H001]   [+0058] 0x000000018367c404
+[H001]   [+0060] 0x000000018367bf90
+[H001]   [+0068] 0x000000018337b724
+[H001]   [+0070] 0x000000018337a714
+[H001]   [+0078] 0x0000000183379828
+[H001]   [+0080] 0x0000000183379114
+[H001]   [+0088] 0x000000018e6a4868
+[H001]   [+0090] 0x000000018e6a55f8
+[H001]   [+0098] 0x000000018e6a4790
+[H001]   [+00a0] 0x000000010b8daeb4
+[H001]   [+00a8] 0x000000010b8d4eb0
+[H001]   [+00b0] 0x000000010b8d51ec
+[H001]   [+00b8] 0x000000010b8dad70
+[H001]   [+00c0] 0x000000010b8d77e0
+[H001]   [+00c8] 0x000000010b8da9a0
+[H001]   [+00d0] 0x000000010b8db600
+[H001]   [+00d8] 0x000000010b8daaa0
+[H001]   [+00e0] 0x000000010b8da648
+[H001]   [+00e8] 0x000000010b8d95d4
+[H001]   [+00f0] 0x000000010b8db258
+[H001]   [+00f8] 0x000000010b8d79b4
+[H001]   [+0100] 0x000000010b8d4d8c
+[H001]   [+0108] 0x000000010b8dc108
+[H001]   [+0110] 0x000000010b8dc1c8
+[H001]   [+0118] 0x000000010b8d9a5c
+[H001]   [+0120] 0x000000010b8dc10c
+[H001]   [+0128] 0x000000010b8da5f4
+[H001]   [+0130] 0x000000010b8d4d84
+[H001]   [+0138] 0x000000010b8db480
+[H001]   [+0140] 0x000000010b8d4de4
+[H001]   [+0148] 0x0000000189acfeac
+[H001]   [+0150] 0x0000000189d88b48
+[H001]   [+0158] 0x0000000180a01588
+[H001]   [+0160] 0x00000001809e9c9c
+[H001]   [+0168] 0x0000000180a039d8
+[H001]   [+0170] 0x0000000180a05214
+[H001]   [+0178] 0x0000000180a0899c
+[H001]   [+0180] 0x0000000180a00c1c
+[H001]   [+0188] 0x0000000180a00a5c
+[H001]   [+0190] 0x0000000180a27acc
+[H001]   [+0198] 0x0000000180a1d9ac
+[H001]   [+01a0] 0x0000000180a016bc
+[H001]   [+01a8] 0x0000000180a05af4
+[H001]   [+01b0] 0x0000000180a5ec84
+[H001]   [+01b8] 0x00000001809e8758
+[H001]   [+01c0] 0x0000000180a0177c
+[H001]   [+01c8] 0x00000001809f07a8
+[H001]   [+01d0] 0x00000001809f4910
+[H001]   [+01d8] 0x00000001809e8908
+[H001]   [+01e0] 0x00000001809f5a48
+[H001]   [+01e8] 0x00000001809f54a0
+[H001]   [+01f0] 0x00000001809ed66c
+[H001]   [+01f8] 0x00000001809ed448
+[H001]   => 0 code pointer(s) in 64 qwords
+[H001] ========== probe complete ==========
+[H001] dyld image callback registered

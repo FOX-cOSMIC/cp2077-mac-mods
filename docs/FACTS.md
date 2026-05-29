@@ -553,6 +553,34 @@ No additional stubs or changes are needed for the `.tweak` parser layer itself. 
 
 ---
 
+### F-029: TweakDB accessors located — GetRecord (+0x58 by-id) and GetFlat (+0x40 sorted flats → +0x148 buffer); confirms macOS layout == Windows (H-010)
+
+- **Date:** 2026-05-30
+- **Game version:** 2.3.1; via Ghidra consumer-trace (read-only headless, static base 0x100000000)
+- **The two accessors:**
+  - **`TweakDB::GetRecord(TweakDBID)` = `FUN_102b745d0`** (1004 callers). Live hash lookup on the **+0x58** map (no caching): `db+0x58`=bucket-index array, `+0x60`=count, `+0x64`=bucketCount, `+0x68`=entries base, `+0x74`=stride; `idx=(id&0xff_ffff_ffff)%bucketCount` → bucket chain → match `entry+0x04==id_lo32 && (entry+0x08&0xff_ffff_ffff)==id40` → returns `*(entry+0x10)`=record instance (refcount++). Caller reads inline fields (Stat_Record value @ p10+0x54, F-027).
+  - **`TweakDB::GetFlat(TweakDBID)` = `FUN_102b76708`** (29 callers, all typed `GetFlatValue<T>` wrappers). Masks id to 40 bits, **binary-searches a SORTED key array off `db+0x40`** (helper `FUN_102b139b8`, compares key[0]=uint32 then key[1]=len), returns `bufferBase + packedOffset` — a pointer **into the +0x148 flat-value buffer**.
+- **This locates the real `flats` array at +0x40** (a SortedUniqueArray, not a hashmap — why hashmap-centric probes missed it) and **confirms H-010**: macOS TweakDB struct == Windows RED4ext.SDK `TweakDB.hpp`. flats@+0x40, recordsByID@+0x58, recordsByType@+0x88, defaultValues@+0x108, flatDataBuffer@+0x148, unk160@+0x160.
+- **Invalidates / corrects:** the map *labels* in F-020/F-022 — **+0x58 is `recordsByID` (not "flats"), +0x108 is `defaultValues` (not "queries")**. The 63,699 record-name hits (F-026) and the read/write proofs remain valid; only the names were wrong. Resolves H-010.
+- **How to re-verify:** Ghidra `re-16-getrecord.py` (GetRecord deref + callers) and `re-3-flatread.py` (getter-callers scanning +0x58/+0x148), saved in `/tmp`.
+
+---
+
+### F-030: Gameplay reads a per-entity StatsContainer CACHE, seeded once at entity init — NOT live TweakDB; this is the root cause of F-028's no-op
+
+- **Date:** 2026-05-30
+- **Game version:** 2.3.1; via Ghidra consumer-trace
+- **Evidence:** scripted stat reads (`StatsDataSystem.GetStatValue/...ByType/Bare/HasStatData` = natives `FUN_103832688/1038327ac/10386c7ec/10386c990`) all funnel to **`FUN_103a7b8e8`** (live stat getter, 23 callers) which reads a **per-entity StatsContainer**: `container+0x50`=sorted stat-type-id array, `+0x5c`=count, `+0x60`=0x10-byte entry array with the value float at **entry+0xc** → binary-search `+0x50`, return `*(entry+0xc)`. It makes **zero** calls to GetFlat/GetRecord/the singleton and never reads `Stat_Record+0x54`. The container is seeded once at entity stat-init/recompute (`FUN_103a99a60/103a9b03c/103a9b73c` gather modifiers via GetRecord; `FUN_103a7d4bc` folds base+modifiers → writes `container+0x60[i]+0xc`).
+- **Root cause of the failed cinema poke (F-028 / unleash):** gameplay queries read the cache, while our writes hit the record/source memory AFTER the one-time copy. F-028's `verify=OK` was real (the record byte changed) but inert (the consumer reads the cache).
+- **Fix (what/where/when):**
+  1. **Preferred (TweakXL-style):** apply at load — after DB-load orchestrator `FUN_102b75744` (F-018) completes, before entity stat-init — so the container seeds from modded values. Write the float at `*(GetRecord(id)+0x10)+0x54` (or, properly, the flat's FlatValue in the +0x148 buffer per F-029/H-010).
+  2. **Immediate on a live save:** also patch the per-entity cache at `StatsContainer+0x60[entry]+0xc` (overwritten on next recompute).
+  3. Forcing a recompute after a TweakDB write is the general mechanism.
+- **How to re-verify:** Ghidra `re-13-base.py` (stats-TU readers of record+0x54) and the `FUN_103a7b8e8` decomp.
+- **Invalidates:** none. Explains F-028's caveat ("does NOT prove gameplay reads this location") — it does NOT; gameplay reads the cache.
+
+---
+
 ### F-027: BaseStats / Stat_Record Float value lives at p10+0x54 — first identified cinema mutation target
 
 - **Date:** 2026-05-29

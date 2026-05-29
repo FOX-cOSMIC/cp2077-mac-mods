@@ -758,3 +758,11 @@ Built tools/probes/candidate_flats.txt: 98 distinct scalar (Int32/Float/Bool) ca
   3. Possibly file F-021 with the correction; possibly invalidate or refine F-012
 
 ---
+
+---
+
+**2026-05-29 — Scope (researcher) — Q1 (+0x88 anomaly) + Q2 (CRC brute-force)**
+
+Q1 RESOLVED: +0x88 (843 entries) is the records-BY-TYPE index (what GetRecords<T> reads, F-012), NOT a record-by-name store. Evidence: 967 game::data::*_Record types in binary RTTI (843 = live subset); GetRecords<T> is type-parameterized; Nova (0xb1e27e8e) MISSES +0x88; +0x28 sub-object (FUN_102b7b084) is a type/reflection registry over a static name table (FNV-1a), not a 13K record store. Added F-021 (refines F-012 — appended REFINED note to F-012) and F-022 (live map census: flats=+0x58/193354, records-by-type=+0x88/843, queries=+0x108/10; H-008 formally resolved; flat read/write proven on 0xce8348b9). Open: where individual records live → H-009 (hypothesis: +0x58 is the combined flat+record id map since 193,354 ≈ 180K flats + 13K records; decisive test = look up Nova's id against +0x58).
+
+Q2 NO MATCH: brute-forced CRC32==0xce8348b9 (len 39) and 5 other live-flat hashes. Tried (a) 13K records × ExtraFlats+common props (2.3M combos) and (b) 13K records × 28,925 binary-harvested property strings (52M combos). Zero matches. Conclusion: the 193K live flats are dominated by runtime-generated inline/nested-record paths whose names are NOT in any offline string pool (tweakdb.bin has only 11 three-part names). Flat names cannot be recovered by offline brute-force. No F-023. Recommend: pull the canonical TweakDB name dump from WolvenKit (online), OR dump full flat names from the load/parse path where names exist transiently. No cinema-ready NAMED flat yet (though write is proven on the unnamed 0xce8348b9).

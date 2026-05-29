@@ -110,3 +110,13 @@ Resolved hypotheses can be deleted after 30 days (the source of truth is now in 
 - **Status:** **resolved-fact (2026-05-29)** — CONFIRMED via Option 2 (runtime). P1.4's smoke test (`tools/test-tweakdb-access.sh`) injected `libred4ext.dylib` into a fresh stock 2.3.1 game launch, waited 15 s for full DB populate, and read the live struct via the singleton: `mapA(+0x58).count=193354`, `mapC(+0x108).count=12`, `records.count=843`, `valueBufferSize=4,291,664 B`. The 16,000:1 ratio between mapA and mapC is decisive — **flats are at +0x58, queries at +0x108**, exactly matching the Windows declaration-order analogy. Evidence captured in `docs/probes/logs/red4ext-mac-2026-05-29-p1-4.log`. **One side-finding:** the F-015 annotation of `hashMapC.count @ +0x114` (block-relative +0x0c, the *bucketCount* slot) was the row that prompted Schema to log BOTH +0x08 and +0x0c — runtime shows `mapC{@08=12,@0c=13}`, so count is at +0x08 like the other maps (F-019/F-012), not +0x0c. Recommend Scope formalize the flats=+0x58 confirmation and the count-offset uniformity as F-020.
 - **Owner:** researcher
 - **Resolved by:** P1.4 smoke test in-game evidence (live game build 2.3.1)
+
+### H-009: Individual records live in the +0x58 map (combined flat+record id map), not a separate by-id map
+
+- **Proposed:** 2026-05-29 by Scope (researcher)
+- **Why we think this:** F-021 established +0x88 (843) is records-BY-TYPE, not by-id, and the +0x28 sub-object is a type/reflection registry — so the ~12,951 individual records are NOT in any structure found so far. The +0x58 map holds **193,354** entries ≈ (~180K flats + ~13K records): a strong hint that +0x58 is the *universal TweakDBID → entry* map holding flats AND records together (Schema's H-008 only distinguished it from +0x108 by size and assumed flats-only). If true, record-targeting mods (clone/edit a record) resolve through the same +0x58 path as flats.
+- **How to test (decisive, cheap — Schema/runtime):** in the P1.12-style probe, look up a known **record** id against the **+0x58** map: `Items.Preset_Nova_Default` → CRC32 `0xb1e27e8e`, build compact key {0xb1e27e8e, len=25, off=0}, `Lookup(mapA, id, flatsHashMode)`.
+  - **HIT** → +0x58 is the combined flat+record id map; records live there. (Then inspect the entry payload to see how record vs flat entries differ.)
+  - **MISS** → records are in a yet-unfound structure (next: disassemble the by-id `GetRecord(TweakDBID)` function and the +0x30 0xf8-byte sub-object `FUN_102b76e78`).
+- **Status:** open — blocks understanding of record-targeting mods (clone/$base). Not needed for flat-only cinema demo.
+- **Owner:** researcher (static) / Schema (runtime probe)

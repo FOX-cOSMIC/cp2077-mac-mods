@@ -311,6 +311,7 @@ No additional stubs or changes are needed for the `.tweak` parser layer itself. 
 - **Callers (xrefs):** static `0x10121c760`, `0x101537164`, `0x1035ef734` — each obtains `this` from the singleton getter `FUN_102b73c7c` (F-011).
 - **How to re-verify:** `awk 'NR>=5974950 && NR<=5975110' reference/ghidra/Cyberpunk2077.txt` (function body around the `0x1073bbea8`/`0x1073bbeb8` references).
 - **Invalidates:** none
+- **REFINED 2026-05-29 by F-021:** the +0x88 map this function reads is the **records-BY-TYPE index** (key = a record-type id; value = the DynArray of records of that type — exactly what `GetRecords<T>` returns), NOT a record-by-name→record lookup. Looking up an individual record by its own TweakDBID (`Items.Preset_Nova_Default`, 0xb1e27e8e) MISSES this map (runtime-proven, P1.12 probe). The sub-layout above is still correct for the +0x88 map; only the gloss "the records map" (implying by-id record lookup) was imprecise. See F-021/F-022.
 
 ---
 
@@ -470,5 +471,41 @@ No additional stubs or changes are needed for the `.tweak` parser layer itself. 
   strings -8 "$BIN" | grep -c 'Constants'   # 0
   ```
 - **Invalidates:** none
+
+---
+
+### F-021: The +0x88 map is the records-BY-TYPE index (GetRecords<T>), NOT a record-by-name store; ~843 = live record-type count
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1 (build 5314028)
+- **Why this was opened:** Schema's P1.12 candidate probe found `Items.Preset_Nova_Default` (CRC32 `0xb1e27e8e`, on-disk 22×) **MISSES** the +0x88 map, and the +0x88 map holds only **843** entries — far below CP2077's ~12,951 record names. F-012 had glossed +0x88 as "the records map," implying by-id record lookup; that gloss is wrong.
+- **Evidence:**
+  - F-012: the function reading +0x88 is `GetRecords<Vehicle_Record>()` — a **type-parameterized** accessor that returns *all records of a type*. Its lookup key is a record-**type** id (the FNV-1a'd output of `FUN_1026cb278`, the per-type id), not a record's own name-hash. So +0x88 is keyed by type, not by record name.
+  - Binary RTTI census: `nm Cyberpunk2077 | grep -oE 'N4game4data[0-9]+[A-Za-z0-9_]+_RecordE' | sort -u | wc -l` → **967** distinct `game::data::*_Record` types (1341 across all namespaces). The live count **843** is a clean subset (record types that have ≥1 instantiated record), matching "records-by-type index" — and nothing like 12,951.
+  - Runtime (Schema, P1.12 log): the +0x88 self-test entry has key `{nameHash=0x081122e0, len=1}` and is queried with hash mode **fnv1a-8B** (FNV-1a over the 8-byte key) — consistent with a synthetic short type id, not a `CRC32(fullname)+strlen` record-name TweakDBID.
+  - The +0x28 heap sub-object (`FUN_102b7b084`, 0x158 bytes) is a reflection/type registry — it FNV-1a-registers a *fixed static table* of type-name strings (`0x1070d5ff0`, e.g. `"alignas"` @ `0x106d2c9a2`), not a 13K record store. So records-by-name are not there either.
+- **Consequence:** to fetch an individual record by its TweakDBID you do **not** use +0x88. Where the by-id record store lives is not yet confirmed (leading hypothesis: the +0x58 map is the *combined* flat+record id map — see H-009; 193,354 ≈ ~180K flats + ~13K records). 
+- **How to re-verify:**
+  ```bash
+  BIN="$HOME/Library/Application Support/Steam/steamapps/common/Cyberpunk 2077/Cyberpunk2077.app/Contents/MacOS/Cyberpunk2077"
+  nm "$BIN" | grep -oE 'N4game4data[0-9]+[A-Za-z0-9_]+_RecordE' | sort -u | wc -l   # 967 record types
+  # + P1.12 probe log: 'records.count=843' and 'Items.Preset_Nova_Default ... -> MISS'
+  ```
+- **Invalidates:** refines F-012 (the +0x88 sub-layout stands; the "by-id record lookup" interpretation is corrected). Does not invalidate F-013/F-015/F-017.
+
+---
+
+### F-022: Live TweakDB map census (P1.12 runtime) — flats=+0x58 (193,354), records-by-type=+0x88 (843), queries=+0x108 (10); H-008 resolved
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1 (build 5314028); measured at title screen (no save), TweakDB @ runtime 0x3222404a0
+- **Evidence (Schema P1.12 probe log, `docs/probes/logs/red4ext-mac-2026-05-29-candidate-probe.log`):**
+  - **+0x58 (hashMapA) = 193,354 entries** — the **flats** map. **H-008 RESOLVED: flats = +0x58** (mapA.count=193354 ≫ mapC=10 → `verdict=flats-is-A`). Keyed by **nameHash-direct** = `CRC32(full flat name)` (line 25: `stored=name=0xce8348b9`); compact-key lookup self-test HIT. Entry stride `0x20`; flat **value buffer** at +0x148, base 0x7164e8000, size 4,291,664 bytes.
+  - **+0x88 (hashMapB) = 843 entries** — records-BY-TYPE index (F-021). Hash mode fnv1a-8B.
+  - **+0x108 (hashMapC) = 10 entries** — queries (mapC{@08=10,@0c=13}).
+  - Flat read/write **works**: id `0xce8348b9` (Int32) read=2 → write 3 → verify ok → restored (lines 26–31). The mutation path (P1.10a) is runtime-proven on a real flat.
+- **Note:** 193,354 ≈ (~180K flats + ~13K records). Whether +0x58 is flats-only or the *combined* flat+record id map is the open question H-009 — decisive because if records are in +0x58, record-targeting mods work too.
+- **How to re-verify:** re-run the P1.12 probe (`TWEAKXL_CANDIDATES_FILE=... DYLD_INSERT_LIBRARIES=libtweakxl.dylib`), read the `[tweakdb] H-008 ...` and `[flat-layout]` lines.
+- **Invalidates:** none (resolves H-008)
 
 ---

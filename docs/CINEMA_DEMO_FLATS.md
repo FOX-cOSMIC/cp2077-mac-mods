@@ -4,6 +4,19 @@
 
 Goal: 2–3 **scalar** flats whose modification is immediately observable in-game, with ready-to-drop YAML. Pipeline is proven end-to-end (E2E PASS @ a1c7d32); this supplies the *target*.
 
+> **⚠ STATUS 2026-05-29 (post P1.12 probe + Q1/Q2 dig):** every flat below was
+> **REJECTED at runtime** (`flat not found`) — the P1.12 probe confirmed all 98
+> ExtraFlats-derived candidates MISS the live flats map (F-022). ExtraFlats
+> property names are not present on these records; the 193,354 live flats are
+> dominated by runtime-generated inline/nested-record paths whose names are not
+> in any offline string pool (F-020). A CRC32 brute-force against 6 known-live
+> flat hashes (52M combos) found **no** name (Q2). **Do not use the picks below
+> as-is.** Flat *write* IS proven (Schema wrote the unnamed flat `0xce8348b9`).
+> **Next move to get NAMED cinema targets:** import the canonical TweakDB name
+> dictionary from WolvenKit (`tweakdbstr` / TweakXL's own string dump, online),
+> or dump full flat names from the load/parse path. The sections below are kept
+> for provenance only.
+
 ---
 
 ## How this was discovered

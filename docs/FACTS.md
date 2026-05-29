@@ -201,3 +201,72 @@ No additional stubs or changes are needed for the `.tweak` parser layer itself. 
 - **Invalidates:** none (corrects an informal assumption that was never promoted to a FACT)
 
 ---
+
+### F-007: ASLR slide differs per launch — empirically confirmed across two runs
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1 (build 5314028)
+- **Evidence:** Two probe runs of the same binary on the same day produced different load bases / slides:
+  - Run 1 (08:27:02): `base = 0x10285c000`, `slide = 0x285c000` (F-003/F-004)
+  - Run 2 (08:44:28, v2 probe): `base = 0x100b10000`, `slide = 0xb10000` (`docs/probes/logs/h001-probe-2026-05-29-v2.log:5-6`)
+  - Both satisfy `base - slide = 0x100000000` (F-004's static base). Both report identical `__TEXT` size (112,512 KB), confirming it's the same binary at a different load address.
+- **Consequence:** F-004's "the slide is per-launch; re-extract it every run" rule is now empirically validated, not merely theoretical. **Any static→runtime address conversion must use the slide from that specific run's probe log.** Never cache a runtime address across launches.
+- **How to re-verify:** Run `tools/run-h001-probe.sh` twice (separate game launches); compare `base`/`slide` lines. They will differ; `base - slide` will be `0x100000000` both times.
+- **Invalidates:** none (strengthens F-004)
+
+---
+
+### F-008: game::data::TweakDB class confirmed in binary; anchor addresses for xref hunt (symbols are DATA-only, no function entry points)
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1 (build 5314028)
+- **Evidence:** The v2 probe's LC_SYMTAB scan (first 20,000 of 68,655 symbols) surfaced ~62 `Tweak`-related symbols confirming the engine type `game::data::TweakDB` with templated `GetRecords<T>()` const member methods (Vehicle, Attitude, District, LifePath, Character, and 26+ other record types), plus RTTI for `TweakDBID`, `TweakDBType`, `TweakDBRecord`, `TweakDBInterface`, `TweakDBResource`. **Verified independently with `nm`.** All static addresses below confirmed present in the binary (static base `0x100000000`; add the per-run slide for runtime):
+
+  | Static addr | Symbol | Use as xref anchor |
+  |---|---|---|
+  | `0x1073af788` | `__ZZ13GetTypeObjectIN4game4data9TweakDBIDEE...E8rttiType` (the `rttiType` pointer static) | RTTI type-object for `game::data::TweakDBID`; multi-referenced hub — many call sites read it |
+  | `0x1073af790` | `__ZGVZ13GetTypeObject...TweakDBID...rttiType` (its init guard) | adjacent guard for the same static |
+  | `0x1073bbea8` | `__ZZNK4game4data7TweakDB10GetRecordsINS0_14Vehicle_RecordEE...E12emptyRecords` | **single-xref anchor** → pins `TweakDB::GetRecords<Vehicle_Record>()` const member → reveals TweakDB struct layout |
+  | `0x1073eef58` | `__ZGVZ17GetNativeTypeHashIN4game4data13TweakDBRecordEE...nativeTypeHash` | native type-hash for `TweakDBRecord` |
+  | `0x1073ea7e0` | `__ZGVZ17GetNativeTypeHashIN4game4data16TweakDBInterfaceEE...nativeTypeHash` | native type-hash for `TweakDBInterface` |
+  | `0x1073eeab0` | `__ZGVZN3red17FixedSizeFunction...RegisterGameTweakDBRTTIvE...` | guard for `RegisterGameTweakDBRTTI()` — RTTI registration entry anchor |
+
+- **Critical nuance (corrects an over-optimistic reading of the symtab):** Every TweakDB-related symbol in the table is **DATA** (`D`) — an Itanium static-init guard (`__ZGVZ...`) or a function-local static (`__ZZ...emptyRecords` / `__ZZ...rttiType`). There are **ZERO** function (`T`/`t`) symbols for `game::data::TweakDB` — confirmed: `nm "$BIN" | awk '$2=="T"||$2=="t"' | grep -cE '_ZNK?4game4data7TweakDB[0-9]'` → **0**. The actual function entry points are inlined / internal-linkage and have no name; they are **not** hiding in the unscanned 48,655 symbols. Therefore the path to the functions is **xref from these DATA statics**, not "scan more symbols." A function-local static (e.g. `emptyRecords` at `0x1073bbea8`) is referenced by exactly one function — its owning method — making it the cleanest single-xref entry point.
+- **How to re-verify:**
+  ```bash
+  BIN="$HOME/Library/Application Support/Steam/steamapps/common/Cyberpunk 2077/Cyberpunk2077.app/Contents/MacOS/Cyberpunk2077"
+  nm "$BIN" | grep -E '1073af788|1073bbea8|1073eef58'         # the statics exist
+  nm "$BIN" | awk '$2=="T"||$2=="t"' | grep -cE '_ZNK?4game4data7TweakDB[0-9]'   # → 0 functions
+  nm "$BIN" | grep 'NK4game4data7TweakDB10GetRecords' | grep -v ZGV | wc -l       # → 31 GetRecords data statics
+  ```
+- **Invalidates:** none (supersedes nothing; refines F-006's "no accessor symbol" with positive anchor addresses)
+
+---
+
+### F-009: Authoritative symbol counts — 68,655 LC_SYMTAB entries total; 67,928 externally-defined
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1 (build 5314028)
+- **Evidence:** The two numbers in play measure different things and are both correct:
+  - **68,655** = total `LC_SYMTAB.nsyms` (every symbol-table entry: defined + undefined + local), as reported by the probe (`...v2.log:11`). `nm "$BIN" | wc -l` ≈ 68,654 (nm filters one debug/null entry).
+  - **67,928** = externally-defined symbols only, `nm -gU "$BIN" | wc -l` (F-006).
+  - Difference (~727) = undefined imports + entries `nm -gU` excludes. No contradiction.
+- **For "is the binary stripped?" the authoritative figure is the export count (67,928, F-006): the binary is not stripped.** For "how many symbols must a full-symtab scan walk," the figure is 68,655.
+- **How to re-verify:** `nm "$BIN" | wc -l` (≈68,654 total); `nm -gU "$BIN" | wc -l` (67,928 exported).
+- **Invalidates:** none (reconciles F-006's count with the probe's reported total)
+
+---
+
+### F-010: __DATA begins with Objective-C runtime metadata, not game data; probe's "CODE" flag false-positives on cstring pointers
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1 (build 5314028)
+- **Evidence (v2 log):**
+  - `__DATA` dump from its base (`vmaddr=0x107394000`, slid `0x107ea4000`): the first 64 qwords are Objective-C selector/method metadata — readable ASCII at the pointed-to bytes spells `isEqual:`, `performSelector:`, `isKindOfClass:`, `respondsToSelector:`, `retain`/`release`/`autorelease`, and ObjC type-encodings (`@16@0:8`, `B24@0:8@16`). This is the `__objc_*` region at the head of `__DATA`. No TweakDB structures in this window (`...v2.log:76-141`).
+  - `__DATA_CONST` dump from its base (`vmaddr=0x106de0000`, slid `0x1078f0000`): pointers into `0x18xxxxxxxx`/`0x19xxxxxxxx` (consistent with the dyld shared cache / system frameworks) and into `0x10b8dxxxx` (other in-process mappings); 0 flagged as main-`__TEXT` code. This is the GOT/bind-pointer head of `__DATA_CONST`, not game data (`...v2.log:142-207`).
+  - **Probe heuristic caveat:** the 41 entries flagged `CODE` in the `__DATA` dump are **false positives** — their values fall inside the `__TEXT` address range but point to C-string/selector data (in `__TEXT,__cstring`/`__objc_methname`), not function prologues (the dumped bytes are ASCII, not ARM64 instructions). The probe's "value ∈ `__TEXT` ⇒ CODE" test does not distinguish code from read-only strings living in `__TEXT`.
+- **Guidance:** A v3 probe must NOT dump from segment base offset 0 to find TweakDB data — that window is ObjC/GOT boilerplate. Target by address (TweakDB statics from F-008 + slide) instead. And treat the `CODE` flag as "points into `__TEXT`," not "is a function" — disambiguate by checking for an ARM64 prologue (e.g. `stp`/`sub sp`) vs printable ASCII.
+- **How to re-verify:** re-run `tools/run-h001-probe.sh`; inspect the `--- __DATA dump ---` and `--- __DATA_CONST dump ---` sections of `/tmp/h001-probe.log`.
+- **Invalidates:** none
+
+---

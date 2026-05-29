@@ -210,3 +210,37 @@ H-001 itself remains untested (no dispatch-table dump in this run). Recommended 
 - **Next:** Lucas chooses: re-run enhanced probe for more data first, OR delegate T-002b directly. Both are valid; the enhanced probe is a 60-second run and gives more data.
 
 ---
+
+---
+
+**2026-05-29 — Scope (researcher) — T-002 v2 (symtab + __DATA analysis)**
+
+Analyzed the v2 probe log (`docs/probes/logs/h001-probe-2026-05-29-v2.log`). Added F-007 (slide variance empirically confirmed: 0x285c000 vs 0xb10000, both base−slide=0x100000000), F-008 (game::data::TweakDB confirmed with anchor addresses), F-009 (symbol-count reconciliation: 68,655 total LC_SYMTAB vs 67,928 exported), F-010 (__DATA base is ObjC metadata, not game data; probe's CODE flag false-positives on cstring pointers).
+
+Key correction (verified via nm, build-independent): the symtab surfaced TweakDB symbols but they are ALL data (guard vars + function-local statics) — ZERO function entry symbols exist for game::data::TweakDB, and they are NOT in the unscanned 48,655 (the functions have no name; inlined/internal linkage). So "scan all symbols" (v3 Option 1) would not find functions. Instead, the function-local statics are single-xref anchors. Refined H-005 to point at static 0x1073bbea8 (TweakDB::GetRecords<Vehicle_Record> emptyRecords static) as the concrete Ghidra entry point, with the TweakDBID RTTI type-object 0x1073af788 as the multi-ref hub.
+
+Recommendation: NO v3 probe for symbol discovery — go straight to Ghidra xref (researcher work, can start now). T-002b not superseded but redefined: validate the slide formula by reading a known TweakDB DATA static (emptyRecords @ 0x1073bbea8 + slide should be a zeroed red::DynArray sentinel) rather than an arbitrary function — fold into next probe run, low priority vs the xref hunt.
+
+## 2026-05-29 — Probe v2 ran + deep analysis by Scope on Opus 4.7 (Claude as Conductor)
+
+- **Goal:** Capture the enhanced probe data (symtab scan + __DATA dumps) by killing the running game and re-launching with the v2 dylib injected, then have Scope analyze.
+- **Probe v2 run:** Conductor killed pre-existing Cyberpunk process, removed v1 dylib, force-rebuilt from v2 source, injected, captured /tmp/h001-probe.log (209 lines, 19KB — 5.4× v1), killed the game. Total wall time ~5 seconds. Log committed to docs/probes/logs/h001-probe-2026-05-29-v2.log.
+- **Scope's analysis (Opus 4.7, 231s turn):**
+  - **F-007** — ASLR slide variance empirically confirmed (run1 0x285c000 vs run2 0xb10000; static base 0x100000000 stable both times). Validates F-004's per-launch rule.
+  - **F-008** — `game::data::TweakDB` class confirmed in binary. KEY INSIGHT: every TweakDB symbol is DATA-only — zero function-entry symbols exist anywhere (verified by `nm` count). The functions exist (game reads/writes flats at runtime) but have no name. The leverage is xref FROM the named DATA statics.
+  - **F-009** — Reconciled symbol counts (68,655 LC_SYMTAB total vs 67,928 dynamic exports — both correct, different meanings).
+  - **F-010** — __DATA base = OBJC runtime metadata, __DATA_CONST base = GOT/shared-cache pointers, neither game data. Probe's "CODE" heuristic false-positives on cstring pointers.
+  - **H-005 updated** — concrete anchor addresses added to "How to test", dependency on T-002b removed (static analysis needs no runtime validation).
+- **Strategic shift:**
+  - **No v3 probe.** Scope verified scanning more of the 68,655 symtab would only yield more DATA statics, not function entries. Time to switch to Ghidra.
+  - **T-002b redefined:** byte-compare against `emptyRecords` static (TweakDB-relevant) instead of arbitrary exported function. De-prioritized to P2 (slide variance already validated by F-007).
+  - **T-002c refined and unblocked** with three F-008 anchor addresses: 0x1073bbea8 (primary single-xref entry), 0x1073af788 (RTTI hub), 0x1073eeab0 (registration entry).
+  - **H-002 (TweakDB struct size/layout) folded into T-002c session** per Scope's recommendation (same disassembly answers both).
+- **New tasks:** T-018 (probe CODE heuristic refinement, P3), T-019 (probe stripped-binary log fix, P3).
+- **Status:** progress 55% → 65%. `next_action` = T-002c (Scope on Ghidra).
+- **Files changed:** docs/FACTS.md (F-007..F-010 by Scope); docs/HYPOTHESES.md (H-005 updated by Scope); docs/probes/logs/h001-probe-2026-05-29-v2.log (raw evidence); .gitignore (exempt probe logs); state/tasks.yaml (T-002b/c refined, T-018/T-019 added); state/status.yaml; this log.
+- **FACTS added:** F-007, F-008, F-009, F-010.
+- **Blockers:** none.
+- **Next:** Conductor fires Scope (Opus 4.7) for T-002c — Ghidra xref hunt from the three anchor addresses. Static analysis, no game needed.
+
+---

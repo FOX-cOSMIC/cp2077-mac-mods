@@ -9,28 +9,29 @@ last_updated: 2026-05-29
 current_phase:
   id: 0
   name: bootstrap-and-revalidation
-  progress_pct: 55
+  progress_pct: 65
   description: >
-    H-001 probe ran. F-003 (injection works), F-004 (slide formula),
-    F-005 (__TEXT bounds), F-006 (binary NOT export-stripped — important
-    correction) all landed. FA-009 documents the dlsym namespace mistake
-    (game::data::* not RED4ext::*). H-005 proposed: real accessor exists as
-    unnamed FUN_* in Ghidra, locatable via xref from exported
-    game::data::TweakDBID type-objects. Next: T-002b validates slide formula
-    empirically (byte-compare via exported _AlignedMalloc), then T-002c
-    hunts the real accessor via Ghidra xrefs.
+    Two probe runs complete. F-001..F-010 banked. Key discovery (F-008):
+    game::data::TweakDB exists in symtab but has ZERO function symbols
+    anywhere — all named symbols are DATA-only (guards + function-local
+    statics). Leverage is xref FROM the named statics. T-002c is now
+    unblocked with 3 concrete anchor addresses; H-002 folded in.
+    T-002b de-prioritized (slide variance already validates per-launch
+    behavior; targeted TweakDB validation can fold into a later probe).
+    Next: Scope hunts in Ghidra.
 
 blockers: []
 
 pending_decisions: []
 
 next_action:
-  agent: lead
-  task_id: T-002b
+  agent: researcher
+  task_id: T-002c
   description: >
-    Conductor presents the path forward: re-run the (already enhanced) probe
-    to get symtab + __DATA dumps, then delegate T-002b to Hookline for the
-    byte-compare validation. Or delegate T-002b directly. Lucas's call.
+    Scope hunts in Ghidra from F-008 anchors (0x1073bbea8 primary,
+    0x1073af788 hub, 0x1073eeab0 RTTI). Folds H-002 in. Outputs:
+    real accessor address + struct layout + viable hook targets.
+    No game needed; no probe iteration needed.
 
 recent_facts_added:
   - F-001
@@ -39,6 +40,10 @@ recent_facts_added:
   - F-004
   - F-005
   - F-006
+  - F-007
+  - F-008
+  - F-009
+  - F-010
 recent_failed_added:
   - FA-001
   - FA-002

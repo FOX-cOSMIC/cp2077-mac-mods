@@ -273,55 +273,110 @@ tasks:
   - id: T-002b
     category: hook
     status: pending
-    priority: P0
+    priority: P2   # de-prioritized; F-007 already shows slide varies; T-002c is the bottleneck
     owner: hook-engineer
-    subject: Empirical slide-formula validation via exported function byte-compare
+    subject: TweakDB-targeted slide-formula validation via emptyRecords sentinel
     description: |
-      Per Scope's T-002 recommendation (Option C). Use F-004's slide formula
-      and F-006's confirmation that the binary IS exported (not stripped) to
-      pick an exported function with a known static address and prove the
-      conversion empirically. Zero Ghidra dependency.
+      REDEFINED 2026-05-29 per Scope's T-002 v2 analysis.
+
+      Original plan was a byte-compare on an arbitrary exported function
+      (_AlignedMalloc). Better idea: read a TweakDB DATA static — its content
+      is predictable AND the result is directly TweakDB-relevant.
 
       Method:
-      1. Pick an exported function. Scope suggested _AlignedMalloc at static
-         0x100fa6e08. Verify with `nm` on the binary.
-      2. Modify h001_probe.cpp (or write h002b_probe.cpp): at image-load time,
-         compute runtime = static + slide. Read N bytes (16-32) at the runtime
-         address via mach_vm_read_overwrite.
-      3. Open the on-disk Mach-O at the corresponding file offset (static -
-         load base = file offset for a function in __TEXT), read the same
-         N bytes.
-      4. Compare. Log match/mismatch with hex of both buffers.
-      5. Lucas re-runs `tools/run-h001-probe.sh`. The byte-compare result
-         either confirms F-004 (mark as F-NNN-confirmed) or falsifies it
-         (file as FA-NNN with the discrepancy).
+      1. Target: `emptyRecords` static of GetRecords<Vehicle_Record> at
+         static address `0x1073bbea8` (per F-008). Expected content: zeroed
+         `red::DynArray` sentinel — 3 zero qwords.
+      2. Modify h001_probe.cpp: after slide is captured, also read
+         (0x1073bbea8 + slide) for 24 bytes via mach_vm_read_overwrite.
+      3. Log hex result. If all zeros → F-004 slide formula confirmed for
+         a TweakDB-relevant address.
+      4. Lucas re-runs probe (or Conductor does).
 
-      Acceptance: F-NNN logged confirming F-004's slide formula, OR a FA-NNN
-      explaining why the formula doesn't hold for this build.
-    depends_on: []   # all prerequisites already met
+      Acceptance: F-NNN confirming F-004 against a TweakDB DATA static,
+      OR FA-NNN if the bytes are unexpected.
+
+      Note: this can fold into a single probe iteration alongside the
+      follow-up cleanups (T-018, T-019). Low priority versus T-002c.
+    depends_on: []
 
   - id: T-002c
     category: research
     status: pending
     priority: P0
     owner: researcher
-    subject: Find real TweakDB accessor via xref from exported game::data::TweakDBID symbols (H-005)
+    subject: Ghidra xref hunt from F-008 anchors — identify TweakDB accessor + struct layout
     description: |
-      Once T-002b confirms F-004, the xref hunt for the real accessor
-      becomes immediately actionable. Per H-005:
+      REFINED 2026-05-29 — concrete addresses provided by F-008.
+      UNBLOCKED — no longer waits on T-002b (Scope corrected dependency:
+      static analysis needs no runtime validation).
 
-      1. From exported symbols (via nm) identify `game::data::TweakDBID`
-         RTTI / type-object entries. These ARE present (F-006).
-      2. In Ghidra, follow xrefs from those type-objects to their callers.
-      3. Identify the unnamed FUN_* that constructs the TweakDB singleton.
-      4. Identify the unnamed FUN_* that reads flat values (GetFlat-equivalent).
-      5. Record their static addresses; convert to runtime via slide formula.
-      6. Pass static addresses to hook-engineer as hook targets.
+      Anchor addresses (static):
+      1. `0x1073bbea8` — emptyRecords static of GetRecords<Vehicle_Record>.
+         Single xref → pins the const member function → struct layout.
+         PRIMARY ENTRY POINT.
+      2. `0x1073af788` — game::data::TweakDBID RTTI type-object pointer.
+         Multi-referenced hub; writer is GetTypeObject<TweakDBID> or
+         RegisterGameTweakDBRTTI.
+      3. `0x1073eeab0` — RegisterGameTweakDBRTTI guard. Entry to type
+         registration path.
 
-      Acceptance: F-NNN entries for the real TweakDB::Get-equivalent (or
-      construction-time hook target) with static address and Ghidra
-      function name (e.g. FUN_103xxxxxx).
-    depends_on: [T-002b]
+      Method:
+      1. In reference/ghidra/, locate function containing `0x1073bbea8`
+         (likely `FUN_xxxx`). Identify its signature — it's
+         GetRecords<Vehicle_Record>.
+      2. Read the function: identify `this` pointer flow, member offsets
+         accessed → determines TweakDB struct layout (folds in H-002).
+      3. Look at xrefs INTO this function to find its callers — they
+         pass the TweakDB singleton. Trace up to singleton initialization.
+      4. From the RTTI type-object (anchor 2), find the constructor
+         (xref to its writer) — identifies the singleton-init path.
+      5. Identify candidate hook targets: TweakDB::Get (singleton
+         accessor), TweakDB construction, flat-read functions.
+
+      Acceptance:
+      - F-NNN entries for the resolved function addresses
+      - F-NNN with TweakDB struct layout (member offsets, sizes — H-002)
+      - At minimum 1-2 viable hook targets for Hookline
+      - H-005 resolved to F-NNN
+      - H-002 resolved (folded in per Scope's recommendation)
+    depends_on: []   # unblocked
+
+  - id: T-018
+    category: hook
+    status: pending
+    priority: P3   # cosmetic
+    owner: hook-engineer
+    subject: Probe — refine CODE heuristic to distinguish ARM64 prologue from ASCII
+    description: |
+      Per F-010 / Scope's T-002 v2 follow-up. The current probe labels any
+      __TEXT-range pointer as "CODE", but cstrings live in __TEXT too —
+      the 41 "CODE" hits in v2's __DATA dump are actually selector strings
+      ("isEqual:", etc.) not function pointers.
+
+      Refinement: read 4 bytes at the target address. If they look like
+      a valid ARM64 instruction (e.g., `STP X29, X30, [SP, ...]` for a
+      function prologue) → label CODE. Otherwise label STRING or DATA.
+
+      Acceptance: probe v3 (or whatever increment) correctly distinguishes
+      function pointers from cstring pointers in __DATA dumps.
+
+  - id: T-019
+    category: hook
+    status: pending
+    priority: P3   # cosmetic but factually wrong
+    owner: hook-engineer
+    subject: Probe — remove "binary likely stripped" log message
+    description: |
+      Per Scope's T-002 v2 follow-up. The v2 probe still logs "binary
+      likely stripped" when dlsym fails for the 4-5 candidates — but
+      F-006 / F-009 established the binary is NOT stripped (68,655 total
+      LC_SYMTAB / 67,928 dynamic exports). The dlsym failure is because
+      RED4ext is the wrong namespace, not because of stripping.
+
+      Replace the misleading log line with something accurate or remove
+      the candidate-list lookup entirely (since FA-009 documented it's
+      a dead path).
 
   - id: T-016
     category: applicator

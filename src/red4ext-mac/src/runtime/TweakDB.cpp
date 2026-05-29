@@ -13,13 +13,20 @@
 
 #include "TweakDB.hpp"
 
+#include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <map>
 #include <mutex>
 #include <string>
+#include <thread>
+#include <utility>
+#include <vector>
 
 #include <dlfcn.h>
 #include <mach/mach.h>
@@ -727,6 +734,1124 @@ void DoVerifyCandidateFlats(const TweakDB* db) {
 
 void VerifyCandidateFlats(const TweakDB* db) {
     std::call_once(g_candidateFlats_once, [db] { DoVerifyCandidateFlats(db); });
+}
+
+// ── P1.13: flats map walker ──────────────────────────────────────────────────
+namespace {
+
+std::once_flag g_dumpFlats_once;
+
+// Treat any address in canonical user-space as "plausibly a pointer". The game
+// image is mapped near 0x100000000 (base) + slide; heap allocations land in the
+// 0x100000000–0x800000000000 region. Anything outside that is almost certainly
+// an inline value or junk we read while a slot was being recycled.
+bool IsPlausibleUserPtr(uint64_t v) {
+    return v >= 0x100000000ull && v < 0x800000000000ull;
+}
+
+// Per-vft tracker: counts entries that look like each scalar type by byte
+// signature of the buffer-stored value. The dominant classification gives the
+// type of the vftable (one of FlatValueFloat/Int32/Bool/CName/TweakDBID/String).
+struct VftCluster {
+    uint32_t freq         = 0;
+    uint32_t aligned4     = 0;
+    uint32_t aligned8     = 0;
+    uint32_t bytesAllZero = 0;          // value all-zero (Bool false / default)
+    uint32_t bytesAscii   = 0;          // first 4 bytes printable ASCII (likely String)
+    uint32_t floatRange   = 0;          // 4-aligned, float ∈ [0.001, 1e7], nonzero
+    uint32_t intRange     = 0;          // 4-aligned, value as i32 ∈ [1, 1e8]
+    uint32_t cnameLike    = 0;          // 8-aligned, top byte ≥ 0x40 (CName hash)
+    uint32_t boolLike     = 0;          // value byte 0x00 or 0x01, rest 0
+    std::vector<uint32_t> sampleIdx;
+    std::vector<uint32_t> typedSamples; // entries flagged for the dominant non-zero type
+};
+
+// Heuristic byte-signature classifier. Returns flags packed in `out` for the
+// cluster to accumulate.
+void ClassifyBufferBytes(uint64_t bytes, uint32_t bufOff, VftCluster& out) {
+    if (bufOff == 0) return;
+    const bool a4 = ((bufOff & 0x3) == 0);
+    const bool a8 = ((bufOff & 0x7) == 0);
+    if (a4) ++out.aligned4;
+    if (a8) ++out.aligned8;
+    if (bytes == 0) { ++out.bytesAllZero; return; }
+    // Bool: low byte is 0/1 and rest is zero.
+    const uint8_t b0 = (uint8_t)(bytes & 0xFFu);
+    if ((b0 == 0x00 || b0 == 0x01) && (bytes >> 8) == 0) { ++out.boolLike; return; }
+    // ASCII string: first 4 bytes printable.
+    bool asc = true;
+    for (int i = 0; i < 4; ++i) {
+        const uint8_t b = (uint8_t)((bytes >> (i*8)) & 0xFFu);
+        if (b < 0x20 || b >= 0x7f) { asc = false; break; }
+    }
+    if (asc) { ++out.bytesAscii; return; }
+    // Numeric: 4-aligned, interpret low-32 as float and int.
+    if (a4) {
+        const uint32_t raw = (uint32_t)(bytes & 0xFFFFFFFFu);
+        float f; std::memcpy(&f, &raw, 4);
+        const int32_t  iv = (int32_t)raw;
+        if (std::isfinite(f) && f != 0.0f) {
+            const float af = std::fabs(f);
+            if (af >= 0.001f && af <= 1.0e7f) { ++out.floatRange; return; }
+        }
+        if (iv >= 1 && iv <= 100000000) { ++out.intRange; return; }
+    }
+    // CName: 8-aligned + top byte set.
+    if (a8) {
+        const uint8_t topB = (uint8_t)((bytes >> 56) & 0xFFu);
+        if (topB >= 0x40) { ++out.cnameLike; return; }
+    }
+}
+
+constexpr size_t kSamplesPerCluster = 3;
+constexpr size_t kTopClustersToDump  = 30;
+// Range that catches most gameplay floats: 0.01 .. 1e6. Anything outside is
+// almost certainly an int / hash / garbage misinterpreted as float.
+bool LooksLikeGameplayFloat(uint64_t val64) {
+    float f; std::memcpy(&f, &val64, sizeof(f));
+    if (!std::isfinite(f)) return false;
+    const float af = std::fabs(f);
+    return af >= 0.01f && af <= 1.0e6f;
+}
+
+// Print "..." for non-ASCII bytes — diagnostic-readable, not lossless.
+void HexAscii(uint64_t v, char* out) {
+    for (int i = 0; i < 8; ++i) {
+        uint8_t b = (uint8_t)((v >> (i*8)) & 0xFF);
+        out[i] = (b >= 0x20 && b < 0x7f) ? (char)b : '.';
+    }
+    out[8] = 0;
+}
+
+// Cached at the start of DoDumpFlatsSample so DumpEntry can reach the buffer.
+uintptr_t g_dumpBufferBase = 0;
+uint32_t  g_dumpBufferSize = 0;
+
+void DumpEntry(uint32_t i, uintptr_t e) {
+    uint64_t storedKey = 0;
+    uintptr_t ptr10 = 0;
+    SafeReadU64(e + 0x08, &storedKey);
+    SafeReadPtr(e + 0x10, &ptr10);
+    // Dump 9 consecutive 8-byte words from p10 (+0x00..+0x40). Real value
+    // slots — Float/Int/CName — must live SOMEWHERE in this range; finding
+    // them is just a matter of looking.
+    uint64_t p10w[9] = {0};
+    if (IsPlausibleUserPtr(ptr10)) {
+        for (int k = 0; k < 9; ++k) SafeReadU64(ptr10 + 0x00 + 8*k, &p10w[k]);
+    }
+    const uint32_t nameHash = (uint32_t)(storedKey & 0xFFFFFFFFu);
+    const uint8_t  nameLen  = (uint8_t)((storedKey >> 32) & 0xFFu);
+    // Interpret each 8-byte word as float-at-low-32 to see which slot holds
+    // gameplay magnitudes.
+    char fl[9][24] = {{0}};
+    for (int k = 0; k < 9; ++k) {
+        float f; std::memcpy(&f, &p10w[k], sizeof(f));
+        std::snprintf(fl[k], sizeof(fl[k]), "%.4g", (double)f);
+    }
+    log_line("[flat-dump] e[%u] hash=0x%08x len=%u p10=%p vft=0x%llx "
+             "+8=%016llx +10=%016llx +18=%016llx +20=%016llx +28=%016llx "
+             "+30=%016llx +38=%016llx +40=%016llx "
+             "[asF: +8=%s +10=%s +18=%s +20=%s +28=%s +30=%s +38=%s +40=%s]",
+             i, nameHash, nameLen, (void*)ptr10,
+             (unsigned long long)p10w[0],
+             (unsigned long long)p10w[1], (unsigned long long)p10w[2],
+             (unsigned long long)p10w[3], (unsigned long long)p10w[4],
+             (unsigned long long)p10w[5], (unsigned long long)p10w[6],
+             (unsigned long long)p10w[7], (unsigned long long)p10w[8],
+             fl[1], fl[2], fl[3], fl[4], fl[5], fl[6], fl[7], fl[8]);
+}
+
+void DoDumpFlatsSample(const TweakDB* db, uint32_t maxEntries) {
+    if (!db) { log_line("[flat-dump] skipped (db=null)"); return; }
+    const HashMap* flats = GetFlatsMapCandidate(db);   // +0x58
+    if (!flats) { log_line("[flat-dump] no flats map"); return; }
+
+    // Snapshot the flat data buffer pointer + size so DumpEntry can
+    // resolve p10[+0x28] (a byte offset) into typed scalar bytes.
+    const uintptr_t dbBase = reinterpret_cast<uintptr_t>(db);
+    uintptr_t bufBasePtr = 0;
+    SafeReadPtr(dbBase + offsetof(TweakDB, flatDataBuffer), &bufBasePtr);
+    SafeReadU32(dbBase + offsetof(TweakDB, flatDataBufferSize), &g_dumpBufferSize);
+    g_dumpBufferBase = bufBasePtr;
+    log_line("[flat-dump] flat-buffer base=%p size=%u",
+             (void*)g_dumpBufferBase, g_dumpBufferSize);
+
+    const uintptr_t mb = reinterpret_cast<uintptr_t>(flats);
+    uint32_t  count = 0, stride = 0, bucketCount = 0;
+    uintptr_t entries = 0, bucketArray = 0;
+    SafeReadU32(mb + offsetof(HashMap, count),       &count);
+    SafeReadU32(mb + offsetof(HashMap, stride),      &stride);
+    SafeReadU32(mb + offsetof(HashMap, bucketCount), &bucketCount);
+    SafeReadPtr(mb + offsetof(HashMap, entries),     &entries);
+    SafeReadPtr(mb + offsetof(HashMap, bucketArray), &bucketArray);
+
+    log_line("[flat-dump] map=+0x58 count=%u bucketCount=%u stride=%u entries=%p",
+             count, bucketCount, stride, (void*)entries);
+    if (!entries || !stride || count == 0) {
+        log_line("[flat-dump] map not initialized — bailing"); return;
+    }
+
+    // Walk EVERY entry (bounded by maxEntries) to get the full type histogram.
+    // Default cap is 500 (light), but deep-mode (TWEAKXL_DUMP_FLATS_MAX=200000)
+    // sweeps the whole map so we see the rare-but-cinema-meaningful clusters
+    // (Float, Int32, Bool, CName) that the uniform-vft head doesn't expose.
+    const uint32_t cap = std::min(count, maxEntries);
+    log_line("[flat-dump] deep-walking %u of %u entries", cap, count);
+
+    // Walk every entry, classify its buffer bytes, and aggregate per-vft.
+    std::map<uint64_t, VftCluster> clusters;
+
+    for (uint32_t i = 0; i < cap; ++i) {
+        const uintptr_t e = entries + (uint64_t)i * stride;
+        uint64_t storedKey = 0;
+        SafeReadU64(e + 0x08, &storedKey);
+        if (storedKey == 0) continue;
+
+        uintptr_t p10 = 0;
+        SafeReadPtr(e + 0x10, &p10);
+        if (!IsPlausibleUserPtr(p10)) continue;
+
+        uint64_t vft = 0, p10_28 = 0;
+        SafeReadU64(p10 + 0x00, &vft);
+        SafeReadU64(p10 + 0x28, &p10_28);
+        const uint32_t bufOff = (uint32_t)(p10_28 & 0xFFFFFFFFu);
+
+        auto& c = clusters[vft];
+        c.freq++;
+        if (c.sampleIdx.size() < kSamplesPerCluster) c.sampleIdx.push_back(i);
+
+        if (g_dumpBufferBase && bufOff != 0 && bufOff + 8 <= g_dumpBufferSize) {
+            uint64_t bv = 0;
+            SafeReadU64(g_dumpBufferBase + bufOff, &bv);
+            const uint32_t before = c.floatRange + c.intRange + c.boolLike +
+                                    c.bytesAscii + c.cnameLike;
+            ClassifyBufferBytes(bv, bufOff, c);
+            const bool flagged = (c.floatRange + c.intRange + c.boolLike +
+                                  c.bytesAscii + c.cnameLike) > before;
+            if (flagged && c.typedSamples.size() < 5) c.typedSamples.push_back(i);
+        }
+    }
+
+    log_line("[flat-dump] walked %u entries, %u unique vfts",
+             cap, (unsigned)clusters.size());
+
+    // One-shot deep dump: read the first non-empty entry's p10 + 256 bytes
+    // raw — the value MUST live in there if it's stored on the object at all.
+    for (uint32_t i = 0; i < cap && i < 200; ++i) {
+        const uintptr_t e = entries + (uint64_t)i * stride;
+        uint64_t storedKey = 0;
+        SafeReadU64(e + 0x08, &storedKey);
+        if (storedKey == 0) continue;
+        uintptr_t p10 = 0;
+        SafeReadPtr(e + 0x10, &p10);
+        if (!IsPlausibleUserPtr(p10)) continue;
+        log_line("[flat-dump] === deep p10 dump (256 bytes) entry[%u] key=0x%016llx p10=%p ===",
+                 i, (unsigned long long)storedKey, (void*)p10);
+        for (uint32_t off = 0; off < 256; off += 16) {
+            uint64_t a = 0, b = 0;
+            SafeReadU64(p10 + off,     &a);
+            SafeReadU64(p10 + off + 8, &b);
+            float fa, fb; std::memcpy(&fa, &a, 4); std::memcpy(&fb, &b, 4);
+            log_line("[flat-dump]   p10[+0x%02x] = %016llx %016llx | asF: %.4g %.4g | asI: %d %d",
+                     off, (unsigned long long)a, (unsigned long long)b,
+                     (double)fa, (double)fb,
+                     (int32_t)(a & 0xffffffffu), (int32_t)(b & 0xffffffffu));
+        }
+        break;
+    }
+
+    // Reverse search: scan the flat data buffer for 4-byte aligned floats in
+    // a tight gameplay range, then trace each hit back to the cluster (vft)
+    // that owns it. A type whose buffer offsets disproportionately land on
+    // these float-magnitude slots IS the FlatValueFloat type.
+    if (g_dumpBufferBase && g_dumpBufferSize > 0) {
+        std::map<uint32_t, std::pair<uint32_t, float>> bufOffFloats; // bufOff → (count, sample)
+        const uint32_t scanBytes = std::min<uint32_t>(g_dumpBufferSize, 4u * 1024 * 1024);
+        for (uint32_t o = 0; o + 4 <= scanBytes; o += 4) {
+            uint32_t raw = 0;
+            SafeReadU32(g_dumpBufferBase + o, &raw);
+            if (raw == 0) continue;
+            float f; std::memcpy(&f, &raw, 4);
+            if (!std::isfinite(f)) continue;
+            const float af = std::fabs(f);
+            // Tight gameplay-magnitude window: catches damage, range, speed,
+            // multiplier — excludes denormals, large hash-like ints
+            // reinterpreted as float, and most random data.
+            if (af >= 5.0f && af <= 500.0f) {
+                auto it = bufOffFloats.find(o);
+                if (it == bufOffFloats.end()) bufOffFloats[o] = {1, f};
+                else it->second.first++;
+            }
+        }
+        log_line("[flat-dump] buffer-scan: %zu distinct 4-aligned offsets in [5,500] over %u bytes",
+                 bufOffFloats.size(), scanBytes);
+
+        // For each entry, check if its bufOff is a "looks like Float" offset
+        // and accumulate per-vft.
+        std::map<uint64_t, std::pair<uint32_t, uint32_t>> vftFloatHits; // vft → (count, sampleIdx)
+        for (uint32_t i = 0; i < cap; ++i) {
+            const uintptr_t e = entries + (uint64_t)i * stride;
+            uint64_t storedKey = 0;
+            SafeReadU64(e + 0x08, &storedKey);
+            if (storedKey == 0) continue;
+            uintptr_t p10 = 0;
+            SafeReadPtr(e + 0x10, &p10);
+            if (!IsPlausibleUserPtr(p10)) continue;
+            uint64_t vft = 0, p10_28 = 0;
+            SafeReadU64(p10 + 0x00, &vft);
+            SafeReadU64(p10 + 0x28, &p10_28);
+            const uint32_t bufOff = (uint32_t)(p10_28 & 0xFFFFFFFFu);
+            if (bufOffFloats.count(bufOff)) {
+                auto& v = vftFloatHits[vft];
+                v.first++;
+                if (v.second == 0) v.second = i;
+            }
+        }
+
+        std::vector<std::pair<uint64_t, std::pair<uint32_t, uint32_t>>> vfh(
+            vftFloatHits.begin(), vftFloatHits.end());
+        std::sort(vfh.begin(), vfh.end(),
+                  [](const auto& a, const auto& b) { return a.second.first > b.second.first; });
+        log_line("[flat-dump] === REVERSE-SCAN: vfts whose bufOffs land on gameplay-float slots ===");
+        for (size_t k = 0; k < std::min<size_t>(15, vfh.size()); ++k) {
+            const auto& it = clusters.find(vfh[k].first);
+            const uint32_t total = (it != clusters.end()) ? it->second.freq : 0;
+            const uint32_t hits  = vfh[k].second.first;
+            const double pct = total ? (100.0 * hits / total) : 0.0;
+            log_line("[flat-dump] FLOAT-CAND vft=0x%llx freq=%u float-bufOff-hits=%u (%.1f%%)",
+                     (unsigned long long)vfh[k].first, total, hits, pct);
+            DumpEntry(vfh[k].second.second,
+                      entries + (uint64_t)vfh[k].second.second * stride);
+        }
+    }
+
+    // Pick the dominant classification per cluster, then group by type.
+    auto dominantType = [](const VftCluster& c) -> const char* {
+        struct Cand { const char* name; uint32_t n; };
+        Cand v[] = {
+            {"Float",  c.floatRange},
+            {"Int32",  c.intRange},
+            {"String", c.bytesAscii},
+            {"Bool",   c.boolLike},
+            {"CName",  c.cnameLike},
+        };
+        uint32_t best = 0; const char* who = "Unknown";
+        for (auto& x : v) if (x.n > best) { best = x.n; who = x.name; }
+        // Require at least 25% of buffer-readable entries to commit to a type.
+        const uint32_t classified = c.floatRange + c.intRange + c.bytesAscii +
+                                    c.boolLike + c.cnameLike + c.bytesAllZero;
+        if (best == 0 || (classified > 0 && best * 4 < classified)) return "Unknown";
+        return who;
+    };
+
+    // Ranking helpers.
+    std::vector<std::pair<uint64_t, VftCluster>> all(clusters.begin(), clusters.end());
+
+    // (A) Float-typed cluster shortlist — these are the cinema targets.
+    log_line("[flat-dump] === FLOAT-typed clusters (sorted by absolute floatRange count) ===");
+    std::sort(all.begin(), all.end(),
+              [](const std::pair<uint64_t, VftCluster>& a,
+                 const std::pair<uint64_t, VftCluster>& b) {
+                  return a.second.floatRange > b.second.floatRange;
+              });
+    uint32_t shown = 0;
+    for (auto& kv : all) {
+        if (kv.second.floatRange == 0) break;
+        if (shown >= 10) break;
+        const VftCluster& c = kv.second;
+        log_line("[flat-dump] FLOAT vft=0x%llx freq=%u float=%u int=%u str=%u bool=%u "
+                 "cname=%u zero=%u a4=%u",
+                 (unsigned long long)kv.first, c.freq,
+                 c.floatRange, c.intRange, c.bytesAscii, c.boolLike,
+                 c.cnameLike, c.bytesAllZero, c.aligned4);
+        for (uint32_t idx : c.typedSamples) {
+            DumpEntry(idx, entries + (uint64_t)idx * stride);
+        }
+        ++shown;
+    }
+
+    // (B) Per-type summary across the top-N most frequent clusters.
+    log_line("[flat-dump] === Per-cluster type classification (top by freq) ===");
+    std::sort(all.begin(), all.end(),
+              [](const std::pair<uint64_t, VftCluster>& a,
+                 const std::pair<uint64_t, VftCluster>& b) {
+                  return a.second.freq > b.second.freq;
+              });
+    for (size_t k = 0; k < std::min<size_t>(kTopClustersToDump, all.size()); ++k) {
+        const VftCluster& c = all[k].second;
+        log_line("[flat-dump] type[%zu]: vft=0x%llx freq=%u dominant=%s "
+                 "[F=%u I=%u S=%u B=%u C=%u Z=%u]",
+                 k, (unsigned long long)all[k].first, c.freq, dominantType(c),
+                 c.floatRange, c.intRange, c.bytesAscii, c.boolLike,
+                 c.cnameLike, c.bytesAllZero);
+        for (uint32_t idx : c.sampleIdx) {
+            DumpEntry(idx, entries + (uint64_t)idx * stride);
+        }
+    }
+}
+
+} // namespace
+
+// ── P1.14b: name → vtable mapping ────────────────────────────────────────────
+namespace {
+
+std::once_flag g_mapNames_once;
+
+std::string ResolveRecordNamesPath() {
+    if (const char* env = std::getenv("TWEAKXL_RECORDS_FILE"); env && *env) {
+        return env;
+    }
+    Dl_info info;
+    if (dladdr(reinterpret_cast<const void*>(&MapNamesToVftables), &info) && info.dli_fname) {
+        std::string p = info.dli_fname;
+        const auto slash = p.find_last_of('/');
+        const std::string dir = (slash == std::string::npos) ? "." : p.substr(0, slash);
+        return dir + "/../../../reference/tweakxl-data/record_names.txt";
+    }
+    return "reference/tweakxl-data/record_names.txt";
+}
+
+// Dump 128 bytes at a named record's p10 so the field layout of one
+// representative record per type can be eyeballed for a known-value Float.
+void DumpNamedRecord(const TweakDB* db, const char* name) {
+    const HashMap* flats = GetFlatsMapCandidate(db);
+    if (!flats) return;
+    const HashMode fmode = GetFlatsHashMode();
+    TweakDBID id{};
+    id.nameHash   = Crc32(name, std::strlen(name));
+    id.nameLength = (uint8_t)std::min<size_t>(std::strlen(name), 255);
+    const uint8_t* hit = Lookup(flats, id, fmode);
+    if (!hit) { log_line("[record-dump] '%s' MISS", name); return; }
+
+    const uintptr_t e = reinterpret_cast<uintptr_t>(hit);
+    uintptr_t p10 = 0;
+    SafeReadPtr(e + 0x10, &p10);
+    if (!IsPlausibleUserPtr(p10)) { log_line("[record-dump] '%s' p10 invalid", name); return; }
+
+    uint64_t vft = 0;
+    SafeReadU64(p10 + 0x00, &vft);
+    log_line("[record-dump] === '%s' (hash=0x%08x) p10=%p vft=0x%llx ===",
+             name, id.nameHash, (void*)p10, (unsigned long long)vft);
+    for (uint32_t off = 0; off < 128; off += 16) {
+        uint64_t a = 0, b = 0;
+        SafeReadU64(p10 + off,     &a);
+        SafeReadU64(p10 + off + 8, &b);
+        // Bit-cast LOW 32 bits of each word as float — gameplay floats jump
+        // out by reading sensibly (e.g. 0.1, 1.0, 100.0).
+        float fa, fb; std::memcpy(&fa, &a, 4); std::memcpy(&fb, &b, 4);
+        log_line("[record-dump]   +0x%02x = %016llx %016llx | asF: %.6g %.6g | asI: %d %d",
+                 off, (unsigned long long)a, (unsigned long long)b,
+                 (double)fa, (double)fb,
+                 (int32_t)(a & 0xffffffffu), (int32_t)(b & 0xffffffffu));
+    }
+}
+
+void DoMapNamesToVftables(const TweakDB* db) {
+    if (!db) { log_line("[name-vft] skipped (db=null)"); return; }
+    const HashMap* flats = GetFlatsMapCandidate(db);          // +0x58
+    if (!flats) { log_line("[name-vft] no +0x58 map"); return; }
+    const HashMode fmode = GetFlatsHashMode();
+
+    const std::string namesPath = ResolveRecordNamesPath();
+    std::ifstream in(namesPath);
+    if (!in) {
+        log_line("[name-vft] ERROR: cannot open names file '%s' "
+                 "(set TWEAKXL_RECORDS_FILE to override)", namesPath.c_str());
+        return;
+    }
+    log_line("[name-vft] reading names from %s", namesPath.c_str());
+
+    const char* outPath = std::getenv("TWEAKXL_VFT_MAP_OUT");
+    FILE* outFp = outPath ? std::fopen(outPath, "w") : nullptr;
+    if (outFp) log_line("[name-vft] writing tab-separated <vft>\\t<name> to %s", outPath);
+
+    // Per-vtable bucket: count + up to N sample names.
+    struct Bucket {
+        uint32_t freq = 0;
+        std::vector<std::string> samples;
+    };
+    std::map<uint64_t, Bucket> byVft;
+    constexpr size_t kSamplesPerVft = 8;
+
+    uint32_t total = 0, hits = 0, misses = 0;
+    std::string line;
+    while (std::getline(in, line)) {
+        // Strip CR if present (cross-platform line endings).
+        while (!line.empty() && (line.back() == '\r' || line.back() == ' ' || line.back() == '\t')) {
+            line.pop_back();
+        }
+        if (line.empty() || line[0] == '#') continue;
+        ++total;
+
+        TweakDBID id{};
+        id.nameHash   = Crc32(line.data(), line.size());
+        id.nameLength = (uint8_t)std::min<size_t>(line.size(), 255);
+        // tdbOffset stays zero (compact-key probe in F-022).
+
+        const uint8_t* hit = Lookup(flats, id, fmode);
+        if (!hit) { ++misses; continue; }
+        ++hits;
+
+        // Read entry+0x10 → p10, then *p10 = vtable (F-023).
+        const uintptr_t entryAddr = reinterpret_cast<uintptr_t>(hit);
+        uintptr_t p10 = 0;
+        SafeReadPtr(entryAddr + 0x10, &p10);
+        uint64_t vft = 0;
+        if (p10) SafeReadU64(p10 + 0x00, &vft);
+
+        auto& b = byVft[vft];
+        b.freq++;
+        if (b.samples.size() < kSamplesPerVft) b.samples.push_back(line);
+
+        if (outFp) std::fprintf(outFp, "0x%llx\t%s\n",
+                                (unsigned long long)vft, line.c_str());
+    }
+    if (outFp) std::fclose(outFp);
+
+    log_line("[name-vft] resolved %u/%u names (hits=%u misses=%u), %u distinct vtables",
+             hits, total, hits, misses, (unsigned)byVft.size());
+
+    // Rank vtable clusters by frequency and emit each one's sample names.
+    std::vector<std::pair<uint64_t, Bucket>> ranked(byVft.begin(), byVft.end());
+    std::sort(ranked.begin(), ranked.end(),
+              [](const std::pair<uint64_t, Bucket>& a,
+                 const std::pair<uint64_t, Bucket>& b) {
+                  return a.second.freq > b.second.freq;
+              });
+    log_line("[name-vft] === per-vtable record clusters (sample names reveal type) ===");
+    for (size_t k = 0; k < std::min<size_t>(40, ranked.size()); ++k) {
+        const Bucket& b = ranked[k].second;
+        std::string samples;
+        for (size_t s = 0; s < b.samples.size(); ++s) {
+            if (s) samples += ", ";
+            samples += b.samples[s];
+        }
+        log_line("[name-vft] vft=0x%llx freq=%u samples=[%s]",
+                 (unsigned long long)ranked[k].first, b.freq, samples.c_str());
+    }
+
+    // ── Targeted record dumps: one representative per likely-Float-bearing
+    // record class (Stat, AttackModifier, Attack) and one heavy reference type
+    // (Vehicle, Character) for comparison. The byte layouts side-by-side reveal
+    // which offset holds the Float for the Stat type — the cinema target.
+    log_line("[name-vft] === targeted record byte dumps (find the Float slot) ===");
+    const char* targets[] = {
+        // Stat records — these are PURE Float-bearing (BaseStats.X.value : Float).
+        "BaseStats.ADSSpeedPercentBonus",
+        "BaseStats.AccumulatedDoTDecayRate",
+        "BaseStats.AccumulatedDoTDecayStartDelay",
+        // AttackModifier — also float-bearing.
+        "AttackModifier.ChopperMinTBH",
+        "AttackModifier.AlliedDamage",
+        // Attack — has fields like damage etc.
+        "Attacks.BodySlamAttackLevel1",
+        // Larger records for offset comparison.
+        "Vehicle.PlayerCar",
+        "Items.Preset_Lexington_Military",
+    };
+    for (const char* t : targets) DumpNamedRecord(db, t);
+}
+
+} // namespace
+
+void MapNamesToVftables(const TweakDB* db) {
+    std::call_once(g_mapNames_once, [db] { DoMapNamesToVftables(db); });
+}
+
+// ── P1.17: cinema mutation ───────────────────────────────────────────────────
+namespace {
+
+std::once_flag g_cinema_once;
+
+void DoCinemaMutate(const TweakDB* db) {
+    const char* name = std::getenv("TWEAKXL_CINEMA_NAME");
+    const char* val  = std::getenv("TWEAKXL_CINEMA_VALUE");
+    if (!name || !*name || !val || !*val) {
+        log_line("[cinema] skipped (set TWEAKXL_CINEMA_NAME + TWEAKXL_CINEMA_VALUE to fire)");
+        return;
+    }
+    if (!db) { log_line("[cinema] skipped (db=null)"); return; }
+
+    float newValue = (float)std::strtod(val, nullptr);
+
+    const HashMap* flats = GetFlatsMapCandidate(db);
+    if (!flats) { log_line("[cinema] no +0x58 map"); return; }
+    const HashMode fmode = GetFlatsHashMode();
+
+    TweakDBID id{};
+    id.nameHash   = Crc32(name, std::strlen(name));
+    id.nameLength = (uint8_t)std::min<size_t>(std::strlen(name), 255);
+    const uint8_t* hit = Lookup(flats, id, fmode);
+    if (!hit) {
+        log_line("[cinema] '%s' MISS (hash=0x%08x)", name, id.nameHash);
+        return;
+    }
+
+    const uintptr_t entryAddr = reinterpret_cast<uintptr_t>(hit);
+    uintptr_t p10 = 0;
+    SafeReadPtr(entryAddr + 0x10, &p10);
+    if (!IsPlausibleUserPtr(p10)) {
+        log_line("[cinema] '%s' invalid p10=%p", name, (void*)p10);
+        return;
+    }
+
+    uint64_t vft = 0;
+    SafeReadU64(p10 + 0x00, &vft);
+
+    // Read current value at p10+0x54 (F-027: gamedataStat_Record value slot).
+    uint32_t beforeRaw = 0;
+    SafeReadU32(p10 + 0x54, &beforeRaw);
+    float beforeF; std::memcpy(&beforeF, &beforeRaw, 4);
+
+    // Write new value via mach_vm_write — same path that worked for the
+    // refcount-byte test (F-022 / F-023), now applied to the actual value slot.
+    uint32_t newRaw;
+    std::memcpy(&newRaw, &newValue, 4);
+    const bool wrote = SafeWrite(p10 + 0x54, &newRaw, sizeof(newRaw));
+
+    // Re-read to confirm the write committed (write-back path verification).
+    uint32_t afterRaw = 0;
+    SafeReadU32(p10 + 0x54, &afterRaw);
+    float afterF; std::memcpy(&afterF, &afterRaw, 4);
+
+    const bool ok = wrote && (afterRaw == newRaw);
+    log_line("[cinema] '%s' vft=0x%llx p10=%p +0x54 before=%.6g after=%.6g "
+             "wrote=%d verify=%s",
+             name, (unsigned long long)vft, (void*)p10,
+             (double)beforeF, (double)afterF,
+             wrote ? 1 : 0, ok ? "OK" : "MISMATCH");
+}
+
+} // namespace
+
+void CinemaMutateStat(const TweakDB* db) {
+    std::call_once(g_cinema_once, [db] { DoCinemaMutate(db); });
+}
+
+// ── P1.17b: BULK cinema mutation across all gamedataStat_Record entries ─────
+namespace {
+
+std::once_flag g_cinemaBulk_once;
+
+struct StatTarget {
+    std::string name;
+    uintptr_t   valueAddr;     // p10 + 0x54
+    float       originalValue; // captured on first pass
+};
+
+// Discover the live Stat_Record vtable by looking up a known BaseStats name
+// (the run's slide changes the absolute vtable each launch; we resolve it
+// dynamically). Returns 0 on miss.
+uint64_t DiscoverStatVft(const TweakDB* db) {
+    const HashMap* flats = GetFlatsMapCandidate(db);
+    if (!flats) return 0;
+    const HashMode fmode = GetFlatsHashMode();
+    const char* probeName = "BaseStats.AccumulatedDoTDecayRate";
+    TweakDBID id{};
+    id.nameHash   = Crc32(probeName, std::strlen(probeName));
+    id.nameLength = (uint8_t)std::strlen(probeName);
+    const uint8_t* hit = Lookup(flats, id, fmode);
+    if (!hit) return 0;
+    uintptr_t p10 = 0;
+    SafeReadPtr(reinterpret_cast<uintptr_t>(hit) + 0x10, &p10);
+    if (!IsPlausibleUserPtr(p10)) return 0;
+    uint64_t vft = 0;
+    SafeReadU64(p10 + 0x00, &vft);
+    return vft;
+}
+
+// Build the target list: every named record whose vtable matches statVft,
+// reading its current +0x54 float and recording (name, addr, original).
+std::vector<StatTarget> BuildStatTargets(const TweakDB* db, uint64_t statVft) {
+    std::vector<StatTarget> out;
+    const HashMap* flats = GetFlatsMapCandidate(db);
+    if (!flats || statVft == 0) return out;
+    const HashMode fmode = GetFlatsHashMode();
+    const std::string namesPath = ResolveRecordNamesPath();
+    std::ifstream in(namesPath);
+    if (!in) return out;
+    std::string line;
+    while (std::getline(in, line)) {
+        while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
+        if (line.empty() || line[0] == '#') continue;
+        TweakDBID id{};
+        id.nameHash   = Crc32(line.data(), line.size());
+        id.nameLength = (uint8_t)std::min<size_t>(line.size(), 255);
+        const uint8_t* hit = Lookup(flats, id, fmode);
+        if (!hit) continue;
+        uintptr_t p10 = 0;
+        SafeReadPtr(reinterpret_cast<uintptr_t>(hit) + 0x10, &p10);
+        if (!IsPlausibleUserPtr(p10)) continue;
+        uint64_t vft = 0;
+        SafeReadU64(p10 + 0x00, &vft);
+        if (vft != statVft) continue;
+        uint32_t raw = 0;
+        SafeReadU32(p10 + 0x54, &raw);
+        float v; std::memcpy(&v, &raw, 4);
+        // Filter: must be finite, non-zero, in a sane gameplay magnitude range.
+        if (!std::isfinite(v) || v == 0.0f) continue;
+        const float av = std::fabs(v);
+        if (av < 1e-6f || av > 1e8f) continue;
+        out.push_back({std::move(line), p10 + 0x54, v});
+    }
+    return out;
+}
+
+// One pass over the captured targets: write originalValue * factor.
+uint32_t ApplyMutationPass(const std::vector<StatTarget>& targets, float factor) {
+    uint32_t mutated = 0;
+    for (const StatTarget& t : targets) {
+        float newV = t.originalValue * factor;
+        if (!std::isfinite(newV)) continue;
+        uint32_t newRaw;
+        std::memcpy(&newRaw, &newV, 4);
+        if (SafeWrite(t.valueAddr, &newRaw, sizeof(newRaw))) ++mutated;
+    }
+    return mutated;
+}
+
+void DoCinemaBulk(const TweakDB* db) {
+    if (!std::getenv("TWEAKXL_CINEMA_BULK")) {
+        log_line("[cinema-bulk] skipped (set TWEAKXL_CINEMA_BULK=1 to enable)");
+        return;
+    }
+    if (!db) { log_line("[cinema-bulk] skipped (db=null)"); return; }
+
+    float factor = 100.0f;
+    if (const char* f = std::getenv("TWEAKXL_CINEMA_BULK_FACTOR"); f && *f)
+        factor = (float)std::strtod(f, nullptr);
+    uint32_t repeatSec = 0;
+    if (const char* r = std::getenv("TWEAKXL_CINEMA_BULK_REPEAT"); r && *r)
+        repeatSec = (uint32_t)std::strtoul(r, nullptr, 10);
+
+    const uint64_t statVft = DiscoverStatVft(db);
+    if (statVft == 0) {
+        log_line("[cinema-bulk] could not discover Stat_Record vftable via probe lookup");
+        return;
+    }
+    log_line("[cinema-bulk] Stat_Record vftable resolved: 0x%llx (factor=%g repeat=%us)",
+             (unsigned long long)statVft, (double)factor, repeatSec);
+
+    auto targets = BuildStatTargets(db, statVft);
+    log_line("[cinema-bulk] built target list: %zu safe Stat records to mutate",
+             targets.size());
+
+    // Sample 10 representative targets so the audit trail shows what changes.
+    for (size_t k = 0; k < std::min<size_t>(10, targets.size()); ++k) {
+        log_line("[cinema-bulk]   sample[%zu] %s before=%.6g new=%.6g",
+                 k, targets[k].name.c_str(),
+                 (double)targets[k].originalValue,
+                 (double)(targets[k].originalValue * factor));
+    }
+
+    const uint32_t mutated = ApplyMutationPass(targets, factor);
+    log_line("[cinema-bulk] PASS#1: mutated %u of %zu targets (factor=%g)",
+             mutated, targets.size(), (double)factor);
+
+    // Verify a few writes stuck.
+    uint32_t verified = 0;
+    for (size_t k = 0; k < std::min<size_t>(20, targets.size()); ++k) {
+        uint32_t raw = 0;
+        SafeReadU32(targets[k].valueAddr, &raw);
+        float v; std::memcpy(&v, &raw, 4);
+        const float expect = targets[k].originalValue * factor;
+        if (v == expect) ++verified;
+    }
+    log_line("[cinema-bulk] verify: %u of 20 sampled writes match expected", verified);
+
+    // Optional re-application loop: combats any per-frame "reload defaults"
+    // pattern by re-writing every N seconds. Spawned detached so it never
+    // blocks the loader callback chain.
+    if (repeatSec > 0) {
+        // Heap-copy targets for the thread's lifetime.
+        auto* ownedTargets = new std::vector<StatTarget>(std::move(targets));
+        const float f = factor;
+        const uint32_t period = repeatSec;
+        std::thread([ownedTargets, f, period]() {
+            uint64_t pass = 1;
+            for (;;) {
+                std::this_thread::sleep_for(std::chrono::seconds(period));
+                ++pass;
+                const uint32_t n = ApplyMutationPass(*ownedTargets, f);
+                if ((pass % 10) == 0) {
+                    log_line("[cinema-bulk] re-apply pass#%llu: mutated %u/%zu",
+                             (unsigned long long)pass, n, ownedTargets->size());
+                }
+            }
+        }).detach();
+        log_line("[cinema-bulk] background re-apply thread started (every %us)",
+                 repeatSec);
+    }
+}
+
+} // namespace
+
+void CinemaBulkMutateStats(const TweakDB* db) {
+    std::call_once(g_cinemaBulk_once, [db] { DoCinemaBulk(db); });
+}
+
+// ── P1.20: process-wide float memory scan ──────────────────────────────────
+namespace {
+
+std::once_flag g_scanMem_once;
+
+struct ScanRegion {
+    mach_vm_address_t base;
+    mach_vm_size_t    size;
+};
+
+// Walk the process address space and collect every readable, writable, private
+// VM region (skips __TEXT, mapped files, shared libraries — those won't hold
+// per-instance gameplay state). Stops at user-space ceiling.
+std::vector<ScanRegion> CollectScannableRegions() {
+    std::vector<ScanRegion> out;
+    mach_vm_address_t addr = 0;
+    const task_t task = mach_task_self();
+    for (int safety = 0; safety < 200000; ++safety) {
+        mach_vm_size_t size = 0;
+        natural_t depth = 1;
+        vm_region_submap_info_data_64_t info;
+        mach_msg_type_number_t count = VM_REGION_SUBMAP_INFO_COUNT_64;
+        kern_return_t kr = mach_vm_region_recurse(
+            task, &addr, &size, &depth,
+            (vm_region_recurse_info_t)&info, &count);
+        if (kr != KERN_SUCCESS) break;
+
+        const bool readable  = (info.protection & VM_PROT_READ);
+        const bool writable  = (info.protection & VM_PROT_WRITE);
+        // Skip submaps; we already recursed for them.
+        if (!info.is_submap && readable && writable && size >= 4096 &&
+            size <= (1ull << 32)) {              // cap per-region 4GB
+            out.push_back({addr, size});
+        }
+        addr += size;
+        if (addr == 0) break;
+    }
+    return out;
+}
+
+void DoScanMemoryForFloat() {
+    const char* fA = std::getenv("TWEAKXL_SCAN_FLOAT_A");
+    if (!fA || !*fA) {
+        log_line("[scan] skipped (set TWEAKXL_SCAN_FLOAT_A=<float> to enable)");
+        return;
+    }
+    const char* fB = std::getenv("TWEAKXL_SCAN_FLOAT_B");
+    uint32_t maxHits = 100;
+    if (const char* m = std::getenv("TWEAKXL_SCAN_MAX_HITS"); m && *m)
+        maxHits = (uint32_t)std::strtoul(m, nullptr, 10);
+    uint32_t delaySec = 30;
+    if (const char* d = std::getenv("TWEAKXL_SCAN_DELAY_SEC"); d && *d)
+        delaySec = (uint32_t)std::strtoul(d, nullptr, 10);
+    const char* outPath = std::getenv("TWEAKXL_SCAN_OUT");
+    if (!outPath || !*outPath) outPath = "/tmp/scan_hits.tsv";
+
+    const float tA = (float)std::strtod(fA, nullptr);
+    const float tB = fB ? (float)std::strtod(fB, nullptr) : 0.0f;
+    uint32_t bitsA, bitsB = 0;
+    std::memcpy(&bitsA, &tA, 4);
+    if (fB) std::memcpy(&bitsB, &tB, 4);
+
+    log_line("[scan] target A=%g (bits=0x%08x) %s%s%s — delay=%us, maxHits=%u, out=%s",
+             (double)tA, bitsA,
+             fB ? "target B=" : "", fB ? fB : "",
+             fB ? " " : "",
+             delaySec, maxHits, outPath);
+
+    // Sleep so the user can load a save before we scan — the gameplay caches
+    // we're hunting only exist after the save's player entity is created.
+    if (delaySec > 0) {
+        log_line("[scan] sleeping %us — load your save now", delaySec);
+        std::this_thread::sleep_for(std::chrono::seconds(delaySec));
+    }
+
+    const auto regions = CollectScannableRegions();
+    uint64_t totalBytes = 0;
+    for (const ScanRegion& r : regions) totalBytes += r.size;
+    log_line("[scan] %zu writable regions, %llu MB total — scanning...",
+             regions.size(), (unsigned long long)(totalBytes >> 20));
+
+    FILE* outFp = std::fopen(outPath, "w");
+    if (outFp) std::fprintf(outFp, "target\taddr\tregion_base\tregion_size\n");
+
+    uint32_t hitsA = 0, hitsB = 0;
+    std::vector<mach_vm_address_t> bAddrs;     // collect B hits for cache mutation
+    constexpr size_t kBufBytes = 1u << 20; // 1MB chunks
+    std::vector<uint8_t> buf(kBufBytes);
+    const task_t task = mach_task_self();
+
+    // For each hit, also dump 64 bytes of surrounding context (-16 .. +48) so
+    // the data structure shape is visible. Captured to a side log so the main
+    // line stream stays clean.
+    auto dumpContext = [&](const char* tag, mach_vm_address_t hitAddr) {
+        const int32_t before = 16, after = 48;
+        const mach_vm_address_t start = hitAddr - before;
+        uint8_t ctx[64];
+        mach_vm_size_t cgot = 0;
+        if (mach_vm_read_overwrite(task, start, sizeof(ctx),
+                                   (mach_vm_address_t)ctx, &cgot) == KERN_SUCCESS &&
+            cgot == sizeof(ctx)) {
+            // 4 lines x 16 bytes, with floats per 4-byte group.
+            for (int row = 0; row < 4; ++row) {
+                char hex[64]; char asc[20]; char fl[80];
+                size_t hl = 0, al = 0, fll = 0;
+                for (int c = 0; c < 16; ++c) {
+                    uint8_t b = ctx[row*16 + c];
+                    hl += std::snprintf(hex + hl, sizeof(hex) - hl, "%02x", b);
+                    if (c < 15) hl += std::snprintf(hex + hl, sizeof(hex) - hl, " ");
+                    asc[al++] = (b >= 0x20 && b < 0x7f) ? (char)b : '.';
+                }
+                asc[al] = 0;
+                for (int g = 0; g < 4; ++g) {
+                    uint32_t v;
+                    std::memcpy(&v, ctx + row*16 + g*4, 4);
+                    float f; std::memcpy(&f, &v, 4);
+                    fll += std::snprintf(fl + fll, sizeof(fl) - fll, " %.4g", (double)f);
+                }
+                log_line("[scan-ctx] %s 0x%llx: %s  %s | f:%s",
+                         tag,
+                         (unsigned long long)(start + row*16),
+                         hex, asc, fl);
+            }
+        }
+    };
+
+    for (const ScanRegion& r : regions) {
+        for (mach_vm_size_t off = 0; off < r.size; off += kBufBytes) {
+            const mach_vm_size_t chunk = std::min<mach_vm_size_t>(kBufBytes, r.size - off);
+            mach_vm_size_t got = 0;
+            kern_return_t kr = mach_vm_read_overwrite(
+                task, r.base + off, chunk,
+                (mach_vm_address_t)buf.data(), &got);
+            if (kr != KERN_SUCCESS || got != chunk) continue;
+
+            // 4-byte aligned scan only — floats are float-aligned.
+            for (mach_vm_size_t i = 0; i + 4 <= got; i += 4) {
+                uint32_t v;
+                std::memcpy(&v, buf.data() + i, 4);
+                if (v == bitsA && hitsA < maxHits) {
+                    const mach_vm_address_t a = r.base + off + i;
+                    log_line("[scan] hit A @ 0x%llx (region 0x%llx + 0x%llx)",
+                             (unsigned long long)a,
+                             (unsigned long long)r.base,
+                             (unsigned long long)(off + i));
+                    dumpContext("A", a);
+                    if (outFp) std::fprintf(outFp, "A\t0x%llx\t0x%llx\t0x%llx\n",
+                                            (unsigned long long)a,
+                                            (unsigned long long)r.base,
+                                            (unsigned long long)r.size);
+                    ++hitsA;
+                }
+                if (fB && v == bitsB && hitsB < maxHits) {
+                    const mach_vm_address_t a = r.base + off + i;
+                    log_line("[scan] hit B @ 0x%llx", (unsigned long long)a);
+                    dumpContext("B", a);
+                    if (outFp) std::fprintf(outFp, "B\t0x%llx\t0x%llx\t0x%llx\n",
+                                            (unsigned long long)a,
+                                            (unsigned long long)r.base,
+                                            (unsigned long long)r.size);
+                    bAddrs.push_back(a);
+                    ++hitsB;
+                }
+                if (hitsA >= maxHits && (!fB || hitsB >= maxHits)) goto done;
+            }
+        }
+    }
+done:
+    if (outFp) std::fclose(outFp);
+    log_line("[scan] done: %u hits for A (target %g), %u hits for B (target %g)",
+             hitsA, (double)tA, hitsB, (double)tB);
+
+    // Cache mutation pass: write A value into every B hit address (and keep
+    // re-applying every 2s in a background thread to catch the gameplay
+    // re-reading from somewhere else). Gated by TWEAKXL_SCAN_MUTATE_B=1.
+    if (const char* mb = std::getenv("TWEAKXL_SCAN_MUTATE_B"); mb && *mb && !bAddrs.empty()) {
+        uint32_t writeRaw;
+        std::memcpy(&writeRaw, &tA, 4);
+        uint32_t mutated = 0;
+        for (auto addr : bAddrs) {
+            kern_return_t kr = mach_vm_write(task, addr, (vm_offset_t)&writeRaw, 4);
+            if (kr == KERN_SUCCESS) ++mutated;
+        }
+        log_line("[scan] cache-mutate: wrote A=%g to %u/%zu B addrs (%u failed)",
+                 (double)tA, mutated, bAddrs.size(),
+                 (uint32_t)(bAddrs.size() - mutated));
+        // Background re-apply so any continuous read-back from the source
+        // doesn't undo our cache write.
+        auto* owned = new std::vector<mach_vm_address_t>(std::move(bAddrs));
+        const uint32_t raw = writeRaw;
+        std::thread([owned, raw]() {
+            uint64_t pass = 1;
+            const task_t t = mach_task_self();
+            for (;;) {
+                std::this_thread::sleep_for(std::chrono::seconds(2));
+                ++pass;
+                uint32_t n = 0;
+                for (auto a : *owned)
+                    if (mach_vm_write(t, a, (vm_offset_t)&raw, 4) == KERN_SUCCESS) ++n;
+                if ((pass % 15) == 0)
+                    log_line("[scan] cache-reapply pass#%llu: %u/%zu B addrs rewritten",
+                             (unsigned long long)pass, n, owned->size());
+            }
+        }).detach();
+        log_line("[scan] cache re-apply thread started (every 2s)");
+    }
+}
+
+} // namespace
+
+void ScanMemoryForFloat(const TweakDB* /*db*/) {
+    std::call_once(g_scanMem_once, [] {
+        // Run on a detached thread so the loader callback chain isn't blocked
+        // during the sleep + scan.
+        std::thread(DoScanMemoryForFloat).detach();
+    });
+}
+
+// ── P1.21: aggressive shotgun mutation ──────────────────────────────────────
+namespace {
+
+std::once_flag g_unleash_once;
+
+struct UnleashTarget {
+    uintptr_t addr;        // exact byte address to write
+    float     newValue;    // factor × original
+};
+
+uint32_t UnleashOnePass(const std::vector<UnleashTarget>& targets) {
+    uint32_t n = 0;
+    const task_t task = mach_task_self();
+    for (const UnleashTarget& t : targets) {
+        uint32_t raw;
+        std::memcpy(&raw, &t.newValue, 4);
+        if (mach_vm_write(task, t.addr, (vm_offset_t)&raw, 4) == KERN_SUCCESS) ++n;
+    }
+    return n;
+}
+
+void DoCinemaUnleash(const TweakDB* db) {
+    if (!std::getenv("TWEAKXL_UNLEASH")) {
+        log_line("[unleash] skipped (set TWEAKXL_UNLEASH=1 to enable)");
+        return;
+    }
+    if (!db) { log_line("[unleash] skipped (db=null)"); return; }
+
+    float factor = 1000.0f, minV = 1.0f, maxV = 200.0f;
+    uint32_t startOff = 0x48, endOff = 0x100, repeatSec = 2;
+    std::string filterSubstr;
+    if (const char* e = std::getenv("TWEAKXL_UNLEASH_FACTOR"); e && *e) factor = (float)std::strtod(e, nullptr);
+    if (const char* e = std::getenv("TWEAKXL_UNLEASH_MIN"); e && *e) minV = (float)std::strtod(e, nullptr);
+    if (const char* e = std::getenv("TWEAKXL_UNLEASH_MAX"); e && *e) maxV = (float)std::strtod(e, nullptr);
+    if (const char* e = std::getenv("TWEAKXL_UNLEASH_OFFSET_START"); e && *e) startOff = (uint32_t)std::strtoul(e, nullptr, 0);
+    if (const char* e = std::getenv("TWEAKXL_UNLEASH_OFFSET_END"); e && *e) endOff = (uint32_t)std::strtoul(e, nullptr, 0);
+    if (const char* e = std::getenv("TWEAKXL_UNLEASH_REPEAT"); e && *e) repeatSec = (uint32_t)std::strtoul(e, nullptr, 10);
+    if (const char* e = std::getenv("TWEAKXL_UNLEASH_NAME_SUBSTR"); e && *e) filterSubstr = e;
+
+    log_line("[unleash] factor=%g range=[%g,%g] scan=+0x%x..+0x%x repeat=%us filter='%s'",
+             (double)factor, (double)minV, (double)maxV,
+             startOff, endOff, repeatSec, filterSubstr.c_str());
+
+    // Walk only NAMED records (from InheritanceMap) so we can filter by name
+    // substring AND skip auto-generated _inline records (their bodies are
+    // less likely to hold gameplay-affecting floats and more likely garbage).
+    const HashMap* flats = GetFlatsMapCandidate(db);
+    if (!flats) { log_line("[unleash] no +0x58 map"); return; }
+    const HashMode fmode = GetFlatsHashMode();
+    const std::string namesPath = ResolveRecordNamesPath();
+    std::ifstream in(namesPath);
+    if (!in) {
+        log_line("[unleash] cannot open names file %s", namesPath.c_str());
+        return;
+    }
+
+    std::vector<UnleashTarget> targets;
+    uint32_t recordsScanned = 0, recordsMatched = 0;
+    std::string line;
+    while (std::getline(in, line)) {
+        while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
+        if (line.empty() || line[0] == '#') continue;
+        if (!filterSubstr.empty() && line.find(filterSubstr) == std::string::npos) continue;
+        ++recordsScanned;
+
+        TweakDBID id{};
+        id.nameHash   = Crc32(line.data(), line.size());
+        id.nameLength = (uint8_t)std::min<size_t>(line.size(), 255);
+        const uint8_t* hit = Lookup(flats, id, fmode);
+        if (!hit) continue;
+
+        uintptr_t p10 = 0;
+        SafeReadPtr(reinterpret_cast<uintptr_t>(hit) + 0x10, &p10);
+        if (!IsPlausibleUserPtr(p10)) continue;
+        ++recordsMatched;
+
+        for (uint32_t off = startOff; off + 4 <= endOff; off += 4) {
+            uint32_t raw = 0;
+            if (!SafeReadU32(p10 + off, &raw)) continue;
+            float v; std::memcpy(&v, &raw, 4);
+            if (!std::isfinite(v)) continue;
+            // Skip negatives — modifiers and reductions get MORE negative when
+            // multiplied by a positive factor, which broke damage-reduction
+            // math and crashed the firing pipeline last run. Positive-only
+            // is safer and still catches base-damage values.
+            if (v < minV || v > maxV) continue;
+            float newV = v * factor;
+            if (!std::isfinite(newV)) continue;
+            if (newV > 1.0e7f) newV = 1.0e7f;    // cap at 10M to avoid overflow
+            targets.push_back({p10 + off, newV});
+        }
+    }
+
+    log_line("[unleash] scanned %u named records (matched %u in DB), built %zu mutation targets",
+             recordsScanned, recordsMatched, targets.size());
+
+    // Sample a few so the audit trail shows what we're touching.
+    for (size_t k = 0; k < std::min<size_t>(10, targets.size()); ++k) {
+        uint32_t raw = 0;
+        SafeReadU32(targets[k].addr, &raw);
+        float before; std::memcpy(&before, &raw, 4);
+        log_line("[unleash]   sample[%zu] @0x%llx before=%g new=%g",
+                 k, (unsigned long long)targets[k].addr,
+                 (double)before, (double)targets[k].newValue);
+    }
+
+    const uint32_t pass1 = UnleashOnePass(targets);
+    log_line("[unleash] PASS#1: wrote %u of %zu targets", pass1, targets.size());
+
+    if (repeatSec > 0 && !targets.empty()) {
+        auto* owned = new std::vector<UnleashTarget>(std::move(targets));
+        const uint32_t period = repeatSec;
+        std::thread([owned, period]() {
+            uint64_t pass = 1;
+            for (;;) {
+                std::this_thread::sleep_for(std::chrono::seconds(period));
+                ++pass;
+                const uint32_t n = UnleashOnePass(*owned);
+                if ((pass % 10) == 0)
+                    log_line("[unleash] re-apply pass#%llu: %u/%zu",
+                             (unsigned long long)pass, n, owned->size());
+            }
+        }).detach();
+        log_line("[unleash] re-apply thread started (every %us)", repeatSec);
+    }
+}
+
+} // namespace
+
+void CinemaUnleash(const TweakDB* db) {
+    std::call_once(g_unleash_once, [db] { DoCinemaUnleash(db); });
+}
+
+void DumpFlatsSample(const TweakDB* db, uint32_t maxEntries) {
+    std::call_once(g_dumpFlats_once, [db, maxEntries] {
+        // Env override wins so the user can crank it up for a deeper sample.
+        uint32_t cap = maxEntries;
+        if (const char* env = std::getenv("TWEAKXL_DUMP_FLATS_MAX"); env && *env) {
+            char* end = nullptr;
+            unsigned long v = std::strtoul(env, &end, 10);
+            if (end != env && v > 0 && v <= 1000000) cap = (uint32_t)v;
+        }
+        DoDumpFlatsSample(db, cap);
+    });
 }
 
 } // namespace red4ext_mac

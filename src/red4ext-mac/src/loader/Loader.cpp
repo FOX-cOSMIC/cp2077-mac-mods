@@ -99,6 +99,18 @@ static void red4ext_mac_loader_init() {
         log_line("[apply-trigger] after VerifyFlatEntry");
         red4ext_mac::VerifyCandidateFlats(db); // P1.12 — runtime-verify Scope's flat candidates
         log_line("[apply-trigger] after VerifyCandidateFlats");
+        red4ext_mac::DumpFlatsSample(db);     // P1.13 — walk +0x58 entries, dump for cinema prospecting
+        log_line("[apply-trigger] after DumpFlatsSample");
+        red4ext_mac::MapNamesToVftables(db);  // P1.14b — record-name → vtable mapping (vtable→type ID)
+        log_line("[apply-trigger] after MapNamesToVftables");
+        red4ext_mac::CinemaMutateStat(db);    // P1.17 — first end-to-end cinema mutation (env-gated)
+        log_line("[apply-trigger] after CinemaMutateStat");
+        red4ext_mac::CinemaBulkMutateStats(db); // P1.17b — bulk-mutate every Stat_Record Float (env-gated)
+        log_line("[apply-trigger] after CinemaBulkMutateStats");
+        red4ext_mac::ScanMemoryForFloat(db);  // P1.20 — process-wide float scan (env-gated, detached)
+        log_line("[apply-trigger] after ScanMemoryForFloat");
+        red4ext_mac::CinemaUnleash(db);       // P1.21 — aggressive shotgun: nuke every plausible float in every record (env-gated)
+        log_line("[apply-trigger] after CinemaUnleash");
         log_line("[apply-trigger] system callbacks done; user mods can apply now");
     });
     red4ext_mac::EnsureStarted();

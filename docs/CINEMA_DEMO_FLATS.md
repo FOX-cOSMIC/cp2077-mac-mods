@@ -4,18 +4,31 @@
 
 Goal: 2–3 **scalar** flats whose modification is immediately observable in-game, with ready-to-drop YAML. Pipeline is proven end-to-end (E2E PASS @ a1c7d32); this supplies the *target*.
 
-> **⚠ STATUS 2026-05-29 (post P1.12 probe + Q1/Q2 dig):** every flat below was
+> **⚠ STATUS 2026-05-29 (post P1.12 probe + Q1/Q2 dig + 297-cand sweep):** every flat below was
 > **REJECTED at runtime** (`flat not found`) — the P1.12 probe confirmed all 98
 > ExtraFlats-derived candidates MISS the live flats map (F-022). ExtraFlats
 > property names are not present on these records; the 193,354 live flats are
 > dominated by runtime-generated inline/nested-record paths whose names are not
 > in any offline string pool (F-020). A CRC32 brute-force against 6 known-live
-> flat hashes (52M combos) found **no** name (Q2). **Do not use the picks below
-> as-is.** Flat *write* IS proven (Schema wrote the unnamed flat `0xce8348b9`).
-> **Next move to get NAMED cinema targets:** import the canonical TweakDB name
-> dictionary from WolvenKit (`tweakdbstr` / TweakXL's own string dump, online),
-> or dump full flat names from the load/parse path. The sections below are kept
-> for provenance only.
+> flat hashes (52M combos) found **no** name (Q2). A targeted 297-candidate
+> sweep (11 confirmed-live records × 27 common property names: `damage`,
+> `magazineCapacity`, `weaponVignetteIntensity`, `tags`, …) ALSO yielded
+> **0/297 hits** — confirming that even canonical-looking `<record>.<property>`
+> guesses miss. The flat name corpus is unreachable offline.
+> **Do not use the picks below as-is.** Flat *write* IS proven (Schema wrote the
+> unnamed flat `0xce8348b9`).
+> **Next move to get NAMED cinema targets (in priority order):**
+>   1. **In-process map walker** (P1.13 candidate) — walk +0x58 buckets, dump
+>      first ~500 entries' TweakDBIDs + FlatValue {vft, value} payloads to log,
+>      then hand-pick a Float/Int with a meaningful default and mutate it.
+>      Doesn't need any name — proves cinema via blind mutation of a real flat.
+>   2. **WolvenKit TweakDB string dump** — community-extracted name dictionary
+>      (`tweakdbstr` from WolvenKit's Console projects, or `tweakdb_str.dat`
+>      bundled with TweakXL on Windows). One-shot import gives us all real flat
+>      names, end of guessing.
+>   3. **RTTI dump at runtime** — enumerate per-record-type properties via the
+>      game's reflection. Larger lift but gives a complete on-host map.
+> The sections below are kept for provenance only.
 
 ---
 

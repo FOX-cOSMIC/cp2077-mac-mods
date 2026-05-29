@@ -509,3 +509,156 @@ No additional stubs or changes are needed for the `.tweak` parser layer itself. 
 - **Invalidates:** none (resolves H-008)
 
 ---
+
+### F-023: macOS TweakDB FlatValue indirection is at entry+0x10 (NOT +0x18 — P1.6 verdict was wrong)
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1 (build 5314028); measured live via P1.13 walker
+- **Evidence (P1.13 walker, deep-walk of all 193,354 entries):**
+  - **entry+0x10** dereferences to a heap address whose first 8 bytes are a **real C++ vtable pointer** in the game's __TEXT segment (range `0x107090xxx…0x107110xxx` at the run's slide — slid by ~0x6000000 from the base). Histogram of `*(entry+0x10)`'s deref yields **exactly 843 distinct vtables** — matching the records-by-type count (F-021), i.e. **one C++ class per record type**.
+  - **entry+0x18** dereferences to a different heap region whose first 8 bytes are a **tagged 64-bit header** of form `(N<<32)|2` (`0x200000002`, `0x600000002`, `0xa00000002`, …) — NOT a vtable, just an allocator/refcount block. 191,127 of 193,354 (98.8%) entries share the same dominant tag `0x200000002`. That's why the P1.6 layout test was misled: BOTH `+0x10` and `+0x18` looked like plausible pointers (6/6 tally each), and the code picked `+0x18` arbitrarily.
+  - P1.13 walker source: `src/red4ext-mac/src/runtime/TweakDB.cpp::DoDumpFlatsSample`, wired in Loader.cpp after `VerifyCandidateFlats`. Env: `TWEAKXL_DUMP_FLATS_MAX=200000`.
+- **Implication:** every accessor that reads/writes a flat must follow `entry → +0x10 → FlatValue`. The current P1.6/P1.10 R/W path uses `+0x18` and IS WRONG — the existing "write of `0xce8348b9`" (F-022) succeeded only by coincidence of a 4-byte slot in the +0x18-pointed header being writable; it did not modify a flat value. **All flat R/W code needs a fix-up to use +0x10.**
+- **How to re-verify:** `cmake --build build && TWEAKXL_DUMP_FLATS_MAX=200000 DYLD_INSERT_LIBRARIES=…/libtweakxl.dylib "$GAME"` and grep `\[flat-dump\] FREQ-ranked` in `/tmp/red4ext-mac.log`. Every FREQ-ranked top vft is in `0x107xxxxxx` (binary __TEXT range, slide-adjusted).
+- **Invalidates:** the `flatValue-ptr-at-entry @ +0x18` selection in `FlatLayout` / P1.6 verdict. Layout was previously declared `confirmed = true`; downgrade.
+
+---
+
+### F-028: End-to-end live mutation of a typed gamedataStat_Record field — framework proven
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1
+- **Evidence (single log line, machine-parseable):**
+  ```
+  [cinema] 'BaseStats.AccumulatedDoTDecayRate' vft=0x10936a198 p10=0x31ae40d00 +0x54
+           before=0.0961745 after=10 wrote=1 verify=OK
+  ```
+  - The `before` value (0.0961745) is the bit-exact float that F-027 read at the same offset in a separate process — confirming the address was located, not coincidence.
+  - `wrote=1` means `mach_vm_write` returned `KERN_SUCCESS` against the live record-class instance memory.
+  - `verify=OK` means a subsequent `mach_vm_read_overwrite` of the same 4 bytes returned the freshly-written `10.0` — the change persisted.
+- **What this proves end-to-end:** the macOS framework can (1) inject via `DYLD_INSERT_LIBRARIES`, (2) capture the slide (P1.1), (3) read the TweakDB singleton (P1.2), (4) detect DB-ready via apply-trigger polling (P1.3), (5) hash-lookup a named record in the +0x58 map (P1.5/P1.14b), (6) follow the F-023 corrected indirection at entry+0x10 to the typed record, (7) write a per-class field at the F-027-identified offset, and (8) read it back. The full Read→Write→Verify path is live. **Modding works in principle.**
+- **What this does NOT yet prove:** that the in-game gameplay system reads `BaseStats.AccumulatedDoTDecayRate` from this memory location (vs an unrelated copy or cached value). A visible in-game test (load save → trigger a poison/burning DoT → time the decay vs vanilla) is needed to confirm the gameplay path. That is the next step.
+- **Caveats / Honest gaps:**
+  - This is one offset on one record class. Other record types (`Vehicle`, `Item`, `Attack`, `Character`) still need per-class probing for their value slot offsets (F-027 caveat).
+  - The full TweakXL `.tweak` mod-application pipeline (parse YAML → resolve flat name → mutate) still needs the per-class value-slot table to be exhaustive. P1.18+ would build that table by probing one representative record per vftable.
+- **How to re-verify:** rebuild then
+  ```
+  DYLD_INSERT_LIBRARIES=…/libtweakxl.dylib \
+    TWEAKXL_CINEMA_NAME=BaseStats.AccumulatedDoTDecayRate \
+    TWEAKXL_CINEMA_VALUE=10.0 \
+    "$GAME_DIR/Cyberpunk2077.app/Contents/MacOS/Cyberpunk2077"
+  ```
+  Then `grep '\[cinema\]' /tmp/red4ext-mac.log` — line should match the form above with `wrote=1 verify=OK`.
+- **Invalidates:** none. Confirms F-023 + F-027 in vivo.
+
+---
+
+### F-027: BaseStats / Stat_Record Float value lives at p10+0x54 — first identified cinema mutation target
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1; measured live via `MapNamesToVftables` + `DumpNamedRecord` probe
+- **Evidence:** named-record dump of 3 different `BaseStats.*` records at title screen showed an identical 128-byte layout:
+  ```
+  p10[+0x00]  void*       vtable           = 0x10b94e198 (gamedataStat_Record)
+  p10[+0x08]  void*       self_ptr
+  p10[+0x10]  void*       refcount_block
+  p10[+0x28]  uint32_t    bufOff (small)
+  p10[+0x40]  TweakDBID   storedKey echo   (low32 = recordHash, byte4 = nameLen)
+  p10[+0x48]  uint64_t    secondary tag    (looks like CName + 0x08000033-ish type)
+  p10[+0x50]  uint32_t    pad / zero
+  p10[+0x54]  float       VALUE            ← the scalar payload
+  ```
+  Per-record `+0x54` floats:
+  - `BaseStats.ADSSpeedPercentBonus`:                  `0x43d654b4` = **428.665**
+  - `BaseStats.AccumulatedDoTDecayRate`:               `0x3dc4f722` = **0.0961** ✓ plausible decay rate
+  - `BaseStats.AccumulatedDoTDecayStartDelay`:         `0xca62dd63` = -3.71e+06 (anomaly — bytes there may not be the value for this particular stat, or a default-not-loaded variant)
+- **Cinema-demo path now concrete:**
+  1. Pick a Stat with a known plausible default (e.g. `AccumulatedDoTDecayRate` = 0.0961).
+  2. Look up its TweakDBID in +0x58.
+  3. Read `p10+0x10 → record` and write a new float at `record+0x54` via `mach_vm_write`.
+  4. Launch the game and observe DoT-related gameplay (poison/burn duration) — a visible change at 10.0 vs 0.0961 is the cinema.
+- **Caveats:**
+  - The +0x54 offset is **specific to `gamedataStat_Record`** (vft `0x10b94e198`). Other record classes (`Vehicle_Record`, `Item_Record`, `Attack_Record`) have different layouts; their value offsets need per-class probing. Dump output for `Attack`, `Vehicle`, `Item` samples is captured in `/tmp/red4ext-mac.log`.
+  - The `0xca62dd63` outlier for one BaseStats record suggests possibly an alternative encoding for some stat sub-types, OR a field that holds a different kind of value (max instead of base, e.g.). Probe more BaseStats samples before declaring +0x54 universal for the class.
+- **How to re-verify:** rebuild, run with `DYLD_INSERT_LIBRARIES=…/libtweakxl.dylib`, grep `\[record-dump\] === 'BaseStats\.`. The 3 sample dumps in `/tmp/red4ext-mac.log` should reproduce.
+- **Invalidates:** none. Closes the per-class field-offset half of F-025's gap, for ONE class (`gamedataStat_Record`).
+
+---
+
+### F-026: vftable → record-class identification solved (269 named-record vtables mapped) — closes F-025's "vtable→type" gap
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1; measured via P1.14b name→vft probe at title screen
+- **Evidence:** ran `MapNamesToVftables` against `reference/tweakxl-data/record_names.txt` (63,711 canonical record names extracted from psiberx TweakXL's `InheritanceMap.yaml`). Results:
+  - **63,699 of 63,711 (99.98%) resolved** in the live +0x58 map. 12 misses are all stale records: `Items.CapacityBooster_Regina*` (removed in a CP2077 update) and `Character.TygerClawsBikerTattooTest_ma`. Acceptable noise.
+  - **269 distinct vtables** in the named-record set (vs 843 total from the full P1.13 deep walk — the 574 unaccounted vtables are auto-generated `_inline` records not present in InheritanceMap).
+  - Each vtable cluster's sample record names share a **dominant prefix that identifies the C++ record class**. Top clusters (sample → class name):
+
+  | vtable | freq | class identified by name prefix |
+  |--------|------|---------------------------------|
+  | `0x107d1a5b8` | 6891 | inline attack/modifier data |
+  | `0x107d1e820` | 6668 | `gamedataCharacter_Record` (all "Character.*") |
+  | `0x107d8fc98` | 4835 | `gamedataAmmo_Record` (all "Ammo.*") |
+  | `0x107d4c1a0` | 3494 | `gamedataAIAction_Record` (Action* / ActionSamples.*) |
+  | `0x107d5b418` | 1997 | `gamedataClothing_Record` (Items.* clothing) |
+  | `0x107d58fa0` | 1822 | `gamedataItem_Record` (Items.* weapons/cyberware) |
+  | `0x107d4a788` | 1499 | `gamedataVendor_Record` (all "Vendors.*") |
+  | `0x107d177a8` | 1377 | `gamedataVehicle_Record` (all "Vehicle.*") |
+  | `0x107d4a198` | 1269 | `gamedataStat_Record` ⚡ (all "BaseStats.*") |
+  | `0x107d31568` | 1081 | `gamedataAIActionTarget_Record` |
+  | `0x107d66b88` | 609 | `gamedataAttack_Record` (all "Attacks.*") |
+
+- **Implication:** combined with `reference/tweakxl-data/ExtraFlats.yaml` (60 record-type → property-list mappings authored by psiberx), we now have a **typed flat candidate generator**: pick a named record, look up its vtable, infer the class, and the ExtraFlats entry for that class lists the canonical property names (with flat-types like `Float`, `String`, `Int32`). Cinema target inference becomes deterministic per type rather than blind guessing.
+- **Still pending:** the per-class FIELD OFFSET within the C++ record instance — i.e. for `gamedataStat_Record`, at what byte offset within the 0x88-byte record does the `value` Float live? Solving this needs either a per-class probe (dump 128 bytes for a known-value record, locate the float by eye) or Ghidra RTTI walk.
+- **How to re-verify:** rebuild + run with `TWEAKXL_VFT_MAP_OUT=/tmp/vft_map.tsv DYLD_INSERT_LIBRARIES=…/libtweakxl.dylib`; grep `\[name-vft\] resolved` (expect "63699/63711") and `\[name-vft\] vft=` for the cluster table. Output TSV is at `/tmp/vft_map.tsv`.
+- **Invalidates:** none. Builds on F-023, F-025; closes the type-name half of F-025's gap.
+
+---
+
+### F-025: macOS +0x58 entries point to TYPED RECORD instances, not FlatValue objects — values are inline record-class members
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1; measured via P1.13 walker 256-byte deep dump of entry[0]
+- **Evidence:** dumping 256 bytes at `p10 = *(entry+0x10)` shows the SAME 0x48-byte header (vtable, self, refcnt, …, bufOff, storedKey) **repeating every 0x88-0x90 bytes** through the allocation. The second header at `p10+0x90` has its own valid vtable (`0x10bd99520`, also __TEXT-range), self-ptr (close to original p10), refcount-ptr, distinct bufOff (`0x036305`), and a different storedKey (`0x34000034e4c`). The 64 bytes BETWEEN consecutive headers (`p10+0x48..p10+0x87`) hold mixed-pattern bytes including values that look like CName hashes (`0x50404031`), small ints, and zero-padded fields. **Conclusion: p10 is not a `FlatValue<T>` — it's the start of a slab of TYPED record instances**, where each record's class is identified by its vtable and its property values are stored inline as C++ member fields between header and next allocation.
+- **Implication:**
+  - **193,354 entries in +0x58 ≈ 193,354 records** (matches CP2077's ~50K records + ~140K flats-as-records-with-one-prop, or each map entry per-record-per-property). Not a flat-only map.
+  - **843 unique vftables = 843 typed record subclasses** (`gamedataItem_Record`, `gamedataAttack_Record`, etc. — matching the 843 records-by-type count in +0x88 / F-021).
+  - **Value access requires per-class reflection.** Each typed record places its properties (damage, range, multiplier, …) at class-specific offsets. There is no uniform "value slot" — only Ghidra-level RTTI walk OR an in-process RTTI dump can map (vtable → property name → field offset).
+  - **F-022's "write of `0xce8348b9` succeeded"** mutated a refcount byte in the +0x18 allocator pool (per F-023) — neither the flat value nor a meaningful record field.
+  - **The on-disk flat data buffer at +0x148 (4.1MB) IS real and IS used for some scalar storage** (we successfully decoded `"LocKey#8"` and `"9298"` ASCII from buffer offsets) — but `p10+0x28` is not a clean buffer offset for arbitrary flats; the buffer-scan reverse search found NO vftable cluster with disproportionate float hits (uniform 0.0-0.2% rate across all clusters).
+- **Cinema-demo readiness:** **blocked** until one of:
+  1. Per-vftable Ghidra RTTI walk identifies a typed record class with a known scalar field (e.g. `gamedataAttack_Record::damage @ +0x4c`) — direct mutation feasible.
+  2. WolvenKit canonical TweakDB name dump (P1.14) + per-class probe — named flat lookup gives a known record/property, then probe its layout in-process.
+  3. RTTI dump at runtime — enumerate vtable[N] for type-info string per class.
+- **How to re-verify:** P1.13 walker with `TWEAKXL_DUMP_FLATS_MAX=200000`. Grep `\[flat-dump\] === deep p10 dump` for the 256-byte hex; look for the second header at `+0x90`.
+- **Invalidates:** F-024's `FlatValue object layout` framing — supersede the "this is a FlatValue<T>" interpretation with "this is a Record* into a typed slab." Keep F-024 visible for the layout fields (vtable/self/refcnt/bufOff/storedKey ARE real and are the record's common prefix); revise the interpretation.
+
+---
+
+### F-024: FlatValue object layout (macOS) — 9-word header with vtable, self-ptr, refcount ref, buffer offset, back-key
+
+- **Date:** 2026-05-29
+- **Game version:** 2.3.1; measured at title screen via P1.13 walker
+- **Evidence:** for every sampled entry's `p10 = *(entry+0x10)`, the 9 8-byte words at `p10+0x00..p10+0x40` consistently decode as:
+
+  ```
+  +0x00  void*       vtable             — 843 distinct values, points into __TEXT (binary RTTI)
+  +0x08  void*       self_ptr           — equals p10 (TweakRecord base-class "this" back-ref)
+  +0x10  void*       refcount_ptr       — points to a 16-byte heap block holding (N<<32)|2 headers
+                                          (the same allocator pool as the entry+0x18 indirection)
+  +0x18  uint64_t    0                  — zero in every observed entry
+  +0x20  uint64_t    0                  — zero in every observed entry
+  +0x28  uint32_t    bufferOffset       — byte offset into TweakDB.flatDataBuffer (+0x148, 4.1MB).
+                                          Range observed: 0x362f0..~0x5fa6c+ across 193k entries.
+                                          ALIASED: distinct entries with the same value share an offset
+                                          (interning), so |distinct offsets| ≪ |entries|.
+  +0x30  uint64_t    0
+  +0x38  uint64_t    0
+  +0x40  TweakDBID   storedKey echo     — same 8 bytes as entry+0x08 (back-reference for type-erased ops)
+  ```
+- **Buffer content confirmed typed-by-vft:** reading `bufferBase + bufferOffset` yields real ASCII for the string-typed vfts (e.g. `0x382379654b636f4c` decodes byte-wise to `"LocKey#8"` — Cyberpunk's localization key format). The buffer holds **typed scalar bytes packed contiguously** (strings null-terminated; Floats/Ints 4-byte aligned).
+- **Per-cluster typing still pending:** which vft = `FlatValueFloat`, which = `FlatValueInt32`, etc., is not yet decoded. The float-hit-rate predicate (4-aligned bufOff + value in `[0.01, 1e6]`) was noise-level (~4% across all clusters), indicating either (a) heavy interning of `0.0` floats, or (b) Floats are a small cluster diluted by alignment-quirks. **F-025 / a follow-up RTTI walk needed.**
+- **How to re-verify:** P1.13 walker output. Look for `[flat-dump] e[i] hash=… p10=… vft=0x107xxxxxx +8=<self> +10=<refcnt> +28=<bufOff> +40=<storedKey>` lines — the pattern repeats across all samples.
+- **Invalidates:** none. Supersedes the prior assumption that `+0x18` carried the FlatValue (corrected in F-023).
+
+---

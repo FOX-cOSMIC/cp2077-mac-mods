@@ -275,4 +275,123 @@ void VerifyFlatEntry(const TweakDB* db);
 // systemic lookup bug from genuine flat absence. Emits to /tmp/red4ext-mac.log.
 void VerifyCandidateFlats(const TweakDB* db);
 
+// ───────────────────────────────────────────────────────────────────────────
+// P1.13 — flats map walker / cinema target prospecting (once-only).
+//
+// Bypasses the offline-name dead end (F-020 + the 297-cand sweep proving even
+// canonical-looking <record>.<property> guesses miss): walks the +0x58 map's
+// `entries` array linearly i = 0..min(count, maxN), dumps each non-empty entry's
+// raw bytes (key, next-index, stored-hash, payload @ +0x18 + dereferenced
+// FlatValue {vft, val64}), and accumulates a vft-frequency histogram. Names are
+// NOT required — the dump exposes the live (id, vft, value) tuples directly so
+// a Float cluster with meaningful defaults can be hand-picked for blind
+// mutation. Sampling cap defaults to 500; env var TWEAKXL_DUMP_FLATS_MAX
+// overrides. Emits to /tmp/red4ext-mac.log:
+//   [flat-dump] map=+0x58 count=N stride=S bucketCount=B entries=PTR
+//   [flat-dump] e[i] key=.. hash=.. len=.. tdb=.. flat=.. vft=.. val64=.. i32=.. f32=..
+//   [flat-dump] vft-cluster[k]: vft=.. count=..
+//   [flat-dump] sampled N entries (emitted M with plausible flatPtr+vft)
+void DumpFlatsSample(const TweakDB* db, uint32_t maxEntries = 500);
+
+// ───────────────────────────────────────────────────────────────────────────
+// P1.14b — name → vtable mapping for type identification (once-only).
+//
+// Reads a newline-delimited record-names file (TWEAKXL_RECORDS_FILE if set,
+// else <dylib dir>/../../../reference/tweakxl-data/record_names.txt — 63,711
+// canonical names from psiberx TweakXL's InheritanceMap.yaml). For each name,
+// computes its TweakDBID, looks it up in +0x58, and on HIT dumps the entry's
+// p10 vtable. Aggregates per-vtable: (a) total HIT count, (b) up to N sample
+// record names. The dominant prefix in each cluster's sample names (e.g.
+// "Items.*", "Attacks.*", "Character.*") reveals which record class that
+// vtable represents — closing F-025's "vtable → type name" mapping gap.
+//
+// Emits to /tmp/red4ext-mac.log and (if TWEAKXL_VFT_MAP_OUT set) a parseable
+// "<vtable_hex>\t<record_name>" line per HIT to that path for post-processing.
+void MapNamesToVftables(const TweakDB* db);
+
+// ───────────────────────────────────────────────────────────────────────────
+// P1.17 — cinema mutation (once-only).
+//
+// First end-to-end proof that the macOS framework can MUTATE live game state:
+//   - Looks up a named gamedataStat_Record (e.g. "BaseStats.AccumulatedDoTDecayRate")
+//   - Reads p10 via entry+0x10 (F-023)
+//   - Reads the current float at p10+0x54 (F-027 — Stat_Record value slot)
+//   - Writes a new float via mach_vm_write
+//   - Re-reads to confirm
+// Emits a machine-parseable summary line to /tmp/red4ext-mac.log:
+//   [cinema] '<name>' before=<f> after=<f> kr=<int> ok=<bool>
+// Driven by env vars (so this never fires unless explicitly opted in):
+//   TWEAKXL_CINEMA_NAME — record name to mutate
+//   TWEAKXL_CINEMA_VALUE — new float value (decimal)
+// Skipped if either env var is missing.
+void CinemaMutateStat(const TweakDB* db);
+
+// ───────────────────────────────────────────────────────────────────────────
+// P1.17b — BULK cinema mutation (once-only).
+//
+// Locates every named record whose vtable matches the live gamedataStat_Record
+// vtable (detected from a reference Stat record), then multiplies every safe
+// non-zero finite Float at p10+0x54 by TWEAKXL_CINEMA_BULK_FACTOR. Skips
+// garbage (NaN/inf/0/wildly-out-of-range) to keep the game stable.
+// Logs: count attempted, count mutated, count skipped, sample {name, before, after}.
+// Env-gated:
+//   TWEAKXL_CINEMA_BULK         — set to any value to enable
+//   TWEAKXL_CINEMA_BULK_FACTOR  — float multiplier (default 100.0)
+//   TWEAKXL_CINEMA_BULK_REPEAT  — seconds between re-application
+//                                 (default 0 = one-shot)
+// Skipped silently if TWEAKXL_CINEMA_BULK is unset.
+void CinemaBulkMutateStats(const TweakDB* db);
+
+// ───────────────────────────────────────────────────────────────────────────
+// P1.20 — process-wide float memory scan.
+//
+// Walks all writable VM regions of THIS process (the game) via
+// mach_vm_region_recurse and searches each for the IEEE-754 bits of one or
+// two target floats (TWEAKXL_SCAN_FLOAT_A and optionally TWEAKXL_SCAN_FLOAT_B).
+// Reports every address whose 4-byte aligned read equals the target. Limits
+// results per target so a popular value doesn't blow the log.
+//
+// Cinema-debug use: mutate a known TweakDB Float to a distinctive value
+// (e.g. 13.371337) via CinemaMutateStat, then scan for it after the game has
+// loaded a save — any address ≠ the mutation source is a downstream READER.
+//
+// Env-gated (does nothing unless TWEAKXL_SCAN_FLOAT_A is set):
+//   TWEAKXL_SCAN_FLOAT_A         — primary target float (decimal, e.g. "13.371337")
+//   TWEAKXL_SCAN_FLOAT_B         — optional second target
+//   TWEAKXL_SCAN_DELAY_SEC       — sleep N seconds before scanning (default 30,
+//                                  to give the user time to load a save)
+//   TWEAKXL_SCAN_MAX_HITS        — cap per-target results (default 100)
+//   TWEAKXL_SCAN_OUT             — optional path for tab-separated address
+//                                  output (default /tmp/scan_hits.tsv)
+//
+// Safety: read-only via mach_vm_read_overwrite. Skips non-writable, non-
+// private, and __TEXT regions. Will NOT mutate anything.
+void ScanMemoryForFloat(const TweakDB* db);
+
+// ───────────────────────────────────────────────────────────────────────────
+// P1.21 — UNLEASH: aggressive shotgun mutation across all 193K records.
+//
+// Walks every entry in the +0x58 map. For each record's p10 (the typed record
+// instance), scans bytes from +TWEAKXL_UNLEASH_OFFSET_START to +TWEAKXL_UNLEASH_OFFSET_END
+// every 4 bytes. Any 4-byte aligned float in [MIN, MAX] (current value) gets
+// multiplied by FACTOR (clamped to avoid inf). Re-applies every REPEAT seconds.
+//
+// This is the "set all damage to infinity" sledgehammer — it doesn't know which
+// fields are damage vs range vs multiplier, it just nukes every plausible
+// gameplay-magnitude float in every record's body. Something will visibly
+// change unless the gameplay system never reads any value from p10 directly.
+//
+// Env-gated:
+//   TWEAKXL_UNLEASH=1                  — enable
+//   TWEAKXL_UNLEASH_FACTOR (1000.0)    — multiply by this
+//   TWEAKXL_UNLEASH_MIN (1.0)          — lower bound of "plausible value"
+//   TWEAKXL_UNLEASH_MAX (200.0)        — upper bound
+//   TWEAKXL_UNLEASH_OFFSET_START (0x48)
+//   TWEAKXL_UNLEASH_OFFSET_END (0x100)
+//   TWEAKXL_UNLEASH_REPEAT (2)         — seconds between re-applications
+//   TWEAKXL_UNLEASH_NAME_SUBSTR        — only records whose name contains this
+//                                        substring (uses InheritanceMap names);
+//                                        empty = ALL records
+void CinemaUnleash(const TweakDB* db);
+
 } // namespace red4ext_mac

@@ -766,3 +766,49 @@ Built tools/probes/candidate_flats.txt: 98 distinct scalar (Int32/Float/Bool) ca
 Q1 RESOLVED: +0x88 (843 entries) is the records-BY-TYPE index (what GetRecords<T> reads, F-012), NOT a record-by-name store. Evidence: 967 game::data::*_Record types in binary RTTI (843 = live subset); GetRecords<T> is type-parameterized; Nova (0xb1e27e8e) MISSES +0x88; +0x28 sub-object (FUN_102b7b084) is a type/reflection registry over a static name table (FNV-1a), not a 13K record store. Added F-021 (refines F-012 — appended REFINED note to F-012) and F-022 (live map census: flats=+0x58/193354, records-by-type=+0x88/843, queries=+0x108/10; H-008 formally resolved; flat read/write proven on 0xce8348b9). Open: where individual records live → H-009 (hypothesis: +0x58 is the combined flat+record id map since 193,354 ≈ 180K flats + 13K records; decisive test = look up Nova's id against +0x58).
 
 Q2 NO MATCH: brute-forced CRC32==0xce8348b9 (len 39) and 5 other live-flat hashes. Tried (a) 13K records × ExtraFlats+common props (2.3M combos) and (b) 13K records × 28,925 binary-harvested property strings (52M combos). Zero matches. Conclusion: the 193K live flats are dominated by runtime-generated inline/nested-record paths whose names are NOT in any offline string pool (tweakdb.bin has only 11 three-part names). Flat names cannot be recovered by offline brute-force. No F-023. Recommend: pull the canonical TweakDB name dump from WolvenKit (online), OR dump full flat names from the load/parse path where names exist transiently. No cinema-ready NAMED flat yet (though write is proven on the unnamed 0xce8348b9).
+
+---
+
+## 2026-05-29 (eve) — Cinema breakthrough: name→vtable resolution + live record mutation (Claude as Conductor)
+
+*Backfilled into the log after a context compaction — this work happened after the Q2 brute-force entry above but was never logged. Facts already landed in FACTS.md as F-023..F-028; this entry records the narrative + the final in-game sledgehammer run.*
+
+- **The pivot that unblocked everything:** offline brute-force of flat NAMES is dead (Q2 above — 52M combos, 0 matches; the 193K live flats are runtime-generated inline paths not in any offline string pool). Instead of recovering flat names, we went after the **record-class field offsets** directly, using the live RTTI.
+- **F-023 (corrected indirection):** P1.13 deep-walk of all 193,354 +0x58 entries proved the FlatValue/record pointer is at **entry+0x10** (not +0x18 — the old P1.6 verdict was wrong; +0x18 is an allocator/refcount block). `*(entry+0x10)=p10` whose first 8 bytes are a real `__TEXT` vtable → exactly **843 distinct vtables** = one C++ class per record type (matches F-021).
+- **F-025 (entries are typed records):** the 256-byte deep dump shows a 0x88–0x90-byte header repeating — p10 is the start of a **slab of typed record instances**, values stored inline as C++ members, not a uniform FlatValue.
+- **F-026 (the resolver — H-009 closed):** `MapNamesToVftables` looked up **63,711** canonical record names (extracted to `reference/tweakxl-data/record_names.txt` from psiberx `InheritanceMap.yaml`) against +0x58 → **63,699 HIT (99.98%)**, clustered into **269 record-class vtables**. The cluster table identifies classes by name prefix (`gamedataStat_Record`=BaseStats.*, `gamedataItem_Record`=Items.*, `gamedataAttack_Record`=Attacks.*, `gamedataVehicle_Record`=Vehicle.*, etc.). **H-009 is now resolved-fact.**
+- **F-027 (first value-slot offset):** for `gamedataStat_Record` (vft cluster `0x107d4a198`, 1269 BaseStats.* records), the scalar Float value lives at **p10+0x54**. Verified against 3 BaseStats samples (`AccumulatedDoTDecayRate`=0.0961 etc.).
+- **F-028 (end-to-end live mutation — PROVEN):** wrote `BaseStats.AccumulatedDoTDecayRate` 0.0961745 → 10.0 via `mach_vm_write` against the live record-class instance; `wrote=1 verify=OK`. Full inject→slide→singleton→apply-trigger→hash-lookup→+0x10 indirection→typed-field write→read-back chain is live. **Modding works in principle.**
+- **🎬 Cinema sledgehammer run (`tools/test-cinema-unleash.sh`, 17:47):** rather than depend on per-class offset tables, the "unleash" probe scans every named record and multiplies every gameplay-magnitude float (range-gated, offset-windowed) by a FACTOR, re-applying on a 2 s thread so the game can't reset them. Run captured (`docs/probes/logs/red4ext-mac-2026-05-29-cinema-unleash.log`):
+  ```
+  [unleash] factor=30 range=[5,200] scan=+0x48..+0x100 repeat=2s filter='Damage'
+  [unleash] scanned 595 named records (matched 595 in DB), built 154 mutation targets
+  [unleash]   sample[0] @0x31b674088 before=64.5002 new=1935.01
+  [unleash]   sample[2] @0x31b3f3e00 before=81.3952 new=2441.86
+  [unleash] PASS#1: wrote 154 of 154 targets
+  [unleash] re-apply pass#120: 154/154   (held ~4 min across 120+ passes)
+  ```
+  154 damage-magnitude floats written ×30 and held continuously. The before-values (64.5, 81.4, 24.1, 135.3…) are real weapon/attack damage magnitudes.
+- **What's PROVEN:** we can locate, mutate, and persist live gameplay float data in the running game, by record name, at scale.
+- **What's NOT yet confirmed (honest gap, per F-028):** that the gameplay *systems* read these specific memory locations live (vs a cached/recomputed copy). The decisive test is the user loading a save with unleash running and **seeing** broken damage. That visible-confirmation step is the one thing only an in-game look can settle.
+- **Doc reconciliation done this turn:** persisted `/tmp/cinema-unleash-launcher.log` + `/tmp/game-cinema.log` (the 298-candidate `Record.property` sweep, 0/297 — confirms name-guessing is dead) into `docs/probes/logs/`; marked H-009 resolved-fact in HYPOTHESES.md.
+- **Uncommitted:** `reference/tweakxl-data/` (record_names, ExtraFlats, InheritanceMap), `tools/test-cinema-{bulk,scan,unleash}.sh`, FACTS.md F-023..F-028, TweakDB.{hpp,cpp}, Loader.cpp, CINEMA_DEMO_FLATS.md. Not committed (awaiting user go-ahead).
+- **Blockers:** none mechanical. Cinema's last mile = a visible in-game look, the user's call.
+- **Next (Lucas's call):**
+  - **(a)** Run unleash again + load a save and confirm the visible effect (closes F-028's gap; the actual "cinema").
+  - **(b)** Build the per-class value-slot offset table (F-027 only covers `gamedataStat_Record`; Item/Attack/Vehicle/Character need per-class probing) → enables real by-name flat mutation across all types, the v1.0 product.
+  - **(c)** Source the canonical FLAT-name dump (companion to record_names.txt) so the YAML-by-name pipeline targets real named flats instead of raw offsets.
+  - **(d)** Commit this milestone, then pause.
+
+---
+
+## 2026-05-30 — Ghidra export currency VERIFIED (no regen needed) (Claude as Conductor)
+
+- **Question (Lucas):** is the Nov-2025 Ghidra export still valid, or did a game update invalidate it?
+- **Definitive check (hash, not version string):**
+  - Live binary `Cyberpunk2077` SHA256 = `2a6ba5c2847759f7ed896b6bed7b36fe5a7990f75fe9f779383a62adb19d5a15`, MD5 = `995240dd50b535a7eee8e13e94b47905`.
+  - F-001 recorded baseline SHA256 = same.
+  - Binary that the Ghidra project actually analyzed (via `analyzeHeadless … -readOnly -postScript PrintHash.py` → `program.getExecutableSHA256()`): **same SHA256 AND MD5**, image base `0x100000000`, lang `AARCH64:LE:64:AppleSilicon`.
+  - **All three identical → the executable is unchanged. The Ghidra export is current.** A full re-analysis would reproduce identical output (hours wasted). Skipped.
+- **Toolchain unlocked:** Ghidra 11.4.2 headless works with `JAVA_HOME=/opt/homebrew/Cellar/openjdk@21/21.0.9/libexec/openjdk.jdk/Contents/Home`. Read-only scripted queries against the live 2.1GB project are now possible (xref/decompile without the 450MB .c grep). Script template: `/tmp/PrintHash.py`.
+- **Next:** Option A — trace the TweakDB flat/stat CONSUMER (the code that reads a value at gameplay time). This is the gap behind the failed cinema poke: we mapped the data layout (F-011..F-028) but never traced a real reader, so writes hit bytes nothing consumes. T-002e (`GetFlat` xref) was always pending; doing it now.

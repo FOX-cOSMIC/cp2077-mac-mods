@@ -1,0 +1,345 @@
+[red4ext-mac] loader init 2026-05-29T15:17:17, base=0x102aa0000 slide=0x2aa0000
+[singleton-access] initial poll: 0x0 (null — expected at load time; DB built later)
+[apply-trigger] polling thread started (interval=50ms, stable-threshold=3 polls, timeout=300000ms)
+[tweakxl] plugin orchestrator init
+[S_API] SteamAPI_Init(): Loaded '/Users/lucas_1/Library/Application Support/Steam/Steam.AppBundle/Steam/Contents/MacOS/steamclient.dylib' OK.
+May 29 15:17:17  Cyberpunk2077[21896] <Error>: GameServicesSteam: Failed to initialize Steam
+[S_API FAIL] Tried to access Steam interface SteamUser023 before SteamAPI_Init succeeded.
+[apply-trigger] singleton non-null at poll 56 (TweakDB=0x322cd1020)
+[apply-trigger] count stable at 843 after 3 consecutive polls
+[apply-trigger] firing callbacks (db=0x322cd1020, poll #81)
+[apply-trigger] callback batch snapshot: size=2 fired=0
+[apply-trigger] lambda entered (db=0x322cd1020)
+[tweakdb] H-008 verification: mapA(+0x58).count=193354 mapC(+0x108).count=10 verdict=flats-is-A
+[tweakdb] H-008 raw: mapA{@08=193354,@0c=193354} records{@08=843,@0c=843} mapC{@08=10,@0c=13} (F-015 lists mapC.count@0c=+0x114; F-012/F-019 use @08)
+[tweakdb] state: records.count=843 valueBufferSize=4291664
+[apply-trigger] after VerifyH008
+[hashmap] hash-function: fnv1a-8B stored=0x0fb50608 computed=0x0fb50608 key=<TweakDBID(0x0a9b1740,len=1,off=0x000000)> bucket=0/843
+[hashmap] lookup-test: pass key=<TweakDBID(0x0a9b1740,len=1)> entry=0x701cc53780 expected=0x701cc53780
+[apply-trigger] after VerifyHashFunction
+[flat-layout] flats: count=193354 stride=0x20 bufferBase=0x71b204000 bufferSize=4291664
+[flat-layout] sample[0]: hash=0xce8348b9 key=<TweakDBID(0xce8348b9,len=39,off=0x000000)> viaTdb.vft=0x0 viaTdb.raw32=0x00000000 asI32=0 asF32=0 entry+0x10.i32=444588528 ptr@0x10=0x31a7fe1f0 ptr@0x18=0x31a29a8d0
+[flat-layout] sample[1]: hash=0x8ccf59c9 key=<TweakDBID(0x8ccf59c9,len=43,off=0x000000)> viaTdb.vft=0x0 viaTdb.raw32=0x00000000 asI32=0 asF32=0 entry+0x10.i32=446164528 ptr@0x10=0x31a97ee30 ptr@0x18=0x31a9a9cf8
+[flat-layout] sample[2]: hash=0x5bd16bfd key=<TweakDBID(0x5bd16bfd,len=28,off=0x000000)> viaTdb.vft=0x0 viaTdb.raw32=0x00000000 asI32=0 asF32=0 entry+0x10.i32=452238960 ptr@0x10=0x31af49e70 ptr@0x18=0x31ae30eb0
+[flat-layout] sample[3]: hash=0x3dbd038a key=<TweakDBID(0x3dbd038a,len=49,off=0x000000)> viaTdb.vft=0x0 viaTdb.raw32=0x00000000 asI32=0 asF32=0 entry+0x10.i32=454435552 ptr@0x10=0x31b1622e0 ptr@0x18=0x31b1b4730
+[flat-layout] sample[4]: hash=0xa1d4c90d key=<TweakDBID(0xa1d4c90d,len=52,off=0x000000)> viaTdb.vft=0x0 viaTdb.raw32=0x00000000 asI32=0 asF32=0 entry+0x10.i32=443444304 ptr@0x10=0x31a6e6c50 ptr@0x18=0x31a768cb8
+[flat-layout] sample[5]: hash=0x23a86068 key=<TweakDBID(0x23a86068,len=39,off=0x000000)> viaTdb.vft=0x0 viaTdb.raw32=0x00000000 asI32=0 asF32=0 entry+0x10.i32=457588800 ptr@0x10=0x31b464040 ptr@0x18=0x31b53e3c0
+[flat-layout] verdict: flatValue-ptr-at-entry type-tag-offset:+0x00(vft) value-data-offset:+0x8 buffer-offset-source:entry-ptr tally{tdb=0 ptr@0x18=6 ptr@0x10=6 entryOff=0}/6
+[hashmap] flats-map hash-function: nameHash-direct stored=0xce8348b9 fnv8=0x0ee3fa46 fnv5=0x33c7bd12 crc8=0x289b8eb0 name=0xce8348b9
+[flat-rw] read id=<TweakDBID(0xce8348b9,len=39)> found=yes raw=0x00000002
+[flat-write] id=<TweakDBID(0xce8348b9,len=39)> type=Int32 @0x31a29a8d8 old=0x00000002 new=0x00000003 width=4 verify=ok
+[flat-rw] write id=<0xce8348b9> old=0x00000002 new=0x00000003 result=ok reread=0x00000003 match=yes
+[flat-write] id=<TweakDBID(0xce8348b9,len=39)> type=Int32 @0x31a29a8d8 old=0x00000003 new=0x00000002 width=4 verify=ok
+[flat-rw] restore old=0x00000002 result=ok
+[flat-rw] verdict: pass
+[apply-trigger] after VerifyFlatEntry
+[flat-probe] preflight-self(records): storedKey=0x000000010a9b1740 fullKeyLookup=HIT compactRebuildLookup=HIT
+[flat-probe] preflight-self(flats): storedKey=0x00000027ce8348b9 fullKeyLookup=HIT compactRebuildLookup=HIT
+[flat-probe] preflight: records-map lookup of 'Items.Preset_Nova_Default' (hash=0xb1e27e8e) -> MISS
+[flat-probe] NOTE: 'Items.Preset_Nova_Default' absent from records map (records path verified). Flats lookup path IS verified (self-test compact HIT) — candidate MISSes are trustworthy.
+[flat-probe] candidates file: /tmp/cinema_candidates.txt (source=TWEAKXL_CANDIDATES_FILE)
+[flat-probe] MISS name=Items.Preset_Lexington_Military.damage hash=0x4558faea
+[flat-probe] MISS name=Items.Preset_Lexington_Military.damageMin hash=0xb6a0def2
+[flat-probe] MISS name=Items.Preset_Lexington_Military.damageMax hash=0x8aade1ab
+[flat-probe] MISS name=Items.Preset_Lexington_Military.baseDamage hash=0x27e4aa6e
+[flat-probe] MISS name=Items.Preset_Lexington_Military.fireRate hash=0x789d813d
+[flat-probe] MISS name=Items.Preset_Lexington_Military.magazineCapacity hash=0x37e55894
+[flat-probe] MISS name=Items.Preset_Lexington_Military.weight hash=0x535dfbc7
+[flat-probe] MISS name=Items.Preset_Lexington_Military.level hash=0xd41363e5
+[flat-probe] MISS name=Items.Preset_Lexington_Military.qualityLevel hash=0x78915eea
+[flat-probe] MISS name=Items.Preset_Lexington_Military.buyPrice hash=0xf40dc458
+[flat-probe] MISS name=Items.Preset_Lexington_Military.sellPrice hash=0x6c143354
+[flat-probe] MISS name=Items.Preset_Lexington_Military.weight hash=0x535dfbc7
+[flat-probe] MISS name=Items.Preset_Lexington_Military.duration hash=0xdae86572
+[flat-probe] MISS name=Items.Preset_Lexington_Military.cooldown hash=0x82d4c96b
+[flat-probe] MISS name=Items.Preset_Lexington_Military.value hash=0x538ef7c2
+[flat-probe] MISS name=Items.Preset_Lexington_Military.minDamage hash=0xdd9d6bc9
+[flat-probe] MISS name=Items.Preset_Lexington_Military.maxDamage hash=0x0a76d988
+[flat-probe] MISS name=Items.Preset_Lexington_Military.weaponVignetteIntensity hash=0xfbed734a
+[flat-probe] MISS name=Items.Preset_Lexington_Military.weaponVignetteRadius hash=0xd8a59fdb
+[flat-probe] MISS name=Items.Preset_Lexington_Military.weaponZoom hash=0xfeacb9fd
+[flat-probe] MISS name=Items.Preset_Lexington_Military.recoilJumpUp hash=0xec11e795
+[flat-probe] MISS name=Items.Preset_Lexington_Military.recoilJumpDown hash=0x462a80b3
+[flat-probe] MISS name=Items.Preset_Lexington_Military.spread hash=0x28250efe
+[flat-probe] MISS name=Items.Preset_Lexington_Military.tags hash=0x929036c4
+[flat-probe] MISS name=Items.Preset_Lexington_Military.stats hash=0x19bec85c
+[flat-probe] MISS name=Items.Preset_Lexington_Military.effectors hash=0xde5476b3
+[flat-probe] MISS name=Items.Preset_Lexington_Military.abilities hash=0x9d0be8e1
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.damage hash=0x2ea1ba91
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.damageMin hash=0xda1c5c95
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.damageMax hash=0xe61163cc
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.baseDamage hash=0xf45ee217
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.fireRate hash=0xc28a0b69
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.magazineCapacity hash=0x8e4b3282
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.weight hash=0x38a4bbbc
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.level hash=0x4602ecb5
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.qualityLevel hash=0xfe6b864d
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.buyPrice hash=0x4e1a4e0c
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.sellPrice hash=0x00a8b133
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.weight hash=0x38a4bbbc
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.duration hash=0x60ffef26
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.cooldown hash=0x38c3433f
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.value hash=0xc19f7892
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.minDamage hash=0xb121e9ae
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.maxDamage hash=0x66ca5bef
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.weaponVignetteIntensity hash=0xf9e1d665
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.weaponVignetteRadius hash=0x6aae4321
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.weaponZoom hash=0x2d16f184
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.recoilJumpUp hash=0x6aeb3f32
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.recoilJumpDown hash=0x2f647681
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.spread hash=0x43dc4e85
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.tags hash=0x5191fd08
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.stats hash=0x8baf470c
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.effectors hash=0xb2e8f4d4
+[flat-probe] MISS name=Items.BladeMod3_Uncommon.abilities hash=0xf1b76a86
+[flat-probe] MISS name=Items.TechMod1_Common.damage hash=0x95b0ada6
+[flat-probe] MISS name=Items.TechMod1_Common.damageMin hash=0x940b0b5f
+[flat-probe] MISS name=Items.TechMod1_Common.damageMax hash=0xa8063406
+[flat-probe] MISS name=Items.TechMod1_Common.baseDamage hash=0x8fa1deee
+[flat-probe] MISS name=Items.TechMod1_Common.fireRate hash=0xd15e958b
+[flat-probe] MISS name=Items.TechMod1_Common.magazineCapacity hash=0x5ea6ae94
+[flat-probe] MISS name=Items.TechMod1_Common.weight hash=0x83b5ac8b
+[flat-probe] MISS name=Items.TechMod1_Common.level hash=0x5c52d800
+[flat-probe] MISS name=Items.TechMod1_Common.qualityLevel hash=0x147adbc1
+[flat-probe] MISS name=Items.TechMod1_Common.buyPrice hash=0x5dced0ee
+[flat-probe] MISS name=Items.TechMod1_Common.sellPrice hash=0x4ebfe6f9
+[flat-probe] MISS name=Items.TechMod1_Common.weight hash=0x83b5ac8b
+[flat-probe] MISS name=Items.TechMod1_Common.duration hash=0x732b71c4
+[flat-probe] MISS name=Items.TechMod1_Common.cooldown hash=0x2b17dddd
+[flat-probe] MISS name=Items.TechMod1_Common.value hash=0xdbcf4c27
+[flat-probe] MISS name=Items.TechMod1_Common.minDamage hash=0xff36be64
+[flat-probe] MISS name=Items.TechMod1_Common.maxDamage hash=0x28dd0c25
+[flat-probe] MISS name=Items.TechMod1_Common.weaponVignetteIntensity hash=0x615b135e
+[flat-probe] MISS name=Items.TechMod1_Common.weaponVignetteRadius hash=0x86d65583
+[flat-probe] MISS name=Items.TechMod1_Common.weaponZoom hash=0x56e9cd7d
+[flat-probe] MISS name=Items.TechMod1_Common.recoilJumpUp hash=0x80fa62be
+[flat-probe] MISS name=Items.TechMod1_Common.recoilJumpDown hash=0xad88669e
+[flat-probe] MISS name=Items.TechMod1_Common.spread hash=0xf8cd59b2
+[flat-probe] MISS name=Items.TechMod1_Common.tags hash=0xdb71351c
+[flat-probe] MISS name=Items.TechMod1_Common.stats hash=0x91ff73b9
+[flat-probe] MISS name=Items.TechMod1_Common.effectors hash=0xfcffa31e
+[flat-probe] MISS name=Items.TechMod1_Common.abilities hash=0xbfa03d4c
+[flat-probe] MISS name=Items.RangedMod1_Legendary.damage hash=0x265d3076
+[flat-probe] MISS name=Items.RangedMod1_Legendary.damageMin hash=0x03d6544e
+[flat-probe] MISS name=Items.RangedMod1_Legendary.damageMax hash=0x3fdb6b17
+[flat-probe] MISS name=Items.RangedMod1_Legendary.baseDamage hash=0xe5862343
+[flat-probe] MISS name=Items.RangedMod1_Legendary.fireRate hash=0xded80c80
+[flat-probe] MISS name=Items.RangedMod1_Legendary.magazineCapacity hash=0x3325e139
+[flat-probe] MISS name=Items.RangedMod1_Legendary.weight hash=0x3058315b
+[flat-probe] MISS name=Items.RangedMod1_Legendary.level hash=0xd7b526f8
+[flat-probe] MISS name=Items.RangedMod1_Legendary.qualityLevel hash=0xccdffde3
+[flat-probe] MISS name=Items.RangedMod1_Legendary.buyPrice hash=0x524849e5
+[flat-probe] MISS name=Items.RangedMod1_Legendary.sellPrice hash=0xd962b9e8
+[flat-probe] MISS name=Items.RangedMod1_Legendary.weight hash=0x3058315b
+[flat-probe] MISS name=Items.RangedMod1_Legendary.duration hash=0x7cade8cf
+[flat-probe] MISS name=Items.RangedMod1_Legendary.cooldown hash=0x249144d6
+[flat-probe] MISS name=Items.RangedMod1_Legendary.value hash=0x5028b2df
+[flat-probe] MISS name=Items.RangedMod1_Legendary.minDamage hash=0x68ebe175
+[flat-probe] MISS name=Items.RangedMod1_Legendary.maxDamage hash=0xbf005334
+[flat-probe] MISS name=Items.RangedMod1_Legendary.weaponVignetteIntensity hash=0x8623fcd5
+[flat-probe] MISS name=Items.RangedMod1_Legendary.weaponVignetteRadius hash=0x61bc88cb
+[flat-probe] MISS name=Items.RangedMod1_Legendary.weaponZoom hash=0x3cce30d0
+[flat-probe] MISS name=Items.RangedMod1_Legendary.recoilJumpUp hash=0x585f449c
+[flat-probe] MISS name=Items.RangedMod1_Legendary.recoilJumpDown hash=0xd8377de6
+[flat-probe] MISS name=Items.RangedMod1_Legendary.spread hash=0x4b20c462
+[flat-probe] MISS name=Items.RangedMod1_Legendary.tags hash=0x82372746
+[flat-probe] MISS name=Items.RangedMod1_Legendary.stats hash=0x1a188d41
+[flat-probe] MISS name=Items.RangedMod1_Legendary.effectors hash=0x6b22fc0f
+[flat-probe] MISS name=Items.RangedMod1_Legendary.abilities hash=0x287d625d
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.damage hash=0x27f54ca4
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.damageMin hash=0xd65ca831
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.damageMax hash=0xea519768
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.baseDamage hash=0x25e9c512
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.fireRate hash=0x346597a2
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.magazineCapacity hash=0xa1897901
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.weight hash=0x31f04d89
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.level hash=0xa4b8f2b9
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.qualityLevel hash=0x261616d4
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.buyPrice hash=0xb8f5d2c7
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.sellPrice hash=0x0ce84597
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.weight hash=0x31f04d89
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.duration hash=0x961073ed
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.cooldown hash=0xce2cdff4
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.value hash=0x2325669e
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.minDamage hash=0xbd611d0a
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.maxDamage hash=0x6a8aaf4b
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.weaponVignetteIntensity hash=0x4e04d876
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.weaponVignetteRadius hash=0xbb90b040
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.weaponZoom hash=0xfca1d681
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.recoilJumpUp hash=0xb296afab
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.recoilJumpDown hash=0x7fe80ceb
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.spread hash=0x4a88b8b0
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.tags hash=0x53f5e5c1
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.stats hash=0x69155900
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.effectors hash=0xbea80070
+[flat-probe] MISS name=Items.ShotgunMod1_Epic.abilities hash=0xfdf79e22
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.damage hash=0xc3e5d39e
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.damageMin hash=0x14ce4e22
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.damageMax hash=0x28c3717b
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.baseDamage hash=0xa195162a
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.fireRate hash=0x717c231e
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.magazineCapacity hash=0x40205530
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.weight hash=0xd5e0d2b3
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.level hash=0xbae8c335
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.qualityLevel hash=0x2e53ad3d
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.buyPrice hash=0xfdec667b
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.sellPrice hash=0xce7aa384
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.weight hash=0xd5e0d2b3
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.duration hash=0xd309c751
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.cooldown hash=0x8b356b48
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.value hash=0x3d755712
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.minDamage hash=0x7ff3fb19
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.maxDamage hash=0xa8184958
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.weaponVignetteIntensity hash=0x238a6867
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.weaponVignetteRadius hash=0x6a98454e
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.weaponZoom hash=0x78dd05b9
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.recoilJumpUp hash=0xbad31442
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.recoilJumpDown hash=0xace7260f
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.spread hash=0xae98278a
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.tags hash=0x02360153
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.stats hash=0x7745688c
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.effectors hash=0x7c3ae663
+[flat-probe] MISS name=Items.AdvancedKiroshiOpticsWallhackRare.abilities hash=0x3f657831
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.damage hash=0x7d41d7b2
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.damageMin hash=0x904e53ed
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.damageMax hash=0xac436cb4
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.baseDamage hash=0xaaca4916
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.fireRate hash=0x4f20320d
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.magazineCapacity hash=0x16e03ae9
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.weight hash=0x6b44d69f
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.level hash=0x15fcff47
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.qualityLevel hash=0xa67493f8
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.buyPrice hash=0xc3b07768
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.sellPrice hash=0x4afabe4b
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.weight hash=0x6b44d69f
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.duration hash=0xed55d642
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.cooldown hash=0xb5697a5b
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.value hash=0x92616b60
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.minDamage hash=0xfb73e6d6
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.maxDamage hash=0x2c985497
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.weaponVignetteIntensity hash=0xe3002bdb
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.weaponVignetteRadius hash=0x3bbd1ccf
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.weaponZoom hash=0x73825a85
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.recoilJumpUp hash=0x32f42a87
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.recoilJumpDown hash=0xdb0b9088
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.spread hash=0x103c23a6
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.tags hash=0x1c113ffa
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.stats hash=0xd85154fe
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.effectors hash=0xf8bafbac
+[flat-probe] MISS name=Items.AdvancedElectroshockMechanismEpic.abilities hash=0xbbe565fe
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.damage hash=0x4de35d4a
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.damageMin hash=0xd22dc3b0
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.damageMax hash=0xee20fce9
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.baseDamage hash=0xbf5207cf
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.fireRate hash=0x9e280324
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.magazineCapacity hash=0xa60b39f6
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.weight hash=0x5be65c67
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.level hash=0x0289eea8
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.qualityLevel hash=0x67ea94a1
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.buyPrice hash=0x12b84641
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.sellPrice hash=0x08992e16
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.weight hash=0x5be65c67
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.duration hash=0x3c5de76b
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.cooldown hash=0x64614b72
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.value hash=0x85147a8f
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.minDamage hash=0xb910768b
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.maxDamage hash=0x6efbc4ca
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.weaponVignetteIntensity hash=0xb6740d06
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.weaponVignetteRadius hash=0x476a7cf4
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.weaponZoom hash=0x661a145c
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.recoilJumpUp hash=0xf36a2dde
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.recoilJumpDown hash=0x2e1622a8
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.spread hash=0x209ea95e
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.tags hash=0xdebe9364
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.stats hash=0xcf244511
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.effectors hash=0xbad96bf1
+[flat-probe] MISS name=Items.AdvancedTroubleFinderUncommonPlus.abilities hash=0xf986f5a3
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.damage hash=0x0d9fa965
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.damageMin hash=0xc85fdb83
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.damageMax hash=0xf452e4da
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.baseDamage hash=0x009814c1
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.fireRate hash=0x36e44d30
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.magazineCapacity hash=0x6cb3029b
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.weight hash=0x1b9aa848
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.level hash=0xa176a742
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.qualityLevel hash=0x7dd7473b
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.buyPrice hash=0xba740855
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.sellPrice hash=0x12eb3625
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.weight hash=0x1b9aa848
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.duration hash=0x9491a97f
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.cooldown hash=0xccad0566
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.value hash=0x26eb3365
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.minDamage hash=0xa3626eb8
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.maxDamage hash=0x7489dcf9
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.weaponVignetteIntensity hash=0x0bef9afa
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.weaponVignetteRadius hash=0xf1b55645
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.weaponZoom hash=0xd9d00752
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.recoilJumpUp hash=0xe957fe44
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.recoilJumpDown hash=0xba62d96b
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.spread hash=0x60e25d71
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.tags hash=0x9df70d06
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.stats hash=0x6cdb0cfb
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.effectors hash=0xa0ab73c2
+[flat-probe] MISS name=BaseStatusEffect.BerserkCooldown.abilities hash=0xe3f4ed90
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.damage hash=0xa155d3fc
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.damageMin hash=0x94fce282
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.damageMax hash=0xa8f1dddb
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.baseDamage hash=0x77c3876e
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.fireRate hash=0x26b7488b
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.magazineCapacity hash=0x5fed0a16
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.weight hash=0xb750d2d1
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.level hash=0xd7f57e69
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.qualityLevel hash=0x3d4e52b8
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.buyPrice hash=0xaa270dee
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.sellPrice hash=0x4e480f24
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.weight hash=0xb750d2d1
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.duration hash=0x84c2acc4
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.cooldown hash=0xdcfe00dd
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.value hash=0x5068ea4e
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.minDamage hash=0xffc157b9
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.maxDamage hash=0x282ae5f8
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.weaponVignetteIntensity hash=0x6bc0b540
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.weaponVignetteRadius hash=0x7b7d78d7
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.weaponZoom hash=0xae8b94fd
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.recoilJumpUp hash=0xa9ceebc7
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.recoilJumpDown hash=0xc711b691
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.spread hash=0xcc2827e8
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.tags hash=0xc26fb646
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.stats hash=0x1a58d5d0
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.effectors hash=0xfc084ac3
+[flat-probe] MISS name=Items.BrainMeltLvl4PlusPlusProgram.abilities hash=0xbf57d491
+[flat-probe] MISS name=Items.royce_plasma_cutter.damage hash=0xf7dcd79c
+[flat-probe] MISS name=Items.royce_plasma_cutter.damageMin hash=0x2c23d774
+[flat-probe] MISS name=Items.royce_plasma_cutter.damageMax hash=0x102ee82d
+[flat-probe] MISS name=Items.royce_plasma_cutter.baseDamage hash=0x23a50f72
+[flat-probe] MISS name=Items.royce_plasma_cutter.fireRate hash=0x4427b1bc
+[flat-probe] MISS name=Items.royce_plasma_cutter.magazineCapacity hash=0xdf971d16
+[flat-probe] MISS name=Items.royce_plasma_cutter.weight hash=0xe1d9d6b1
+[flat-probe] MISS name=Items.royce_plasma_cutter.level hash=0xed353d5c
+[flat-probe] MISS name=Items.royce_plasma_cutter.qualityLevel hash=0x385a5091
+[flat-probe] MISS name=Items.royce_plasma_cutter.buyPrice hash=0xc8b7f4d9
+[flat-probe] MISS name=Items.royce_plasma_cutter.sellPrice hash=0xf6973ad2
+[flat-probe] MISS name=Items.royce_plasma_cutter.weight hash=0xe1d9d6b1
+[flat-probe] MISS name=Items.royce_plasma_cutter.duration hash=0xe65255f3
+[flat-probe] MISS name=Items.royce_plasma_cutter.cooldown hash=0xbe6ef9ea
+[flat-probe] MISS name=Items.royce_plasma_cutter.value hash=0x6aa8a97b
+[flat-probe] MISS name=Items.royce_plasma_cutter.minDamage hash=0x471e624f
+[flat-probe] MISS name=Items.royce_plasma_cutter.maxDamage hash=0x90f5d00e
+[flat-probe] MISS name=Items.royce_plasma_cutter.weaponVignetteIntensity hash=0x2b28c936
+[flat-probe] MISS name=Items.royce_plasma_cutter.weaponVignetteRadius hash=0x5a7cdf7e
+[flat-probe] MISS name=Items.royce_plasma_cutter.weaponZoom hash=0xfaed1ce1
+[flat-probe] MISS name=Items.royce_plasma_cutter.recoilJumpUp hash=0xacdae9ee
+[flat-probe] MISS name=Items.royce_plasma_cutter.recoilJumpDown hash=0x6d594d42
+[flat-probe] MISS name=Items.royce_plasma_cutter.spread hash=0x9aa12388
+[flat-probe] MISS name=Items.royce_plasma_cutter.tags hash=0xb77d4d27
+[flat-probe] MISS name=Items.royce_plasma_cutter.stats hash=0x209896e5
+[flat-probe] MISS name=Items.royce_plasma_cutter.effectors hash=0x44d77f35
+[flat-probe] MISS name=Items.royce_plasma_cutter.abilities hash=0x0788e167
+[flat-probe] sweep complete: 297 candidates, hits=0, misses=297
+[apply-trigger] after VerifyCandidateFlats
+[apply-trigger] system callbacks done; user mods can apply now
+[tweakxl] mods dir: /Users/lucas_1/Library/Application Support/Steam/steamapps/common/Cyberpunk 2077/r6/tweaks
+[tweakxl] mods dir not found / not a directory — nothing to apply
+[tweakxl] mods scanned: 0 (yaml=0, tweak=0)
+[S_API FAIL] Tried to access Steam interface SteamFriends017 before SteamAPI_Init succeeded.
+May 29 15:17:21  Cyberpunk2077[21896] <Error>: GameServicesSteam::OnSetRichPresence: Failed to set status 'MainMenu'

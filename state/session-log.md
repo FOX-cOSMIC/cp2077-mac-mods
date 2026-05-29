@@ -526,3 +526,35 @@ Phase 0 essentially DONE: injection, slide formula, struct layout, singleton pat
 - **Blockers:** none — the fix is well-scoped.
 
 ---
+
+## 2026-05-29 — 🎯 P1.6b PASSES — First in-game mutation working (Claude as Conductor)
+
+- **Goal:** Fix per-map hash mode so flats lookups use nameHash-direct while records continue using fnv1a-8B.
+- **Schema's run (Opus 4.7, 226s ≈ 3.8 min, 510 raw output lines):**
+  - Updated HashMap.{hpp,cpp}: replaced global g_hashMode with g_recordsMode/g_flatsMode atomics + Get/Set accessors per map
+  - Updated TweakDB.cpp: VerifyFlatEntry feeds verdict into SetFlatsHashMode; ReadFlat/WriteFlat use GetFlatsHashMode()
+  - Loader.cpp: unchanged (sequencing was already correct)
+  - Built clean: zero errors, zero warnings, all targets including untouched Patchwork tweakxl
+- **🎯 In-game smoke test PASS (independently verified by Conductor):**
+  - Records test (regression check): hash-function=fnv1a-8B, lookup-test pass ✓
+  - **Flats R/W test PASS:**
+    - 6 flats samples — layout `flatValue-ptr-at-entry` confirmed (tally 6/6)
+    - Hash mode `nameHash-direct` confirmed (`stored=0xce8348b9 == name; fnv8/fnv5/crc8 all miss`)
+    - **Lookup found entry:** `found=yes raw=0x00000002`
+    - **WRITE @ 0x31a451f68: 0x2 → 0x3 verify=ok** ← LIVE GAME MEMORY MUTATION
+    - **Reread match=yes** ← write persisted
+    - **Restore @ 0x31a451f68: 0x3 → 0x2 verify=ok** ← game state left untouched
+- **🚀 Milestone: First successful mutation of a live TweakDB flat value via our framework.**
+  - The full Phase 0 architecture is now empirically validated: slide → singleton → struct → lookup (per-map hash) → entry → FlatValue at +0x18 → write at FlatValue+0x08
+  - Two new architectural FACTS surfaced for Scope's next fire:
+    - F-NNN candidate: Records map uses FNV-1a 32-bit on 8 bytes of TweakDBID
+    - F-NNN candidate: Flats map uses nameHash-direct (the binary spec's CRC32 nameHash IS the bucket key, no recomputation)
+    - F-NNN candidate: Flats entry has FlatValue* at entry+0x18 (F-019 ref-counted-payload model confirmed; tdbOffset-buffer-indexing Windows model disproved for macOS, tally 0/6)
+- **Open follow-up:** vft→FlatType map is still unresolved. ReadFlat returns raw uint32 typed as Unknown. P1.10 will work for scalar Assign ops (caller-declared type) but typed reads and array/string ops still blocked. This is researcher RE work.
+- **Status:** Sprint 2 Schema track DONE (P1.4 + P1.5 + P1.6 + P1.6b). Phase 1 progress 50% → 65%.
+- **Files changed:** HashMap.{hpp,cpp}, TweakDB.cpp; docs/probes/logs/red4ext-mac-2026-05-29-p1-6b.log; state/tasks.yaml, state/status.yaml; this log.
+- **FACTS added by this turn:** none directly — Scope to publish F-020..F-023 covering the records hash, flats hash, flats entry layout, and live database statistics.
+- **Blockers:** none.
+- **Next:** Either (a) P1.3 (Hookline — apply-trigger polling using FUN_102b75744 + the now-working data path) OR (b) P1.8 (Patchwork — YAML parser). Both are unblocked. After both + P1.10 (applicator), we have the end-to-end mod-application demo.
+
+---

@@ -8,10 +8,12 @@
 // the per-map field offsets live in TweakDB.hpp (P1.4); this file is the
 // algorithm that walks them.
 //
-// Bucket hashing is 32-bit FNV-1a (F-012: basis 0x811c9dc5, prime 0x01000193,
-// found in GetRecords' body). F-012 did not pin down WHICH bytes of the key are
-// hashed; VerifyHashFunction() settles that empirically at runtime against a
-// real stored entry, then HashKey() uses the confirmed mode.
+// Bucket hashing is per-map (P1.6b): the records map (+0x88) hashes with 32-bit
+// FNV-1a (F-012, P1.5), but the flats map (+0x58) uses key.nameHash DIRECTLY
+// (no rehash — confirmed in-game by P1.6's VerifyFlatEntry). So the hash mode is
+// NOT global: each caller passes the HashMode discovered for the map it walks.
+// VerifyHashFunction()/VerifyFlatEntry() detect and remember each map's mode;
+// Get{Records,Flats}HashMode() expose them.
 //
 // READ-ONLY. Every game-managed pointer is dereferenced via
 // mach_vm_read_overwrite (SingletonAccess model) — a bad pointer yields nullptr
@@ -50,13 +52,23 @@ uint32_t Fnv1a32(const void* data, size_t len);
 // zlib / ISO-3309 CRC32 (reflected poly 0xEDB88320), seed 0 (spec §6).
 uint32_t Crc32(const void* data, size_t len);
 
-// Compute the bucket/stored hash for a key using the runtime-confirmed mode.
-uint32_t HashKey(TweakDBID key);
+// Compute the bucket/stored hash for a key under an explicit mode.
+uint32_t HashKey(TweakDBID key, HashMode mode);
 
-// Walk `map` for `key`. Returns a pointer to the matching entry's BYTE-0 start
-// (next-index @+0x00, stored hash @+0x04, key @+0x08, payload after), or
+// Walk `map` for `key` using `mode` (the hash function for THAT map — different
+// maps use different modes). Returns a pointer to the matching entry's BYTE-0
+// start (next-index @+0x00, stored hash @+0x04, key @+0x08, payload after), or
 // nullptr if not found / map invalid. Never crashes on bad game pointers.
-const uint8_t* Lookup(const HashMap* map, TweakDBID key);
+const uint8_t* Lookup(const HashMap* map, TweakDBID key, HashMode mode);
+
+// ── Per-map hash modes (P1.6b) ───────────────────────────────────────────────
+// Detected at runtime and remembered so downstream callers (ReadFlat/WriteFlat,
+// the applicator) walk each map with its own hash function. Defaults are the
+// structural prior (Fnv1a8B); the verifiers overwrite them with the truth.
+HashMode GetRecordsHashMode();   // set by VerifyHashFunction()  (records, +0x88)
+HashMode GetFlatsHashMode();     // set by VerifyFlatEntry()     (flats,   +0x58)
+void     SetRecordsHashMode(HashMode mode);
+void     SetFlatsHashMode(HashMode mode);
 
 // One-shot (std::call_once) diagnostic: against the first non-empty records-map
 // entry, try every candidate hash function, identify which reproduces the

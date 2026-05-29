@@ -355,11 +355,17 @@ void DoVerifyFlatEntry(const TweakDB* db) {
         const uint32_t cF8 = Fnv1a32(kb, 8), cF5 = Fnv1a32(kb, 5), cC8 = Crc32(kb, 8);
         const uint32_t cName = (uint32_t)kb[0] | ((uint32_t)kb[1] << 8) |
                                ((uint32_t)kb[2] << 16) | ((uint32_t)kb[3] << 24);
-        const char* m =
-            storedHash == cF8  ? "fnv1a-8B" :
-            storedHash == cF5  ? "fnv1a-5B" :
-            storedHash == cC8  ? "crc32-8B" :
-            storedHash == cName? "nameHash-direct" : "unknown";
+        HashMode    fmode = HashMode::Unknown;
+        const char* m     = "unknown";
+        if      (storedHash == cF8)   { fmode = HashMode::Fnv1a8B;        m = "fnv1a-8B"; }
+        else if (storedHash == cF5)   { fmode = HashMode::Fnv1a5B;        m = "fnv1a-5B"; }
+        else if (storedHash == cC8)   { fmode = HashMode::Crc32_8B;       m = "crc32-8B"; }
+        else if (storedHash == cName) { fmode = HashMode::NameHashDirect; m = "nameHash-direct"; }
+
+        // P1.6b: feed the verdict into the per-map state so flats lookups use it.
+        // If nothing matched, fall back to nameHash-direct (the in-game finding).
+        SetFlatsHashMode(fmode == HashMode::Unknown ? HashMode::NameHashDirect : fmode);
+
         log_line("[hashmap] flats-map hash-function: %s stored=0x%08x "
                  "fnv8=0x%08x fnv5=0x%08x crc8=0x%08x name=0x%08x",
                  m, storedHash, cF8, cF5, cC8, cName);
@@ -433,7 +439,7 @@ std::optional<FlatValue> ReadFlat(const TweakDB* db, TweakDBID id) {
     const FlatLayout lay = GetFlatLayout();
     if (!lay.confirmed) return std::nullopt;
 
-    const uint8_t* entryP = Lookup(GetFlatsMapCandidate(db), id);
+    const uint8_t* entryP = Lookup(GetFlatsMapCandidate(db), id, GetFlatsHashMode());
     if (!entryP) return std::nullopt;
 
     uintptr_t vobj = 0;
@@ -498,7 +504,7 @@ bool WriteFlat(TweakDB* db, TweakDBID id, FlatValue newValue) {
             return false;
     }
 
-    const uint8_t* entryP = Lookup(GetFlatsMapCandidate(db), id);
+    const uint8_t* entryP = Lookup(GetFlatsMapCandidate(db), id, GetFlatsHashMode());
     if (!entryP) { log_line("[flat-write] REFUSED id=<0x%08x>: not found in flats map", id.nameHash); return false; }
 
     uintptr_t vobj = 0;

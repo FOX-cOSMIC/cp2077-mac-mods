@@ -66,9 +66,11 @@ bool SafeU32(uintptr_t a, uint32_t* v) { return SafeRead(a, v, sizeof(*v)); }
 bool SafeU64(uintptr_t a, uint64_t* v) { return SafeRead(a, v, sizeof(*v)); }
 bool SafePtr(uintptr_t a, uintptr_t* v) { return SafeRead(a, v, sizeof(*v)); }
 
-// Runtime-confirmed hashing mode (set by VerifyHashFunction). Default prior is
-// the F-012-implied 32-bit FNV-1a over all 8 key bytes.
-std::atomic<HashMode> g_hashMode{HashMode::Fnv1a8B};
+// Per-map runtime-confirmed hash modes (P1.6b). Records uses FNV-1a (F-012/P1.5);
+// flats uses nameHash-direct (P1.6). Default to the structural prior (Fnv1a8B)
+// until each verifier overwrites it with the in-game truth.
+std::atomic<HashMode> g_recordsMode{HashMode::Fnv1a8B};
+std::atomic<HashMode> g_flatsMode{HashMode::Fnv1a8B};
 
 // Read a hash map's four load-bearing fields safely. Returns false if any read
 // faults or the map is structurally empty (zero buckets/stride/null pointers).
@@ -150,8 +152,8 @@ void DoVerifyHashFunction(const TweakDB* db) {
 
     // Per spec: if nothing matched, fall back to nameHash-direct (safest) and
     // dump every candidate so the researcher can investigate.
-    g_hashMode.store(mode == HashMode::Unknown ? HashMode::NameHashDirect : mode,
-                     std::memory_order_release);
+    const HashMode effective = (mode == HashMode::Unknown) ? HashMode::NameHashDirect : mode;
+    SetRecordsHashMode(effective);
 
     const uint32_t off = (uint32_t)key.tdbOffset[0]
                        | ((uint32_t)key.tdbOffset[1] << 8)
@@ -169,8 +171,9 @@ void DoVerifyHashFunction(const TweakDB* db) {
                  cFnv8, cFnv5, cCrc8, cName, storedHash);
     }
 
-    // Round-trip: look the same key back up; it must resolve to the same entry.
-    const uint8_t* hit = Lookup(rec, key);
+    // Round-trip: look the same key back up (with the records mode just found);
+    // it must resolve to the same entry.
+    const uint8_t* hit = Lookup(rec, key, effective);
     const bool pass = (hit == reinterpret_cast<const uint8_t*>(entry));
     log_line("[hashmap] lookup-test: %s key=<TweakDBID(0x%08x,len=%u)> entry=%p expected=%p",
              pass ? "pass" : "fail", key.nameHash, key.nameLength,
@@ -204,10 +207,15 @@ uint32_t Crc32(const void* data, size_t len) {
     return ~crc;
 }
 
-uint32_t HashKey(TweakDBID key) {
+HashMode GetRecordsHashMode() { return g_recordsMode.load(std::memory_order_acquire); }
+HashMode GetFlatsHashMode()   { return g_flatsMode.load(std::memory_order_acquire); }
+void SetRecordsHashMode(HashMode mode) { g_recordsMode.store(mode, std::memory_order_release); }
+void SetFlatsHashMode(HashMode mode)   { g_flatsMode.store(mode, std::memory_order_release); }
+
+uint32_t HashKey(TweakDBID key, HashMode mode) {
     uint8_t b[8];
     std::memcpy(b, &key, sizeof(b));
-    switch (g_hashMode.load(std::memory_order_acquire)) {
+    switch (mode) {
         case HashMode::Fnv1a8B:        return Fnv1a32(b, 8);
         case HashMode::Fnv1a5B:        return Fnv1a32(b, 5);
         case HashMode::Crc32_8B:       return Crc32(b, 8);
@@ -217,11 +225,11 @@ uint32_t HashKey(TweakDBID key) {
     }
 }
 
-const uint8_t* Lookup(const HashMap* map, TweakDBID key) {
+const uint8_t* Lookup(const HashMap* map, TweakDBID key, HashMode mode) {
     MapView mv;
     if (!ReadMapView(map, &mv)) return nullptr;
 
-    const uint32_t h = HashKey(key);
+    const uint32_t h = HashKey(key, mode);
     uint64_t key64 = 0;
     std::memcpy(&key64, &key, sizeof(key64));
 

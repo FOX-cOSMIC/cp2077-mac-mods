@@ -1,0 +1,23 @@
+[red4ext-mac] loader init 2026-05-29T11:40:41, base=0x104c74000 slide=0x4c74000
+[singleton-access] initial poll: 0x0 (null — expected at load time; DB built later)
+[singleton-access] deferred sample: 0x322a10bd0
+[tweakdb] H-008 verification: mapA(+0x58).count=193354 mapC(+0x108).count=12 verdict=flats-is-A
+[tweakdb] H-008 raw: mapA{@08=193354,@0c=193354} records{@08=843,@0c=843} mapC{@08=12,@0c=13} (F-015 lists mapC.count@0c=+0x114; F-012/F-019 use @08)
+[tweakdb] state: records.count=843 valueBufferSize=4291664
+[hashmap] hash-function: fnv1a-8B stored=0x7280140e computed=0x7280140e key=<TweakDBID(0x0cc9a1b0,len=1,off=0x000000)> bucket=0/843
+[hashmap] lookup-test: pass key=<TweakDBID(0x0cc9a1b0,len=1)> entry=0x701dfe2da0 expected=0x701dfe2da0
+[flat-layout] flats: count=193354 stride=0x20 bufferBase=0x71b204000 bufferSize=4291664
+[flat-layout] sample[0]: hash=0xce8348b9 key=<TweakDBID(0xce8348b9,len=39,off=0x000000)> viaTdb.vft=0x0 viaTdb.raw32=0x00000000 asI32=0 asF32=0 entry+0x10.i32=447606528 ptr@0x10=0x31aadef00 ptr@0x18=0x31a451f60
+[flat-layout] sample[1]: hash=0x8ccf59c9 key=<TweakDBID(0x8ccf59c9,len=43,off=0x000000)> viaTdb.vft=0x0 viaTdb.raw32=0x00000000 asI32=0 asF32=0 entry+0x10.i32=448269664 ptr@0x10=0x31ab80d60 ptr@0x18=0x31ab91388
+[flat-layout] sample[2]: hash=0x5bd16bfd key=<TweakDBID(0x5bd16bfd,len=28,off=0x000000)> viaTdb.vft=0x0 viaTdb.raw32=0x00000000 asI32=0 asF32=0 entry+0x10.i32=454930160 ptr@0x10=0x31b1daef0 ptr@0x18=0x31b1684e8
+[flat-layout] sample[3]: hash=0x3dbd038a key=<TweakDBID(0x3dbd038a,len=49,off=0x000000)> viaTdb.vft=0x0 viaTdb.raw32=0x00000000 asI32=0 asF32=0 entry+0x10.i32=457050272 ptr@0x10=0x31b3e08a0 ptr@0x18=0x31b4abd68
+[flat-layout] sample[4]: hash=0xa1d4c90d key=<TweakDBID(0xa1d4c90d,len=52,off=0x000000)> viaTdb.vft=0x0 viaTdb.raw32=0x00000000 asI32=0 asF32=0 entry+0x10.i32=446195664 ptr@0x10=0x31a9867d0 ptr@0x18=0x31a940348
+[flat-layout] sample[5]: hash=0x23a86068 key=<TweakDBID(0x23a86068,len=39,off=0x000000)> viaTdb.vft=0x0 viaTdb.raw32=0x00000000 asI32=0 asF32=0 entry+0x10.i32=460020080 ptr@0x10=0x31b6b5970 ptr@0x18=0x31b6f5a50
+[flat-layout] verdict: flatValue-ptr-at-entry type-tag-offset:+0x00(vft) value-data-offset:+0x8 buffer-offset-source:entry-ptr tally{tdb=0 ptr@0x18=6 ptr@0x10=6 entryOff=0}/6
+[hashmap] flats-map hash-function: nameHash-direct stored=0xce8348b9 fnv8=0x0ee3fa46 fnv5=0x33c7bd12 crc8=0x289b8eb0 name=0xce8348b9
+[flat-rw] read id=<TweakDBID(0xce8348b9,len=39)> found=yes raw=0x00000002
+[flat-write] id=<TweakDBID(0xce8348b9,len=39)> type=Int32 @0x31a451f68 old=0x00000002 new=0x00000003 width=4 verify=ok
+[flat-rw] write id=<0xce8348b9> old=0x00000002 new=0x00000003 result=ok reread=0x00000003 match=yes
+[flat-write] id=<TweakDBID(0xce8348b9,len=39)> type=Int32 @0x31a451f68 old=0x00000003 new=0x00000002 width=4 verify=ok
+[flat-rw] restore old=0x00000002 result=ok
+[flat-rw] verdict: pass

@@ -380,3 +380,18 @@ Phase 0 essentially DONE: injection, slide formula, struct layout, singleton pat
 - **Next:** Run smoke test against live game to validate end-to-end. Then P1.2 (singleton accessor) or P1.7 (mod scanner) in parallel.
 
 ---
+
+## 2026-05-29 — P1.1 smoke test PASS (Claude as Conductor)
+
+- **Live in-game test:** Killed running Cyberpunk, ran tools/test-slide-capture.sh → injected libred4ext.dylib into a fresh game launch → captured loader init line with correct base + slide → auto-killed → PASS.
+- **Capture:** `base=0x1042f8000 slide=0x42f8000` → `base - slide == 0x100000000` ✓
+- **Slide variance evidence:** F-004's per-launch ASLR rule now has THREE empirical data points supporting it:
+  - Probe v1 run: slide 0x285c000
+  - Probe v2 run: slide 0xb10000
+  - P1.1 smoke test: slide 0x42f8000
+  - All three: base - slide == 0x100000000 ✓
+- **Significance:** First production code from our project (not a throwaway probe) verified working in-game.
+- **Files changed:** docs/probes/logs/red4ext-mac-2026-05-29-p1-1.log (evidence), this log.
+- **Next:** P1.2 (singleton accessor) — consume the validated StaticToRuntime(0x1080c92d0) to read the live TweakDB* pointer.
+
+---

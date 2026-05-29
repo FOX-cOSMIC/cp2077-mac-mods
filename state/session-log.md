@@ -721,3 +721,9 @@ Found that tweakdb.bin stores record names (12,951) but not flat property names 
 - **Next:** Lucas's call between (a)/(b)/(c)/(d).
 
 ---
+
+---
+
+**2026-05-29 — Scope (researcher) — Runtime flat-name candidate list (for Schema's probe)**
+
+Built tools/probes/candidate_flats.txt: 98 distinct scalar (Int32/Float/Bool) candidates, all records verified present via strings -8 grep -xF, properties drawn from matching ExtraFlats.yaml type blocks. Coverage: ~29 weapon (WeaponItem), ~16 grenade (Grenade/Item), ~20 attack/projectile (Attack_Projectile), ~18 character (Character), ~10 status-effect (StatusEffect), 3 consumable, 2 perk. Honest reallocation: vehicle/device/economy/movement buckets are NOT derivable as scalar flats (Vehicle ExtraFlats all String; price=TweakDBID; zero Constants.*; movement=StatModifier system) — documented in-file. No candidate is 'high' confidence: cinema rejected all 5 ExtraFlats picks, so this is a hypothesis set; M=51 (strong type-match), L=47. Embedded the exact probe interface + a systemic-bug warning for Schema (if ALL miss, suspect CRC32/hash-mode/offset bug, not absent flats — sanity-check a known RECORD id in the +0x88 records map first; confirm flats block per H-008). No F-NNN added (probe is the verifier). Did not run the game.

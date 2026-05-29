@@ -1,0 +1,210 @@
+# candidate_flats.txt — runtime flat-name candidates for the lookup probe
+# Author: Scope (researcher) · Date: 2026-05-29 · Game: 2.3.1 (build 5314028, F-001)
+#
+# WHY THIS FILE EXISTS
+#   tweakdb.bin stores RECORD names but NOT flat property names (F-020); flat
+#   names are reconstructed from runtime RTTI. The offline cinema attempt
+#   (CINEMA_DEMO_FLATS.md) REJECTED all 5 ops -> we cannot verify flat presence
+#   offline. This is a HYPOTHESIS set for the runtime probe to test, not a
+#   verified set. The probe (Schema, next turn) is the verifier.
+#
+# HOW EACH LINE WAS CHOSEN
+#   record   : confirmed present via `strings -8 tweakdb.bin | grep -xF` (all 41 records verified)
+#   property : a SCALAR (Int32/Float/Bool) flat from the matching record-TYPE
+#              block in reference/windows-tweakxl/data/ExtraFlats.yaml
+#              (P1.10a WriteFlat only handles Int32/Float/Bool).
+#   The record<->type binding (e.g. "Preset_* is WeaponItem") is INFERRED from
+#   naming; that inference is exactly what the probe confirms/refutes.
+#
+# CONFIDENCE: no line is "high" until the probe HITs (cinema lesson). Tags below:
+#   [M]  medium  — property strongly matches record type, likely universal on it
+#   [L]  low     — plausible but type-binding or per-record presence uncertain
+#
+# FORMAT: one `Record.property` per line. `#` lines and inline `# ...` comments
+# are ignored by the probe. ~100 candidates.
+#
+# NOTE on missing diversity buckets (honest, per F-020 + ExtraFlats reality):
+#   - VEHICLE scalars: ExtraFlats `Vehicle` block is ALL String; only 7 Vehicle.*
+#     records exist (tuning helpers). No scalar vehicle flats are derivable. The
+#     lone vehicle scalars (VehicleTPPCameraPresetParams.boomLength,
+#     VehicleDataPackage.exiting) have no confirmable record names in the pool.
+#   - DEVICE scalars: no `Devices.*` namespace in the pool; `Device` block has 1
+#     scalar. Not derivable.
+#   - ECONOMY/price: `price` is TweakDBID (foreignType ConstantStatModifier), NOT
+#     scalar; zero `Constants.*` strings (F-020). Not derivable as scalar flats.
+#   - MOVEMENT speed / FOV: driven by the StatModifier system, not scalar flats.
+#   Buckets reallocated to where real scalars exist (weapon/grenade/projectile/
+#   character/status-effect).
+
+# ============================================================
+# WEAPON FLATS  (Items.Preset_* -> WeaponItem block)
+# Visible: weapon view-model render (size/clip/vignette/blur), reload, special-attack.
+# These are weapon-RENDER params -> likely set on most weapon records.
+# ============================================================
+Items.Preset_Nova_Default.weaponNearPlane            # [M] Float
+Items.Preset_Nova_Default.weaponFarPlane             # [M] Float
+Items.Preset_Nova_Default.weaponVignetteIntensity    # [M] Float (cinema rejected once — re-test)
+Items.Preset_Nova_Default.weaponVignetteRadius       # [M] Float
+Items.Preset_Nova_Default.weaponBlurIntensity        # [M] Float
+Items.Preset_Nova_Default.minimumReloadTime          # [M] Float
+Items.Preset_Nova_Default.scaleToPlayer              # [M] Bool
+Items.Preset_Lexington_Default.weaponNearPlane       # [M] Float
+Items.Preset_Lexington_Default.weaponVignetteIntensity # [M] Float
+Items.Preset_Lexington_Default.minimumReloadTime     # [M] Float
+Items.Preset_HMG_Default.weaponNearPlane             # [M] Float
+Items.Preset_HMG_Default.minimumReloadTime           # [M] Float
+Items.Preset_Defender_Default.weaponVignetteIntensity # [M] Float
+Items.Preset_Defender_Default.minimumReloadTime      # [M] Float
+Items.Preset_Burya_Default.weaponNearPlane           # [M] Float
+Items.Preset_Burya_Default.specialAttackCost         # [M] Float
+Items.Preset_Overture_Default.weaponNearPlane        # [M] Float
+Items.Preset_Overture_Default.weaponVignetteIntensity # [M] Float
+Items.Preset_Quasar_Default.minimumReloadTime        # [M] Float
+Items.Preset_Crusher_Default.minimumReloadTime       # [M] Float
+Items.Preset_Dian_Default.weaponNearPlane            # [M] Float
+Items.Preset_Pulsar_Default.weaponVignetteIntensity  # [M] Float
+Items.Preset_Saratoga_Default.weaponNearPlane        # [M] Float
+Items.Preset_Shingen_Default.weaponEdgesSharpness    # [M] Float
+Items.Preset_Metel_Default.weaponNearPlane           # [M] Float
+Items.Preset_Nova_Default.specialAttackNumber        # [L] Int32
+Items.Preset_Nova_Default.numberOfHandAnims          # [L] Int32
+Items.Preset_Nova_Default.saveStatPools              # [L] Bool
+Items.Preset_Nova_Default.weaponSwapOnAttackDelay    # [M] Float
+
+# ============================================================
+# GRENADE FLATS  (Items.Grenade* -> Grenade block, + Item block for throwables)
+# Visible: fuse timing, bounce/rotation, smoke size, impact behavior.
+# ============================================================
+Items.GrenadeFragRegular.delayToDetonate             # [M] Float — fuse time
+Items.GrenadeFragRegular.explodeOnImpact             # [M] Bool
+Items.GrenadeFragRegular.minimumDistanceFromFloor    # [L] Float
+Items.GrenadeFragSticky.delayToDetonate              # [M] Float
+Items.GrenadeFragSticky.explodeOnImpact              # [M] Bool
+Items.GrenadeFlashRegular.delayToDetonate            # [M] Float
+Items.GrenadeEMPRegular.delayToDetonate              # [M] Float
+Items.GrenadeEMPRegular.turretDisableDuration        # [L] Float
+Items.GrenadeBiohazardRegular.delayToDetonate        # [M] Float
+Items.GrenadeIncendiaryRegular.delayToDetonate       # [M] Float
+Items.GrenadeIncendiaryRegular.freezingDuration      # [L] Float
+Items.GrenadeSmokeRegular.smokeEffectRadius          # [M] Float — bigger cloud
+Items.GrenadeSmokeRegular.smokeEffectDuration        # [M] Float
+Items.GrenadeReconRegular.delayToDetonate            # [M] Float
+Items.GrenadeFragRegular.startVelocity               # [L] Float (Item block — throw speed)
+Items.GrenadeFragRegular.lifetime                    # [L] Float (Item block)
+
+# ============================================================
+# ATTACK / PROJECTILE FLATS  (Attacks.* -> Attack_Projectile block)
+# Visible: explosion size/range, detonation timing, projectile arc/gravity.
+# CINEMATIC: bigger explosions.
+# ============================================================
+Attacks.MissileProjectile.explosionRadius            # [M] Float — giant explosions
+Attacks.MissileProjectile.explosionRange             # [M] Float
+Attacks.MissileProjectile.detonationTimer            # [L] Float
+Attacks.MissileProjectile.gravitySimulation          # [L] Float
+Attacks.HerculesProjectile.explosionRadius           # [M] Float
+Attacks.HerculesProjectile.explosionRange            # [M] Float
+Attacks.ChimeraRocketProjectile.explosionRadius      # [M] Float
+Attacks.ChimeraRocketProjectile.explosionRange       # [M] Float
+Attacks.RocketChargedProjectile.explosionRadius      # [M] Float
+Attacks.EMPProjectile.explosionRadius                # [L] Float
+Attacks.ChemicalProjectile.armingDistance            # [L] Float
+Attacks.PlasmaProjectile.explosionRadius             # [L] Float
+Attacks.Bullet_GameEffect.chance                     # [L] Float (Attack_GameEffect block)
+Attacks.Bullet_GameEffect.attackEffectDuration       # [L] Float
+
+# ============================================================
+# CHARACTER / NPC FLATS  (Character.* -> Character / SubCharacter block)
+# Visible: ragdoll/physics mass, body size, fall-death timing, level.
+# ============================================================
+Character.Player_Puppet_Base.mass                    # [M] Float — ragdoll/physics
+Character.Player_Puppet_Base.sizeFront               # [L] Float
+Character.Player_Puppet_Base.sizeBack                # [L] Float
+Character.Player_Puppet_Base.sizeLeft                # [L] Float
+Character.Player_Puppet_Base.sizeRight               # [L] Float
+Character.Player_Puppet_Base.walkTiltCoefficient     # [L] Float
+Character.Player_Puppet_Base.tiltAngleOnSpeed        # [L] Float
+Character.Player_Puppet_Base.turnInertiaDamping      # [L] Float
+Character.Player_Puppet_Base.pseudoAcceleration      # [L] Float
+Character.Player_Puppet_Base.airDeathRagdollDelay    # [L] Float
+Character.Player_Puppet_Base.speedIdleThreshold      # [L] Float
+Character.Player_Puppet_Base.saveStatPools           # [L] Bool
+Character.Silverhand.mass                            # [L] Float
+Character.Silverhand.level                           # [L] Int32
+Character.johnny_replacer.mass                       # [L] Float
+Character.Player_Puppet_Base.combatDefaultZOffset    # [L] Float
+Character.Player_Puppet_Base.massNormalizedCoefficient # [L] Float
+Character.Player_Puppet_Base.startingRecoveryBalance # [L] Float
+
+# ============================================================
+# STATUS-EFFECT FLATS  (BaseStatusEffect.* -> StatusEffect block)
+# Visible: effect cost/exp scaling, armor-melt cap, reapply behavior.
+# ============================================================
+BaseStatusEffect.BerserkNPCBuff.expModifier          # [L] Float
+BaseStatusEffect.BerserkNPCBuff.costReductionPerStack # [L] Float
+BaseStatusEffect.BerserkNPCBuff.canReapply           # [L] Bool
+BaseStatusEffect.AirDrop_Burning.armorMeltMaxPercent # [L] Float
+BaseStatusEffect.AirDrop_Burning.canReapply          # [L] Bool
+BaseStatusEffect.Cloaked.expModifier                 # [L] Float
+BaseStatusEffect.Cloaked.canReapply                  # [L] Bool
+BaseStatusEffect.ForceKill.canReapply                # [L] Bool
+BaseStatusEffect.GlowingTattoos.canReapply           # [L] Bool
+BaseStatusEffect.CloakedOda.canReapply               # [L] Bool
+
+# ============================================================
+# CONSUMABLE FLATS  (Items.Good*/FirstAid -> ConsumableItem block)
+# ConsumableItem has only one scalar; low yield but cheap to test.
+# ============================================================
+Items.GoodQualityAlcohol1.amountOfCapacityGivenForRipperdocUI  # [L] Float
+Items.GoodQualityDrink1.amountOfCapacityGivenForRipperdocUI    # [L] Float
+Items.FirstAidWhiffV0.amountOfCapacityGivenForRipperdocUI      # [L] Float
+
+# ============================================================
+# PERK FLATS  (NewPerks.* -> NewPerk block) — LOW confidence (sparse per-record)
+# Cinematic IF present: time-dilation strength/duration.
+# ============================================================
+NewPerks.RipAndTearRanged_Buff.timeDilationStrength  # [L] Float
+NewPerks.RipAndTearRanged_Buff.timeDilationDuration  # [L] Float
+
+# ============================================================
+# WILDCARDS — fresh cinematic picks (distinct records; Attack_Projectile block)
+# Top cinematic priorities to test first are the explosionRadius lines above
+# (MissileProjectile / HerculesProjectile) + GrenadeSmokeRegular.smokeEffectRadius.
+# ============================================================
+Attacks.RocketChargedExplosion.explosionRadius       # [M] Float — charged-rocket airburst
+Attacks.PanzerRainMissile.explosionRadius            # [M] Float — Panzer barrage
+Attacks.DelamainRainMissile.explosionRadius          # [L] Float
+Attacks.RainMissile.explosionRadius                  # [L] Float
+Items.Preset_HMG_Default.weaponVignetteIntensity     # [M] Float
+Character.Player_Puppet_Base.level                   # [L] Int32
+
+# ============================================================================
+# Probe interface for Schema (next turn)
+# ============================================================================
+# Function:     red4ext_mac::VerifyCandidateFlats(const TweakDB* db)
+# Input file:   tools/probes/candidate_flats.txt (this file)
+#               (read at runtime via std::ifstream; resolve path relative to
+#                dyld image dir + "../../../tools/probes/candidate_flats.txt"
+#                OR honor env var TWEAKXL_CANDIDATES_FILE)
+# Per-line behavior:
+#   - Strip comments + whitespace (drop everything from the first '#'; trim).
+#   - If line non-empty: compute TweakDBID = { CRC32(name), strlen(name), {0,0,0} }
+#   - Lookup(flats_map, id, GetFlatsHashMode())
+#   - If hit: read FlatValue ptr at entry+0x18 via mach_vm_read_overwrite (safe);
+#             read vft ptr at FlatValue+0x00; read 4 bytes at FlatValue+0x08
+#             (the value); log:
+#             [flat-probe] HIT name=<name> hash=0x<X> flat=<ptr> vft=0x<X> raw=0x<X>
+#   - If miss:
+#             [flat-probe] MISS name=<name> hash=0x<X>
+#   - Once-only via std::call_once
+# Wire-up:      add the call to Loader.cpp's RegisterApplyCallback after
+#               VerifyFlatEntry(db).
+#
+# IMPORTANT for Schema — the cinema run rejected ALL 5 ExtraFlats picks. Two
+# possible root causes the probe must distinguish:
+#   (1) the flats genuinely aren't on those records (sparse ExtraFlats), OR
+#   (2) a SYSTEMIC lookup bug (wrong CRC32 variant/seed, wrong hash mode, wrong
+#       entry/value offsets). If EVERY line MISSes, suspect (2) first — sanity
+#       check the TweakDBID hash against a KNOWN-present RECORD id (e.g. CRC32 of
+#       "Items.Preset_Nova_Default") resolving in the RECORDS map (+0x88) before
+#       trusting the flats-map (+0x58/H-008) results. Confirm flats-block offset
+#       per H-008 (compare +0x58 vs +0x108 entry counts; flats >> queries).

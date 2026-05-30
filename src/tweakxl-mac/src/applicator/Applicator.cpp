@@ -120,7 +120,7 @@ ApplyResult ApplyMod(red4ext_mac::TweakDB* db, const ModFile& mod) {
         // NOTE: for record-cached values (e.g. stats) the change reaches gameplay
         // only after UpdateRecord re-materializes the record (F-030) — that step
         // is the next applicator addition; the flat itself is correctly mutated.
-        if (!red4ext_mac::EditScalarFlatInPlace(db, id, newVal)) {
+        if (!red4ext_mac::EditScalarFlatSafe(db, id, newVal)) {
             ++r.rejected;
             rejectedThisMod = true;
             log_line("[applicator] reject op: EditScalarFlatInPlace failed (id=0x%08x name=%s)",
@@ -141,7 +141,7 @@ ApplyResult ApplyMod(red4ext_mac::TweakDB* db, const ModFile& mod) {
     // ── Atomic finalize: any rejection rolls back this mod's applied writes ──
     if (rejectedThisMod) {
         for (auto it = undo.rbegin(); it != undo.rend(); ++it) {
-            if (!red4ext_mac::EditScalarFlatInPlace(db, it->id, it->oldValue)) {
+            if (!red4ext_mac::EditScalarFlatSafe(db, it->id, it->oldValue)) {
                 log_line("[applicator] WARNING: rollback write failed (id=0x%08x) "
                          "-- state may be inconsistent", it->id.nameHash);
             }

@@ -904,3 +904,11 @@ Q2 NO MATCH: brute-forced CRC32==0xce8348b9 (len 39) and 5 other live-flat hashe
 - **The full thorough/correct path is built & validated:** resolve flat (+0x40) → edit FlatValue (+0x148) → re-materialize record via game factory + RTTI Assign. H-011 resolved-fact (F-033/F-034).
 - **Semantics note:** Assign copies RTTI-reflected properties (the flat-backed targets), not internal fields — correct behavior.
 - **Remaining (not blocking):** temp newRec leaked (proper release = follow-up); interning-safe flat allocation (F-031); final VISIBLE in-game confirmation needs a save + a flat backing a reflected/used property.
+
+## 2026-05-30 — VISIBLE in-game change CONFIRMED + interning-safe write (Conductor)
+
+- **🎬 Cinema CONFIRMED:** applied a grenade/explosion `.range` mod set (12/54 flats; `Attacks.FragGrenade.range` etc.) with the in-place editor → user loaded a save and saw WIDESPREAD gameplay changes (RAM capacity huge, grenade fuse longer, carry capacity down, fewer NPC spawns, more legendaries, UI artifacts). **This proves the full pipeline produces real visible in-game effects.**
+- **Root cause of the side effects = value INTERNING (F-031):** `EditScalarFlatInPlace` overwrote POOLED FlatValues shared by many flats → cross-contamination. Exactly the known issue.
+- **FIX implemented — `EditScalarFlatSafe` (F-035):** allocates a NEW FlatValue (clones the type's vtable, writes data@+0x08) and repoints ONLY the target flat's +0x40 entry tdbOffset (BE 24-bit). One-time buffer growth (`GrowFlatBuffer`: malloc larger, memcpy, rebase +0x108 defaultValues abs-pointers, repoint db+0x00/+0x148/+0x150/+0x158) when no slack. Applicator switched to it (apply + rollback).
+- **In-vivo (`docs/probes/logs/red4ext-mac-2026-05-30-interning-safe.log`):** 12 safe writes each allocated a private FlatValue (offsets 0x40a8e8+), no crash, game running. Buffer had ~54KB slack so no move was needed at this mod size (the move path is built for larger sets).
+- **Pending user re-test:** load a save with the safe build → expect ONLY grenade/explosion range changed, the RAM/carry/spawn/loot chaos GONE.

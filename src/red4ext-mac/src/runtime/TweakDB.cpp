@@ -1943,6 +1943,126 @@ void EnsureRuntimeAccess(TweakDB* db) {
     SafeWrite(reinterpret_cast<uintptr_t>(db) + 0x160, &zero, 1);  // unk160 gate (F-031, inferred)
 }
 
+// ── Interning-safe flat write (F-031) ────────────────────────────────────────
+// The flat-value buffer is pooled: one FlatValue per distinct value, shared by
+// every flat with that value. Editing it IN PLACE corrupts every sharer. The
+// safe path allocates a NEW FlatValue and repoints ONLY the target flat's
+// tdbOffset. The buffer has no slack (game never upsizes), so we move it to a
+// larger malloc'd buffer once, rebasing the +0x108 defaultValues absolute
+// FlatValue* pointers (flats store OFFSETS, so they survive the move).
+namespace {
+
+// Return the address of a flat's entry in the +0x40 SortedUniqueArray (so its
+// tdbOffset can be rewritten), or 0 if absent.
+uintptr_t ResolveFlatEntryAddr(const TweakDB* db, TweakDBID key) {
+    const FlatsArrayView fa = ReadFlatsArrayHeader(db);
+    if (!fa.ok || !fa.entries || fa.size == 0) return 0;
+    const bool notSorted = (fa.flags & 1u) != 0u;
+    auto less = [&](const TweakDBID& e){ return e.nameHash < key.nameHash || (e.nameHash==key.nameHash && e.nameLength<key.nameLength); };
+    auto eq   = [&](const TweakDBID& e){ return e.nameHash==key.nameHash && e.nameLength==key.nameLength; };
+    TweakDBID e;
+    if (!notSorted) {
+        uint32_t lo = 0, hi = fa.size;
+        while (lo < hi) { uint32_t mid = lo+(hi-lo)/2; if (!ReadFlatEntry(fa.entries, mid, &e)) return 0; if (less(e)) lo=mid+1; else hi=mid; }
+        if (lo < fa.size && ReadFlatEntry(fa.entries, lo, &e) && eq(e)) return fa.entries + (uint64_t)lo*8;
+        return 0;
+    }
+    for (uint32_t i=0;i<fa.size;++i){ if(!ReadFlatEntry(fa.entries,i,&e))return 0; if(eq(e))return fa.entries+(uint64_t)i*8; }
+    return 0;
+}
+
+// Move the flat buffer to a larger malloc'd block (one-time), rebasing +0x108
+// defaultValues pointers + the 4 buffer fields. Returns false on failure.
+bool GrowFlatBuffer(TweakDB* db, uint32_t extra) {
+    const uintptr_t dbp = reinterpret_cast<uintptr_t>(db);
+    uintptr_t base = 0, end = 0; uint32_t cap = 0;
+    SafeReadPtr(dbp + 0x148, &base); SafeReadU32(dbp + 0x150, &cap); SafeReadPtr(dbp + 0x158, &end);
+    if (!base || !end || end < base) return false;
+    const uint32_t used = (uint32_t)(end - base);
+    uint32_t newCap = cap + extra;
+    if (newCap > 0x00FFFFFFu) newCap = 0x00FFFFFFu;
+    if (newCap <= used) return false;             // can't grow further
+    void* nb = nullptr;
+    if (posix_memalign(&nb, 16, newCap) != 0 || !nb) return false;
+    std::memcpy(nb, reinterpret_cast<void*>(base), used);
+    const uintptr_t newBase = reinterpret_cast<uintptr_t>(nb);
+
+    // Rebase defaultValues (+0x108) absolute FlatValue* pointers.
+    const uintptr_t dv = dbp + 0x108;
+    uintptr_t dvEntries = 0; uint32_t dvCount = 0, dvStride = 0;
+    SafeReadU32(dv + 0x08, &dvCount); SafeReadPtr(dv + 0x10, &dvEntries); SafeReadU32(dv + 0x1c, &dvStride);
+    if (dvEntries && dvStride && dvCount < 100000u) {
+        for (uint32_t i = 0; i < dvCount; ++i) {
+            const uintptr_t e = dvEntries + (uint64_t)i * dvStride;
+            uintptr_t fv = 0; SafeReadPtr(e + 0x10, &fv);
+            if (fv >= base && fv < end) { uintptr_t nfv = newBase + (fv - base); SafeWrite(e + 0x10, &nfv, 8); }
+        }
+    }
+    const uintptr_t newEnd = newBase + used;
+    SafeWrite(dbp + 0x00, &newBase, 8);   // staticFlatDataBuffer
+    SafeWrite(dbp + 0x148, &newBase, 8);  // flatDataBuffer
+    SafeWrite(dbp + 0x150, &newCap, 4);   // capacity
+    SafeWrite(dbp + 0x158, &newEnd, 8);   // end
+    log_line("[flat-grow] moved buffer 0x%llx(used=%u cap=%u) -> 0x%llx(cap=%u) defaultValues=%u",
+             (unsigned long long)base, used, cap, (unsigned long long)newBase, newCap, dvCount);
+    return true;
+}
+
+// Append a scalar FlatValue ([vtable][data@+0x08]); grow the buffer if needed.
+// Returns the new tdbOffset (<= 0xFFFFFF) or -1.
+int64_t AppendFlatValue(TweakDB* db, uint64_t vtable, const uint8_t* data, uint32_t width) {
+    const uintptr_t dbp = reinterpret_cast<uintptr_t>(db);
+    uintptr_t base = 0, end = 0; uint32_t cap = 0;
+    SafeReadPtr(dbp + 0x148, &base); SafeReadU32(dbp + 0x150, &cap); SafeReadPtr(dbp + 0x158, &end);
+    uintptr_t slot = (end + 7) & ~(uintptr_t)7;
+    if (slot + 0x10 > base + cap) {
+        if (!GrowFlatBuffer(db, 1u << 20)) return -1;   // +1MB
+        SafeReadPtr(dbp + 0x148, &base); SafeReadU32(dbp + 0x150, &cap); SafeReadPtr(dbp + 0x158, &end);
+        slot = (end + 7) & ~(uintptr_t)7;
+        if (slot + 0x10 > base + cap) return -1;
+    }
+    const int64_t off = (int64_t)(slot - base);
+    if (off > 0xFFFFFF) return -1;                       // tdbOffset is 24-bit
+    SafeWrite(slot + 0x00, &vtable, 8);
+    uint8_t buf[8] = {0}; std::memcpy(buf, data, width);
+    SafeWrite(slot + 0x08, buf, width);
+    uintptr_t newEnd = slot + 0x10;
+    SafeWrite(dbp + 0x158, &newEnd, 8);
+    return off;
+}
+
+} // namespace
+
+bool EditScalarFlatSafe(TweakDB* db, TweakDBID flatId, FlatValue v) {
+    if (!db || !IsScalarFlatType(v.type)) return false;
+    const uintptr_t entry = ResolveFlatEntryAddr(db, flatId);
+    if (!entry) { log_line("[flat-safe] MISS id=<0x%08x>", flatId.nameHash); return false; }
+    // Current FlatValue → clone its vtable (preserves exact type ABI).
+    TweakDBID cur{}; { uint64_t raw=0; SafeReadU64(entry,&raw); std::memcpy(&cur,&raw,8); }
+    const uint32_t curOff = (uint32_t)(((uint32_t)cur.tdbOffset[0]<<16)|((uint32_t)cur.tdbOffset[1]<<8)|cur.tdbOffset[2]);
+    uintptr_t base=0; SafeReadPtr(reinterpret_cast<uintptr_t>(db)+0x148,&base);
+    uint64_t vtable=0; SafeReadU64(base + curOff, &vtable);
+    if (!vtable) return false;
+
+    uint8_t bytes[4]={0}; const uint32_t width = ScalarFlatTypeSize(v.type);
+    switch (v.type) {
+        case FlatType::Int32: { int32_t x = std::holds_alternative<int32_t>(v.value)?std::get<int32_t>(v.value):std::holds_alternative<uint32_t>(v.value)?(int32_t)std::get<uint32_t>(v.value):0; std::memcpy(bytes,&x,4); break; }
+        case FlatType::Float: { if(!std::holds_alternative<float>(v.value))return false; float x=std::get<float>(v.value); std::memcpy(bytes,&x,4); break; }
+        case FlatType::Bool:  bytes[0]=(std::holds_alternative<bool>(v.value)&&std::get<bool>(v.value))?1:0; break;
+        default: return false;
+    }
+
+    EnsureRuntimeAccess(db);
+    const int64_t newOff = AppendFlatValue(db, vtable, bytes, width);
+    if (newOff < 0) { log_line("[flat-safe] alloc failed id=<0x%08x>", flatId.nameHash); return false; }
+    // Repoint ONLY this flat: rewrite its entry's tdbOffset (BE bytes [5][6][7]).
+    uint8_t be[3] = { (uint8_t)((newOff>>16)&0xFF), (uint8_t)((newOff>>8)&0xFF), (uint8_t)(newOff&0xFF) };
+    SafeWrite(entry + 5, be, 3);
+    log_line("[flat-safe] id=<0x%08x len=%u> %u -> new FlatValue @0x%06llx (own copy, no interning)",
+             flatId.nameHash, flatId.nameLength, curOff, (unsigned long long)newOff);
+    return true;
+}
+
 // Read a scalar flat's typed value via the +0x40 path (F-031): resolve → read
 // FlatValue [vtable@+0x00][data@+0x08]; the vtable identifies the scalar type.
 // Returns nullopt if absent or non-scalar. Used by the applicator for snapshots.
@@ -2138,6 +2258,72 @@ bool UpdateRecord(TweakDB* db, TweakDBID recordId) {
 
     reinterpret_cast<void (*)(void*, void*, void*)>(assignFn)(nativeType, reinterpret_cast<void*>(realRec), newRec);
     return true;
+}
+
+// Find which candidate flats actually back an RTTI-reflected record field (i.e.
+// editing them + rebuilding changes the record → UpdateRecord will propagate to
+// gameplay). Edits each candidate to a sentinel, rebuilds via the factory, diffs
+// the rebuilt record vs an unedited rebuild (ignoring the +0x28 alloc counter),
+// restores. Env-gated TWEAKXL_PROBE_REFLECTED=1. No save / no persistent writes.
+void ProbeReflectedFlats(TweakDB* db) {
+    if (!db || !std::getenv("TWEAKXL_PROBE_REFLECTED")) {
+        if (db) log_line("[reflected] skipped (set TWEAKXL_PROBE_REFLECTED=1)");
+        return;
+    }
+    bool fromEnv = false;
+    const std::string path = ResolveCandidatesPath(&fromEnv);
+    std::ifstream in(path);
+    if (!in) { log_line("[reflected] cannot open candidates %s", path.c_str()); return; }
+    log_line("[reflected] scanning candidates from %s", path.c_str());
+
+    using FactoryFn = void* (*)(uint32_t, uint64_t);
+    uint32_t reflected = 0, tested = 0;
+    std::string line;
+    while (std::getline(in, line)) {
+        const std::string name = StripLine(line);
+        if (name.empty()) continue;
+        const auto dot = name.rfind('.');
+        if (dot == std::string::npos || dot == 0) continue;
+        const std::string recName = name.substr(0, dot);
+
+        // flat must resolve, record must exist
+        const TweakDBID fid = MakeCompactId(name);
+        if (ResolveFlatOffset(db, fid) < 0) continue;
+        auto snap = ReadScalarFlat(db, fid);
+        if (!snap.has_value()) continue;   // non-scalar — skip
+        const uintptr_t realRec = LookupRecordInstance(db, MakeCompactId(recName));
+        if (!realRec) continue;
+        uint64_t recIdFull = 0; SafeReadU64(realRec + 0x40, &recIdFull);
+        const uint32_t baseHash = CallGetBaseHash(realRec);
+        if (!baseHash) continue;
+        FactoryFn factory = reinterpret_cast<FactoryFn>(StaticToRuntime(kFactoryTable[baseHash & 0x1fu]));
+        ++tested;
+
+        uintptr_t before = reinterpret_cast<uintptr_t>(factory(baseHash, recIdFull));
+        if (!before) continue;
+        FlatValue sent; sent.type = FlatType::Float; sent.value = 9999.0f;
+        EditScalarFlatInPlace(db, fid, sent);
+        uintptr_t after = reinterpret_cast<uintptr_t>(factory(baseHash, recIdFull));
+        EditScalarFlatInPlace(db, fid, *snap);   // restore immediately
+
+        if (!after) continue;
+        // Diff [0x18,0x150), ignore +0x28 (alloc counter).
+        int firstOff = -1; uint32_t va = 0, vb = 0;
+        for (uint32_t off = 0x18; off < 0x150; off += 4) {
+            if (off == 0x28) continue;
+            uint32_t x = 0, y = 0;
+            SafeReadU32(before + off, &x); SafeReadU32(after + off, &y);
+            if (x != y) { firstOff = (int)off; va = x; vb = y; break; }
+        }
+        if (firstOff >= 0) {
+            float fa, fb; std::memcpy(&fa,&va,4); std::memcpy(&fb,&vb,4);
+            log_line("[reflected] YES %s -> field @+0x%02x %g => %g (edit propagates)",
+                     name.c_str(), firstOff, fa, fb);
+            ++reflected;
+        }
+    }
+    log_line("[reflected] done: %u/%u tested candidates back a reflected record field",
+             reflected, tested);
 }
 
 void TestUpdateRecordBuild(TweakDB* db) {

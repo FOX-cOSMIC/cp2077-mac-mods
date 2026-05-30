@@ -267,6 +267,12 @@ int64_t ResolveFlatOffset(const TweakDB* db, TweakDBID key);
 // SetFlat) + UpdateRecord land next. Returns false if absent or non-scalar.
 bool EditScalarFlatInPlace(TweakDB* db, TweakDBID flatId, FlatValue v);
 
+// Interning-SAFE scalar flat write (F-031): allocates a NEW FlatValue (cloning
+// the type's vtable) and repoints ONLY this flat's tdbOffset, so it never
+// corrupts other flats sharing the original pooled value. Grows the flat buffer
+// once if needed (rebasing defaultValues). This is what the applicator uses.
+bool EditScalarFlatSafe(TweakDB* db, TweakDBID flatId, FlatValue v);
+
 // Clear the runtime-write gate (db+0x160 = 0) — macOS analog of TweakXL's
 // EnsureRuntimeAccess (F-031, inferred). Harmless if already 0.
 void EnsureRuntimeAccess(TweakDB* db);
@@ -290,6 +296,10 @@ void TestFlatWritePath(TweakDB* db);
 // StatsContainer seed (F-030). Call after EditScalarFlatInPlace on the record's
 // flats. Returns false if the record/accessors are unresolvable.
 bool UpdateRecord(TweakDB* db, TweakDBID recordId);
+
+// Probe (env TWEAKXL_PROBE_REFLECTED): report which candidate flats back an
+// RTTI-reflected record field (edit+rebuild changes the record). No save.
+void ProbeReflectedFlats(TweakDB* db);
 
 // H-011 step 2a (env-gated TWEAKXL_TEST_UPDATEREC): build a record from edited
 // flats via the game's factory and byte-compare to the live record — validates

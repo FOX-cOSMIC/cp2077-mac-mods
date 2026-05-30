@@ -597,6 +597,18 @@ No additional stubs or changes are needed for the `.tweak` parser layer itself. 
 
 ---
 
+### F-032: Correct flat path VALIDATED in-vivo — named resolve, real values, scalar edit round-trip (no save)
+
+- **Date:** 2026-05-30; build 2.3.1; title-screen test (`TestFlatWritePath`, evidence `docs/probes/logs/red4ext-mac-2026-05-30-flatwrite.log`)
+- **Flats array @ +0x40 holds 3,306,462 flats** (vs 193,354 in +0x58=recordsByID); `flags=0 sorted`; binary-search resolve self-round-trips (HIT).
+- **Named resolution works:** `16/20` high-confidence BaseStats flats HIT with sensible values — `BaseStats.AccumulatedDoTDecayRate.max`=999.0 (Float), `BaseStats.Health.enumName` data="Heal…" (CName "Health"). The 4 misses are all `.value` (BaseStats exposes no `.value` flat; min/max/enumName/flags do exist).
+- **THE root-cause proof:** the candidate file that scored **0/98 against +0x58** now scores **25/98 against +0x40** — same names, correct map. Confirms every prior "flat" miss was the wrong-map bug (F-029), not absent flats.
+- **`EditScalarFlatInPlace` PASS:** Float flat (orig 0.1) → write 1337.0 → read-back 1337.0 → restore 0.1, all verified via `SafeWrite` at `flatDataBuffer+tdbOffset+0x08`. The scalar write primitive works (interning caveat still applies for production).
+- **How to re-verify:** launch with the dylib; grep `[flat-name]` / `[flat-edit-test]` (expect `... PASS`).
+- **Invalidates:** none. Validates F-029/F-031 end-to-end (read+resolve+write). Remaining: UpdateRecord (propagate to record cache), interning-safe allocation, applicator rewire.
+
+---
+
 ### F-027: BaseStats / Stat_Record Float value lives at p10+0x54 — first identified cinema mutation target
 
 - **Date:** 2026-05-29

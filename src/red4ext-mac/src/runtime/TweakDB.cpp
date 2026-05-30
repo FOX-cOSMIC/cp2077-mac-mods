@@ -2039,4 +2039,93 @@ void VerifyFlatArrayAccess(const TweakDB* db) {
     }
 }
 
+// F-031: prove the correct flat path end-to-end at the title screen (no save):
+//  (1) resolve REAL NAMED flats via +0x40 — the same map-less retest of names
+//      that got 0/N against the wrong +0x58 map; includes high-confidence
+//      BaseStats.*.value/.enumName flats (psiberx StatService reads these);
+//  (2) round-trip EditScalarFlatInPlace on a real Float flat (edit → verify →
+//      restore). All memory-level; no gameplay observation required.
+void TestFlatWritePath(TweakDB* db) {
+    if (!db) return;
+    const uintptr_t floatVft = StaticToRuntime(0x106e925f0);
+    const uintptr_t int32Vft = StaticToRuntime(0x106e926f8);
+    const uintptr_t boolVft  = StaticToRuntime(0x106e92d78);
+
+    auto probeName = [&](const std::string& name) -> bool {
+        const TweakDBID id = MakeCompactId(name);
+        const int64_t off = ResolveFlatOffset(db, id);
+        if (off < 0) { log_line("[flat-name] MISS %s (hash=0x%08x len=%zu)", name.c_str(), id.nameHash, name.size()); return false; }
+        uint64_t vt = 0; uint32_t data = 0; const char* tn = "?";
+        if (db->flatDataBuffer) {
+            const uintptr_t fv = reinterpret_cast<uintptr_t>(db->flatDataBuffer) + static_cast<uint64_t>(off);
+            SafeReadU64(fv, &vt); SafeReadU32(fv + 0x08, &data);
+            if (vt==floatVft) tn="Float"; else if (vt==int32Vft) tn="Int32"; else if (vt==boolVft) tn="Bool";
+        }
+        float asF; std::memcpy(&asF, &data, 4);
+        log_line("[flat-name] HIT  %s -> off=0x%06llx type=%s data=0x%08x asF=%g asI=%d",
+                 name.c_str(), (unsigned long long)off, tn, data, asF, (int)data);
+        return true;
+    };
+
+    // (1a) High-confidence named flats: BaseStats records' .value/.enumName/.min/.max.
+    log_line("[flat-name] === high-confidence BaseStats flats (psiberx StatService) ===");
+    const char* kStatRecords[] = {
+        "BaseStats.AccumulatedDoTDecayRate",  // F-027: record value 0.0961 @ +0x54
+        "BaseStats.Health", "BaseStats.CarryCapacity", "BaseStats.ADSSpeedPercentBonus",
+    };
+    const char* kProps[] = { ".value", ".enumName", ".min", ".max", ".flags" };
+    uint32_t hcHits = 0, hcTotal = 0;
+    for (const char* rec : kStatRecords)
+        for (const char* p : kProps) { ++hcTotal; if (probeName(std::string(rec) + p)) ++hcHits; }
+    log_line("[flat-name] high-confidence: %u/%u HIT", hcHits, hcTotal);
+
+    // (1b) Re-sweep the candidate file against +0x40 (got 0/N against +0x58).
+    bool fromEnv = false;
+    const std::string path = ResolveCandidatesPath(&fromEnv);
+    std::ifstream in(path);
+    if (in) {
+        uint32_t hits = 0, total = 0; std::string line;
+        while (std::getline(in, line)) {
+            const std::string name = StripLine(line);
+            if (name.empty()) continue;
+            ++total;
+            if (ResolveFlatOffset(db, MakeCompactId(name)) >= 0) ++hits;
+        }
+        log_line("[flat-name] candidate-file +0x40 sweep: %u/%u HIT (file=%s)", hits, total, path.c_str());
+    }
+
+    // (2) Round-trip edit on the first real Float flat we can find.
+    const FlatsArrayView fa = ReadFlatsArrayHeader(db);
+    if (!fa.ok || !fa.entries || fa.size == 0 || !db->flatDataBuffer) {
+        log_line("[flat-edit-test] skipped (no flats/buffer)"); return;
+    }
+    const uint32_t scanCap = fa.size < 300000u ? fa.size : 300000u;
+    int64_t editOff = -1; TweakDBID editId{};
+    for (uint32_t i = 0; i < scanCap; ++i) {
+        TweakDBID e;
+        if (!ReadFlatEntry(fa.entries, i, &e)) break;
+        const uint32_t off = TdbOffsetOf(e);
+        uint64_t vt = 0;
+        SafeReadU64(reinterpret_cast<uintptr_t>(db->flatDataBuffer) + off, &vt);
+        if (vt == floatVft) { editOff = off; editId = e; break; }
+    }
+    if (editOff < 0) { log_line("[flat-edit-test] no Float flat in first %u entries", scanCap); return; }
+
+    const uintptr_t dataAddr = reinterpret_cast<uintptr_t>(db->flatDataBuffer) + static_cast<uint64_t>(editOff) + 0x08;
+    uint32_t origRaw = 0; SafeReadU32(dataAddr, &origRaw); float origF; std::memcpy(&origF, &origRaw, 4);
+
+    FlatValue sentinel; sentinel.type = FlatType::Float; sentinel.value = 1337.0f;
+    const bool wrote = EditScalarFlatInPlace(db, editId, sentinel);
+    uint32_t aRaw = 0; SafeReadU32(dataAddr, &aRaw); float aF; std::memcpy(&aF, &aRaw, 4);
+
+    FlatValue restore; restore.type = FlatType::Float; restore.value = origF;
+    EditScalarFlatInPlace(db, editId, restore);
+    uint32_t rRaw = 0; SafeReadU32(dataAddr, &rRaw); float rF; std::memcpy(&rF, &rRaw, 4);
+
+    const bool pass = wrote && aF == 1337.0f && rF == origF;
+    log_line("[flat-edit-test] Float flat hash=0x%08x len=%u off=0x%06llx orig=%g wrote=%d after=%g restored=%g %s",
+             editId.nameHash, editId.nameLength, (unsigned long long)editOff, origF, wrote ? 1 : 0, aF, rF,
+             pass ? "PASS" : "FAIL");
+}
+
 } // namespace red4ext_mac

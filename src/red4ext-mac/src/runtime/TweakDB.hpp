@@ -276,6 +276,11 @@ void EnsureRuntimeAccess(TweakDB* db);
 // by its own key. Proves the correct flat path works. Logs to red4ext-mac.log.
 void VerifyFlatArrayAccess(const TweakDB* db);
 
+// Title-screen (no-save) proof of the correct flat path: resolve real NAMED
+// flats via +0x40 (incl. high-confidence BaseStats.*.value flats), and a
+// round-trip EditScalarFlatInPlace on a real Float flat (edit→verify→restore).
+void TestFlatWritePath(TweakDB* db);
+
 // ───────────────────────────────────────────────────────────────────────────
 // P1.6 Phase A — flat entry/value layout discovery (once-only).
 //

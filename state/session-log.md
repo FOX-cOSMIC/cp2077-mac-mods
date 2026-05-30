@@ -862,3 +862,12 @@ Q2 NO MATCH: brute-forced CRC32==0xce8348b9 (len 39) and 5 other live-flat hashe
 - **This is the foundation:** we can now correctly resolve ANY flat by name (compute TweakDBID → binary-search +0x40) — impossible before (we searched +0x58=recordsByID and missed all flats). `EditScalarFlatInPlace` is implemented on top (in-place edit; interning caveat).
 - **Next:** (1) test EditScalarFlatInPlace on a real scalar flat; (2) implement UpdateRecord (CreateTDBRecord FUN_1026b8db8 + fake-DB or in-place rebuild) so edits propagate to record-cached values / the StatsContainer seed; (3) re-point the applicator onto ResolveFlatOffset/EditScalarFlatInPlace; (4) interning-safe new-flat allocation (buffer growth) for production.
 
+
+## 2026-05-30 — Correct flat path VALIDATED (named resolve + edit) — F-032 (Conductor)
+
+- Added `TestFlatWritePath` (title-screen, no-save). Results (`docs/probes/logs/red4ext-mac-2026-05-30-flatwrite.log`):
+  - **Named resolution: 16/20 BaseStats flats HIT** with real values (`...DoTDecayRate.max`=999.0; `Health.enumName`="Health"). `.value` misses (no such flat on BaseStats).
+  - **Candidate file 0/98 (+0x58) → 25/98 (+0x40)** — root-cause proof: wrong-map bug, not absent flats.
+  - **EditScalarFlatInPlace round-trip PASS** (0.1→1337→restore 0.1, verified).
+- The correct flat path is proven end-to-end (resolve-by-name, read, scalar edit, restore). F-032 filed.
+- **Still no-save TODO:** UpdateRecord (CreateTDBRecord FUN_1026b8db8) so edits propagate to record-cached values; applicator rewire onto ResolveFlatOffset/EditScalarFlatInPlace; interning-safe new-flat allocation.

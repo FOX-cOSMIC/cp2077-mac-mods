@@ -250,6 +250,33 @@ std::optional<FlatValue> ReadFlat(const TweakDB* db, TweakDBID id);
 bool WriteFlat(TweakDB* db, TweakDBID id, FlatValue newValue);
 
 // ───────────────────────────────────────────────────────────────────────────
+// F-031 CORRECT flat path. The old ReadFlat/WriteFlat resolve via the +0x58
+// map — which F-029 proved is recordsByID, NOT flats — so they cannot target a
+// real flat. These resolve the REAL flats SortedUniqueArray @ db+0x40 and the
+// macOS FlatValue layout ([vtable @ +0x00][data @ +0x08], 0x10 bytes).
+//
+// ResolveFlatOffset: binary-search (linear if NotSorted) the +0x40 array by the
+// 40-bit key {nameHash, nameLength}; returns the flat's tdbOffset into the
+// flat-data buffer (+0x148), or -1 if the flat is absent.
+int64_t ResolveFlatOffset(const TweakDB* db, TweakDBID key);
+
+// EditScalarFlatInPlace: overwrite an EXISTING scalar flat's value at
+// flatDataBuffer + tdbOffset + 0x08 (clears the runtime gate first). Interning
+// caveat (F-031): pooled values are shared — editing one in place affects every
+// flat pointing at the same FlatValue. New-flat allocation (interning-safe
+// SetFlat) + UpdateRecord land next. Returns false if absent or non-scalar.
+bool EditScalarFlatInPlace(TweakDB* db, TweakDBID flatId, FlatValue v);
+
+// Clear the runtime-write gate (db+0x160 = 0) — macOS analog of TweakXL's
+// EnsureRuntimeAccess (F-031, inferred). Harmless if already 0.
+void EnsureRuntimeAccess(TweakDB* db);
+
+// Self-test (once-only): read the +0x40 flats array header, log the first
+// entries with their FlatValue vtables/values, and round-trip-resolve entry[0]
+// by its own key. Proves the correct flat path works. Logs to red4ext-mac.log.
+void VerifyFlatArrayAccess(const TweakDB* db);
+
+// ───────────────────────────────────────────────────────────────────────────
 // P1.6 Phase A — flat entry/value layout discovery (once-only).
 //
 // Dumps sample flats-map entries + candidate value objects, tests each value

@@ -581,6 +581,22 @@ No additional stubs or changes are needed for the `.tweak` parser layer itself. 
 
 ---
 
+### F-031: TweakDB WRITE-side primitives located — CreateTDBRecord, flats-array layout, FlatValue layout (macOS-specific), buffer fields
+
+- **Date:** 2026-05-30
+- **Game version:** 2.3.1; via Ghidra write-side trace (read-only headless, static base 0x100000000), all decompile-confirmed unless noted
+- **`CreateTDBRecord` = `FUN_1026b8db8`** — `void(TweakDB* db, uint32 baseMurmur3, TweakDBID id)`. Builds a record from current flats and inserts it via `FUN_102b74408` into recordsByID(+0x58) + recordsByType(+0x88). This is the function `UpdateRecord` calls (Windows AddressHash 0x3201127A equiv). The 4 per-class factory builders are `FUN_1027052ac/102726504/10274f578/102798288`. Load-time record-build loop = `FUN_102b16a48`; base-hash builder (murmur3 seed `0x5eedba5e`) = `FUN_1026b8ce8`.
+- **Record object fields:** `recordID` (TweakDBID, 8B) @ **record+0x40**; `GetTweakBaseHash()` = virtual at vtable slot **+0x110** (uint32). (recordID@+0x40 corroborates F-027's storedKey echo.)
+- **Flats array @ db+0x40 = `SortedUniqueArray<TweakDBID>`** (decompiled from `FUN_102b139b8` LowerBound + `FUN_102b76708` GetFlat): `entries` @ +0x00, **`capacity` (uint32) @ +0x08, `size` (uint32) @ +0x0C**, `flags` (int32, bit0=NotSorted) @ +0x10. Entry stride 8 (TweakDBID). Binary-search key = `id & 0xFF_FFFF_FFFF` (low 40 bits = {uint32 nameHash; uint8 nameLen}); tdbOffset is the high 24 bits (big-endian, bytes [5][6][7]). Insert = LowerBound→memmove→write, grow via generic realloc `FUN_1000286e8(arr,newCap,8,8,moveFn)`; sort via `FUN_102b467bc`.
+- **flatDataBuffer fields** (set by `FUN_102b15ec0`, the flats-section parser, via `PoolGMPL_TDB_Data::AllocateAligned`): `staticFlatDataBuffer` @ db+0x00, `flatDataBuffer` @ db+0x148, `flatDataBufferCapacity` (uint32) @ db+0x150, `flatDataBufferEnd` @ db+0x158. **CRITICAL: allocated exactly to flat-data size — capacity==used, ZERO slack, game never upsizes at runtime.** Appending past `end` is unsafe; to add a FlatValue you must allocate a new larger buffer and repoint +0x00/+0x148/+0x150/+0x158 (+ fix defaultValues offsets), Windows-`SetFlatDataBuffer`-style. Editing an EXISTING flat in place is safe.
+- **FlatValue layout (macOS — DIFFERS from Windows):** scalar FlatValue = **0x10 bytes, `[vtable @ +0x00][data @ +0x08]`** (Windows: 0x20, data@+0x10). Confirmed via ctor `FUN_102b1422c`. Per-type vtables (static): **Float `0x106e925f0`, Int32 `0x106e926f8`, Bool `0x106e92d78`**, TweakDBID `0x106e9b448`, Vector3 `0x106e94090`, etc. Scalars of a type share one vtable (so can also clone from an existing same-type FlatValue). Data sizes: Float/Int32/Color=4, Bool=1, TweakDBID/Vector2/LocKey=8, Vector3/EulerAngles=12.
+- **`unk160` @ db+0x160:** ⚠️ inferred — no game writer found; treat as the runtime-write gate (Windows `EnsureRuntimeAccess` clears it). Write 0 before runtime flat writes.
+- **Recipe (edit existing Float flat + refresh record):** clear `*(u8*)(db+0x160)=0`; resolve flat in +0x40 (binary search) → `fv = flatDataBuffer + tdbOffset`; overwrite `*(float*)(fv+0x08)=v` (in-place; interning caveat); then `UpdateRecord`: `rec=GetRecord(db,recordId)` (`FUN_102b745d0`), `CreateTDBRecord(fakeDB, *(u32*)(rec+baseHashVtbl), *(TweakDBID*)(rec+0x40))`, take rebuilt instance from fake recordsByType, `nativeType->Assign(rec,new)`. Apply at LOAD (after `FUN_102b75744`, before entity stat-init, F-030).
+- **How to re-verify:** Ghidra scripts `tools/ghidra/rw-*.py`.
+- **Invalidates:** none. Corrects the assumption (from Windows) that scalar FlatValue data is at +0x10 — on macOS it is **+0x08**. Completes F-029 (write side).
+
+---
+
 ### F-027: BaseStats / Stat_Record Float value lives at p10+0x54 — first identified cinema mutation target
 
 - **Date:** 2026-05-29

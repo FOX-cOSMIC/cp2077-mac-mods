@@ -829,3 +829,36 @@ Q2 NO MATCH: brute-forced CRC32==0xce8348b9 (len 39) and 5 other live-flat hashe
 - **Fix (what/where/when):** (1) apply at load — after `FUN_102b75744` (F-018), before entity stat-init — so the container seeds from modded values (TweakXL model); (2) for a live save, also patch `StatsContainer+0x60[entry]+0xc`; (3) or force recompute. Pure data writes, FA-001-compliant — no __TEXT patch.
 - Reusable Ghidra scripts saved to `tools/ghidra/` (re-*.py, PrintHash.py).
 - **Status:** diagnosis COMPLETE. The cinema failure is fully explained and the correct write path is known. Next engineering step: re-point the applicator to (a) clear unk160@+0x160, (b) write the flat's FlatValue in the +0x148 buffer (or record+0x54) AT LOAD before stat-init, and/or (c) patch the live StatsContainer cache for an already-loaded save. Then re-run the cinema test.
+
+## 2026-05-30 — Load-time applicator: scoped the "full TweakXL way" + launched write-side RE (Conductor)
+
+- **Decision (Lucas):** build the proper general flat-write path (FlatValue in +0x148 buffer), not the record-inline shortcut.
+- **Studied psiberx reference** (`Manager.cpp`, `Buffer.cpp`, RED4ext.SDK `TweakDB.hpp`/`TweakDB-inl.hpp`). The Windows `SetFlat` recipe = `AssignFlat`: `offset = CreateFlatValue(type,instance)` → `flatId.SetTDBOffset(offset)` → `flats.InsertOrAssign(flatId)`; then `UpdateRecord(recordId)`. Key facts:
+  - `TweakDBBuffer::AllocateValue` is a dedup POOL on top of the GAME's `CreateFlatValue`. `CreateFlatValue` itself is reimplemented: `UpsizeFlatDataBuffer(0xFFFFFF)` + `AllocateFlatValue(end_aligned, stackType)` (placement-new `FlatValueImpl<T>`; vtable@0, data@0x10, size 0x20 scalars; aligned to max(align,8)); `flatDataBufferEnd += size`; return ToTDBOffset.
+  - `UpdateRecord` MUST call the game function **`CreateTDBRecord(TweakDB*, uint32 baseMurmur3, TweakDBID)`** (Windows AddressHash 0x3201127A) to rebuild the record from current flats, then `Assign` over the old record. Needed because our apply-trigger fires AFTER records are built — without it, the record's materialized values (and thus the StatsContainer seed) stay stale.
+  - Buffer fields: flatDataBuffer@0x148, capacity@0x150, end@0x158, staticFlatDataBuffer@0x00.
+- **macOS port plan (after write-side RE lands):**
+  1. Fix `TweakDB.hpp` struct: add `flats` SortedUniqueArray @ +0x40; rename hashMapA→recordsByID(+0x58), hashMapC→defaultValues(+0x108); add bufferCapacity@+0x150, bufferEnd@+0x158, staticBuffer@+0x00, unk160@+0x160. (Corrects F-020/F-022 labels in code.)
+  2. Implement flats Find/InsertOrAssign (binary search over +0x40 sorted TweakDBID array).
+  3. Implement CreateFlatValue: grow buffer via our own aligned malloc + SetFlatDataBuffer-style pointer swap (update +0x00/+0x148/+0x150/+0x158 + fix defaultValues offsets); construct FlatValue by **cloning an existing same-type game FlatValue's vtable** (avoids macOS vtable-ABI risk) + writing data@+0x10.
+  4. SetFlat = CreateFlatValue + SetTDBOffset + InsertOrAssign; clear unk160@+0x160 first.
+  5. UpdateRecord via macOS `CreateTDBRecord` (being located).
+  6. Re-point applicator's WriteFlat/ReadFlat onto this; wire at apply-trigger (load time); atomic rollback preserved.
+  7. Test: real mod targeting an actual flat → load fresh save → observe.
+- **Gating RE (launched, background):** locate macOS `CreateTDBRecord` (likely among factory dispatchers FUN_102726504/FUN_10274f578/FUN_102798288/FUN_1027052ac), confirm flats-array fields, buffer end/capacity offsets, FlatValue layout, record recordID/baseHash fields, unk160 gate.
+- **Status:** implementation blocked on the write-side RE; plan is concrete. No code changed yet this step.
+
+## 2026-05-30 — Load-time applicator: CORRECT flat path implemented + proven in-vivo (Conductor)
+
+- Implemented the F-031 correct flat path in `runtime/TweakDB.{hpp,cpp}` (new functions; old ReadFlat/WriteFlat left intact): `ResolveFlatOffset` (binary-search the +0x40 SortedUniqueArray by 40-bit key, linear fallback if NotSorted), `EditScalarFlatInPlace` (write buffer+tdbOffset+0x08, macOS FlatValue data@+0x08), `EnsureRuntimeAccess` (clear db+0x160), `VerifyFlatArrayAccess` (self-test). Wired into Loader apply-callback. Builds clean.
+- **🎯 In-vivo PROOF (`docs/probes/logs/red4ext-mac-2026-05-30-flatarray.log`):**
+  ```
+  [flat-array] +0x40 SortedUniqueArray: entries=0x7197e8000 capacity=3306462 size=3306462 flags=0x0 sorted=yes
+  [flat-array] entry[4] hash=0x1e21 len=59 tdbOff=0xca58 vft=0x1078a3198(String) data=0x626d6f43 "Comb"
+  [flat-array] self-resolve entry0 hash=0x38 len=52 -> off=0x2cf418 expect=0x2cf418 HIT
+  ```
+  - **The real flats array holds 3,306,462 flats** (vs 193,354 in +0x58=recordsByID) — flats outnumber records ~17×, which is exactly why every prior +0x58 "flats" probe missed them.
+  - Binary-search resolve round-trips correctly (HIT). String vtable (0x106e93198 slid) + ASCII data decode confirm the F-031 FlatValue layout (data@+0x08) and vtable map.
+- **This is the foundation:** we can now correctly resolve ANY flat by name (compute TweakDBID → binary-search +0x40) — impossible before (we searched +0x58=recordsByID and missed all flats). `EditScalarFlatInPlace` is implemented on top (in-place edit; interning caveat).
+- **Next:** (1) test EditScalarFlatInPlace on a real scalar flat; (2) implement UpdateRecord (CreateTDBRecord FUN_1026b8db8 + fake-DB or in-place rebuild) so edits propagate to record-cached values / the StatsContainer seed; (3) re-point the applicator onto ResolveFlatOffset/EditScalarFlatInPlace; (4) interning-safe new-flat allocation (buffer growth) for production.
+

@@ -12,6 +12,7 @@
 // No mutation, no mprotect, no __TEXT writes (FA-001).
 
 #include "TweakDB.hpp"
+#include "Symbols.hpp"          // StaticToRuntime — F-031 per-type FlatValue vtables
 
 #include <algorithm>
 #include <chrono>
@@ -1852,6 +1853,190 @@ void DumpFlatsSample(const TweakDB* db, uint32_t maxEntries) {
         }
         DoDumpFlatsSample(db, cap);
     });
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// F-031: CORRECT flat path — the REAL flats live in the SortedUniqueArray @
+// db+0x40 (NOT the +0x58 map, which is recordsByID per F-029). A flat is a
+// TweakDBID whose low-40-bit key = {nameHash, nameLength} and whose high-24-bit
+// tdbOffset (big-endian, bytes [5][6][7]) indexes the flat-data buffer (+0x148).
+// A scalar FlatValue is 0x10 bytes: [vtable @ +0x00][data @ +0x08].
+// ═════════════════════════════════════════════════════════════════════════════
+namespace {
+
+// View of the +0x40 SortedUniqueArray<TweakDBID> header (F-031 field order).
+struct FlatsArrayView {
+    uintptr_t entries  = 0;   // +0x00
+    uint32_t  capacity = 0;   // +0x08
+    uint32_t  size     = 0;   // +0x0C
+    uint32_t  flags    = 0;   // +0x10  (bit0 = NotSorted)
+    bool      ok       = false;
+};
+
+FlatsArrayView ReadFlatsArrayHeader(const TweakDB* db) {
+    FlatsArrayView v;
+    if (!db) return v;
+    const uintptr_t base = reinterpret_cast<uintptr_t>(db) + 0x40;
+    uintptr_t entries = 0;
+    if (!SafeReadPtr(base + 0x00, &entries)) return v;
+    SafeReadU32(base + 0x08, &v.capacity);
+    SafeReadU32(base + 0x0c, &v.size);
+    SafeReadU32(base + 0x10, &v.flags);
+    v.entries = entries;
+    v.ok = true;
+    return v;
+}
+
+bool ReadFlatEntry(uintptr_t entriesBase, uint32_t i, TweakDBID* out) {
+    uint64_t raw = 0;
+    if (!SafeReadU64(entriesBase + static_cast<uint64_t>(i) * 8u, &raw)) return false;
+    std::memcpy(out, &raw, sizeof(*out));
+    return true;
+}
+
+// tdbOffset = high 24 bits, big-endian in bytes [5][6][7] (F-031).
+uint32_t TdbOffsetOf(const TweakDBID& id) {
+    return (static_cast<uint32_t>(id.tdbOffset[0]) << 16)
+         | (static_cast<uint32_t>(id.tdbOffset[1]) << 8)
+         |  static_cast<uint32_t>(id.tdbOffset[2]);
+}
+
+} // namespace
+
+int64_t ResolveFlatOffset(const TweakDB* db, TweakDBID key) {
+    const FlatsArrayView fa = ReadFlatsArrayHeader(db);
+    if (!fa.ok || !fa.entries || fa.size == 0) return -1;
+
+    // Sort order (F-031 / FUN_102b139b8): by nameHash (u32) then nameLength (u8).
+    auto keyLess = [&](const TweakDBID& e) {
+        return e.nameHash < key.nameHash
+            || (e.nameHash == key.nameHash && e.nameLength < key.nameLength);
+    };
+    auto keyEq = [&](const TweakDBID& e) {
+        return e.nameHash == key.nameHash && e.nameLength == key.nameLength;
+    };
+
+    const bool notSorted = (fa.flags & 1u) != 0u;
+    TweakDBID e;
+    if (!notSorted) {
+        uint32_t lo = 0, hi = fa.size;
+        while (lo < hi) {
+            const uint32_t mid = lo + (hi - lo) / 2;
+            if (!ReadFlatEntry(fa.entries, mid, &e)) return -1;
+            if (keyLess(e)) lo = mid + 1; else hi = mid;
+        }
+        if (lo < fa.size && ReadFlatEntry(fa.entries, lo, &e) && keyEq(e))
+            return static_cast<int64_t>(TdbOffsetOf(e));
+        return -1;
+    }
+    // Lazy-sorted array: fall back to a safe linear scan.
+    for (uint32_t i = 0; i < fa.size; ++i) {
+        if (!ReadFlatEntry(fa.entries, i, &e)) return -1;
+        if (keyEq(e)) return static_cast<int64_t>(TdbOffsetOf(e));
+    }
+    return -1;
+}
+
+void EnsureRuntimeAccess(TweakDB* db) {
+    if (!db) return;
+    uint8_t zero = 0;
+    SafeWrite(reinterpret_cast<uintptr_t>(db) + 0x160, &zero, 1);  // unk160 gate (F-031, inferred)
+}
+
+bool EditScalarFlatInPlace(TweakDB* db, TweakDBID flatId, FlatValue v) {
+    if (!db) return false;
+    if (!IsScalarFlatType(v.type)) {
+        log_line("[flat-edit] REFUSED id=<0x%08x>: non-scalar type", flatId.nameHash);
+        return false;
+    }
+    const int64_t off = ResolveFlatOffset(db, flatId);
+    if (off < 0) {
+        log_line("[flat-edit] MISS id=<0x%08x len=%u>: absent from +0x40 flats array",
+                 flatId.nameHash, flatId.nameLength);
+        return false;
+    }
+    const uint8_t* buf = db->flatDataBuffer;   // +0x148
+    if (!buf) { log_line("[flat-edit] no flat buffer"); return false; }
+
+    uint8_t bytes[4] = {0};
+    const uint32_t width = ScalarFlatTypeSize(v.type);
+    switch (v.type) {
+        case FlatType::Int32: {
+            int32_t x = std::holds_alternative<int32_t>(v.value)  ? std::get<int32_t>(v.value)
+                      : std::holds_alternative<uint32_t>(v.value) ? static_cast<int32_t>(std::get<uint32_t>(v.value))
+                      : 0;
+            std::memcpy(bytes, &x, 4);
+            break;
+        }
+        case FlatType::Float: {
+            if (!std::holds_alternative<float>(v.value)) {
+                log_line("[flat-edit] REFUSED id=<0x%08x>: Float variant mismatch", flatId.nameHash);
+                return false;
+            }
+            float x = std::get<float>(v.value);
+            std::memcpy(bytes, &x, 4);
+            break;
+        }
+        case FlatType::Bool:
+            bytes[0] = (std::holds_alternative<bool>(v.value) && std::get<bool>(v.value)) ? 1 : 0;
+            break;
+        default:
+            return false;
+    }
+
+    EnsureRuntimeAccess(db);
+    const uintptr_t dataAddr = reinterpret_cast<uintptr_t>(buf) + static_cast<uint64_t>(off) + 0x08;
+    const bool ok = SafeWrite(dataAddr, bytes, width);
+    log_line("[flat-edit] id=<0x%08x len=%u> tdbOff=0x%06llx data@%p width=%u wrote=%d",
+             flatId.nameHash, flatId.nameLength, (unsigned long long)off, (void*)dataAddr, width, ok ? 1 : 0);
+    return ok;
+}
+
+void VerifyFlatArrayAccess(const TweakDB* db) {
+    const FlatsArrayView fa = ReadFlatsArrayHeader(db);
+    if (!fa.ok) { log_line("[flat-array] header read FAILED"); return; }
+    const bool sorted = (fa.flags & 1u) == 0u;
+    log_line("[flat-array] +0x40 SortedUniqueArray: entries=0x%llx capacity=%u size=%u flags=0x%x sorted=%s",
+             (unsigned long long)fa.entries, fa.capacity, fa.size, fa.flags, sorted ? "yes" : "no");
+    if (!fa.entries || fa.size == 0) { log_line("[flat-array] empty/unpopulated"); return; }
+
+    const uintptr_t floatVft = StaticToRuntime(0x106e925f0);
+    const uintptr_t int32Vft = StaticToRuntime(0x106e926f8);
+    const uintptr_t boolVft  = StaticToRuntime(0x106e92d78);
+    log_line("[flat-array] expected vfts (slid): Float=0x%llx Int32=0x%llx Bool=0x%llx",
+             (unsigned long long)floatVft, (unsigned long long)int32Vft, (unsigned long long)boolVft);
+
+    const uint32_t n = fa.size < 6 ? fa.size : 6;
+    for (uint32_t i = 0; i < n; ++i) {
+        TweakDBID e;
+        if (!ReadFlatEntry(fa.entries, i, &e)) { log_line("[flat-array] entry[%u] read fail", i); continue; }
+        const uint32_t off = TdbOffsetOf(e);
+        uint64_t vt = 0; uint32_t data = 0;
+        const char* tname = "?";
+        if (db->flatDataBuffer) {
+            const uintptr_t fv = reinterpret_cast<uintptr_t>(db->flatDataBuffer) + off;
+            SafeReadU64(fv, &vt);
+            SafeReadU32(fv + 0x08, &data);
+            if      (vt == floatVft) tname = "Float";
+            else if (vt == int32Vft) tname = "Int32";
+            else if (vt == boolVft)  tname = "Bool";
+        }
+        float asF; std::memcpy(&asF, &data, 4);
+        log_line("[flat-array] entry[%u] hash=0x%08x len=%u tdbOff=0x%06x vft=0x%llx type=%s data=0x%08x asF=%g",
+                 i, e.nameHash, e.nameLength, off, (unsigned long long)vt, tname, data, asF);
+    }
+
+    // Round-trip: resolve entry[0] by its own 40-bit key (machinery self-test).
+    TweakDBID e0;
+    if (ReadFlatEntry(fa.entries, 0, &e0)) {
+        TweakDBID key = e0;
+        key.tdbOffset[0] = key.tdbOffset[1] = key.tdbOffset[2] = 0;
+        const int64_t off = ResolveFlatOffset(db, key);
+        const uint32_t expect = TdbOffsetOf(e0);
+        log_line("[flat-array] self-resolve entry0 hash=0x%08x len=%u -> off=0x%06llx expect=0x%06x %s",
+                 e0.nameHash, e0.nameLength, (unsigned long long)off, expect,
+                 (off == static_cast<int64_t>(expect)) ? "HIT" : "MISS");
+    }
 }
 
 } // namespace red4ext_mac

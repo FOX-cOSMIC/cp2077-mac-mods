@@ -99,6 +99,8 @@ static void red4ext_mac_loader_init() {
         log_line("[apply-trigger] after VerifyFlatEntry");
         red4ext_mac::VerifyCandidateFlats(db); // P1.12 — runtime-verify Scope's flat candidates
         log_line("[apply-trigger] after VerifyCandidateFlats");
+        red4ext_mac::VerifyFlatArrayAccess(db); // F-031 — correct flats array (+0x40) read + round-trip self-test
+        log_line("[apply-trigger] after VerifyFlatArrayAccess");
         red4ext_mac::DumpFlatsSample(db);     // P1.13 — walk +0x58 entries, dump for cinema prospecting
         log_line("[apply-trigger] after DumpFlatsSample");
         red4ext_mac::MapNamesToVftables(db);  // P1.14b — record-name → vtable mapping (vtable→type ID)

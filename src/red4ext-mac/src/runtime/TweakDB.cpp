@@ -2065,6 +2065,119 @@ void VerifyFlatArrayAccess(const TweakDB* db) {
     }
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// H-011 step 2a (no-write validation): build a record from the (possibly edited)
+// flats via the game's own factory and compare to the live record. Calls into
+// game code (baseHash accessor + factory) but writes NO game state — the factory
+// allocates a fresh record we read and leak. Proves the UpdateRecord mechanism
+// before the risky copy-back. Env-gated: TWEAKXL_TEST_UPDATEREC=1.
+// ═════════════════════════════════════════════════════════════════════════════
+namespace {
+
+// CreateTDBRecord's 32 per-class factories (static addrs, base 0x100000000),
+// indexed by baseHash & 0x1f (F-031 / F-033). Each: void* fn(uint32 baseHash, uint64 recordId).
+const uintptr_t kFactoryTable[32] = {
+    0x1027052ac, 0x102726504, 0x10274f578, 0x102775fc0, 0x102798288, 0x1027bb6f8,
+    0x1027dc118, 0x1027f6068, 0x10280d970, 0x10282a38c, 0x102852278, 0x1028681f8,
+    0x10287d218, 0x1028a84b8, 0x1028bbe1c, 0x1028d2c10, 0x1028f89d4, 0x102913214,
+    0x1029245e0, 0x102946060, 0x10296d3b8, 0x1029a0100, 0x1029c7e90, 0x1029eb910,
+    0x102a01e44, 0x102a1827c, 0x102a681f0, 0x102a800a4, 0x102a9a66c, 0x102ad3a20,
+    0x102aec110, 0x102afe918,
+};
+
+// Look up a record instance by id in the +0x58 recordsByID map (F-029): the old
+// "flats" accessor name; records resolve here via the flats hash mode (F-026).
+uintptr_t LookupRecordInstance(const TweakDB* db, TweakDBID id) {
+    const uint8_t* hit = Lookup(GetFlatsMapCandidate(db), id, GetFlatsHashMode());
+    if (!hit) return 0;
+    uintptr_t p10 = 0;
+    SafeReadPtr(reinterpret_cast<uintptr_t>(hit) + 0x10, &p10);   // entry+0x10 = instance
+    return p10;
+}
+
+// Call the GetTweakBaseHash virtual at vtable+0x118 (F-033).
+uint32_t CallGetBaseHash(uintptr_t rec) {
+    uintptr_t vtbl = 0;
+    if (!SafeReadPtr(rec + 0x00, &vtbl) || !vtbl) return 0;
+    uintptr_t fn = 0;
+    if (!SafeReadPtr(vtbl + 0x118, &fn) || !fn) return 0;
+    using BaseHashFn = uint32_t (*)(void*);
+    return reinterpret_cast<BaseHashFn>(fn)(reinterpret_cast<void*>(rec));
+}
+
+} // namespace
+
+void TestUpdateRecordBuild(TweakDB* db) {
+    if (!db) return;
+    if (!std::getenv("TWEAKXL_TEST_UPDATEREC")) {
+        log_line("[updaterec] skipped (set TWEAKXL_TEST_UPDATEREC=1)");
+        return;
+    }
+    // Target a known Stat record (F-027/F-033: gamedataStat_Record, value@+0x54).
+    const char* recName = "BaseStats.AccumulatedDoTDecayRate";
+    if (const char* e = std::getenv("TWEAKXL_TEST_RECORD"); e && *e) recName = e;
+
+    TweakDBID rid = MakeCompactId(recName);
+    const uintptr_t realRec = LookupRecordInstance(db, rid);
+    if (!realRec) { log_line("[updaterec] record '%s' not found in +0x58", recName); return; }
+
+    // Canonical recordID stored on the record (+0x40) — pass this to the factory.
+    uint64_t recIdFull = 0;
+    SafeReadU64(realRec + 0x40, &recIdFull);
+
+    const uint32_t baseHash = CallGetBaseHash(realRec);
+    const uint32_t cat = baseHash & 0x1fu;
+    const uintptr_t facStatic = kFactoryTable[cat];
+    const uintptr_t facRuntime = StaticToRuntime(facStatic);
+    uint64_t realVtbl = 0; SafeReadU64(realRec + 0x00, &realVtbl);
+    log_line("[updaterec] rec='%s' realRec=%p vtbl=0x%llx recID@+0x40=0x%016llx baseHash=0x%08x cat=%u factory=0x%llx",
+             recName, (void*)realRec, (unsigned long long)realVtbl,
+             (unsigned long long)recIdFull, baseHash, cat, (unsigned long long)facStatic);
+
+    using FactoryFn = void* (*)(uint32_t, uint64_t);
+    FactoryFn factory = reinterpret_cast<FactoryFn>(facRuntime);
+
+    // ── Build #1 (no edit): should faithfully reproduce the live record ──────
+    log_line("[updaterec] calling factory (build #1, no edit)...");
+    uintptr_t newRec1 = reinterpret_cast<uintptr_t>(factory(baseHash, recIdFull));
+    if (!newRec1) { log_line("[updaterec] factory returned null"); return; }
+    uint64_t n1vtbl = 0; SafeReadU64(newRec1 + 0x00, &n1vtbl);
+    log_line("[updaterec] build #1 ok: newRec1=%p vtbl=0x%llx", (void*)newRec1, (unsigned long long)n1vtbl);
+
+    // Compare value-region (skip the 0x18-byte header: vtable/self/refcount).
+    const uint32_t kCmpStart = 0x18, kCmpEnd = 0x60;
+    auto cmpRegion = [&](uintptr_t a, uintptr_t b, const char* tag) {
+        uint32_t diffs = 0;
+        for (uint32_t off = kCmpStart; off < kCmpEnd; off += 4) {
+            uint32_t va = 0, vb = 0;
+            SafeReadU32(a + off, &va); SafeReadU32(b + off, &vb);
+            if (va != vb) {
+                float fa, fb; std::memcpy(&fa,&va,4); std::memcpy(&fb,&vb,4);
+                log_line("[updaterec]   %s diff @+0x%02x: 0x%08x(%g) vs 0x%08x(%g)", tag, off, va, fa, vb, fb);
+                ++diffs;
+            }
+        }
+        log_line("[updaterec]   %s: %u differing words in [0x%02x,0x%02x)", tag, diffs, kCmpStart, kCmpEnd);
+    };
+    cmpRegion(newRec1, realRec, "build1-vs-real");
+
+    // ── Probe propagation: edit a backing flat, rebuild, see what changes ────
+    const char* props[] = { ".value", ".max", ".min", ".statType" };
+    for (const char* prop : props) {
+        std::string fname = std::string(recName) + prop;
+        TweakDBID fid = MakeCompactId(fname);
+        auto snap = ReadScalarFlat(db, fid);
+        if (!snap.has_value()) { log_line("[updaterec] flat %s absent/non-scalar — skip", fname.c_str()); continue; }
+        FlatValue bump; bump.type = FlatType::Float; bump.value = 4242.0f;
+        EditScalarFlatInPlace(db, fid, bump);
+        uintptr_t newRec2 = reinterpret_cast<uintptr_t>(factory(baseHash, recIdFull));
+        log_line("[updaterec] edited %s=4242 -> rebuild newRec2=%p; diff vs build#1:", fname.c_str(), (void*)newRec2);
+        if (newRec2) cmpRegion(newRec2, newRec1, fname.c_str());
+        EditScalarFlatInPlace(db, fid, *snap);  // restore
+    }
+    log_line("[updaterec] done (temp records leaked, no game state written)");
+}
+
 // F-031: prove the correct flat path end-to-end at the title screen (no save):
 //  (1) resolve REAL NAMED flats via +0x40 — the same map-less retest of names
 //      that got 0/N against the wrong +0x58 map; includes high-confidence

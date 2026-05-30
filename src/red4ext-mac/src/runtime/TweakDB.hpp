@@ -285,6 +285,11 @@ void VerifyFlatArrayAccess(const TweakDB* db);
 // round-trip EditScalarFlatInPlace on a real Float flat (edit→verify→restore).
 void TestFlatWritePath(TweakDB* db);
 
+// H-011 step 2a (env-gated TWEAKXL_TEST_UPDATEREC): build a record from edited
+// flats via the game's factory and byte-compare to the live record — validates
+// the baseHash accessor + factory call (game code) WITHOUT writing game state.
+void TestUpdateRecordBuild(TweakDB* db);
+
 // ───────────────────────────────────────────────────────────────────────────
 // P1.6 Phase A — flat entry/value layout discovery (once-only).
 //

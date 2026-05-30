@@ -103,6 +103,8 @@ static void red4ext_mac_loader_init() {
         log_line("[apply-trigger] after VerifyFlatArrayAccess");
         red4ext_mac::TestFlatWritePath(db);   // F-031 — named-flat resolve + scalar edit round-trip (no save)
         log_line("[apply-trigger] after TestFlatWritePath");
+        red4ext_mac::TestUpdateRecordBuild(db); // H-011 — factory build-from-edited-flats validation (env-gated)
+        log_line("[apply-trigger] after TestUpdateRecordBuild");
         red4ext_mac::DumpFlatsSample(db);     // P1.13 — walk +0x58 entries, dump for cinema prospecting
         log_line("[apply-trigger] after DumpFlatsSample");
         red4ext_mac::MapNamesToVftables(db);  // P1.14b — record-name → vtable mapping (vtable→type ID)

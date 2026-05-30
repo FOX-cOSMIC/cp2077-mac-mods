@@ -1943,6 +1943,32 @@ void EnsureRuntimeAccess(TweakDB* db) {
     SafeWrite(reinterpret_cast<uintptr_t>(db) + 0x160, &zero, 1);  // unk160 gate (F-031, inferred)
 }
 
+// Read a scalar flat's typed value via the +0x40 path (F-031): resolve → read
+// FlatValue [vtable@+0x00][data@+0x08]; the vtable identifies the scalar type.
+// Returns nullopt if absent or non-scalar. Used by the applicator for snapshots.
+std::optional<FlatValue> ReadScalarFlat(const TweakDB* db, TweakDBID id) {
+    if (!db || !db->flatDataBuffer) return std::nullopt;
+    const int64_t off = ResolveFlatOffset(db, id);
+    if (off < 0) return std::nullopt;
+    const uintptr_t fv = reinterpret_cast<uintptr_t>(db->flatDataBuffer) + static_cast<uint64_t>(off);
+    uint64_t vt = 0;
+    if (!SafeReadU64(fv, &vt)) return std::nullopt;
+    uint32_t raw = 0;
+    if (!SafeReadU32(fv + 0x08, &raw)) return std::nullopt;
+
+    FlatValue out;
+    if (vt == StaticToRuntime(0x106e925f0)) {        // Float
+        out.type = FlatType::Float; float f; std::memcpy(&f, &raw, 4); out.value = f;
+    } else if (vt == StaticToRuntime(0x106e926f8)) { // Int32
+        out.type = FlatType::Int32; int32_t i; std::memcpy(&i, &raw, 4); out.value = i;
+    } else if (vt == StaticToRuntime(0x106e92d78)) { // Bool
+        out.type = FlatType::Bool; out.value = (raw & 0xFFu) != 0u;
+    } else {
+        return std::nullopt;  // non-scalar (String/CName/array/...) — not this layer
+    }
+    return out;
+}
+
 bool EditScalarFlatInPlace(TweakDB* db, TweakDBID flatId, FlatValue v) {
     if (!db) return false;
     if (!IsScalarFlatType(v.type)) {

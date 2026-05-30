@@ -271,6 +271,10 @@ bool EditScalarFlatInPlace(TweakDB* db, TweakDBID flatId, FlatValue v);
 // EnsureRuntimeAccess (F-031, inferred). Harmless if already 0.
 void EnsureRuntimeAccess(TweakDB* db);
 
+// Read a scalar flat's typed value via the +0x40 path (F-031). Returns nullopt
+// if the flat is absent or non-scalar. Snapshot source for the applicator.
+std::optional<FlatValue> ReadScalarFlat(const TweakDB* db, TweakDBID id);
+
 // Self-test (once-only): read the +0x40 flats array header, log the first
 // entries with their FlatValue vtables/values, and round-trip-resolve entry[0]
 // by its own key. Proves the correct flat path works. Logs to red4ext-mac.log.

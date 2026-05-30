@@ -871,3 +871,12 @@ Q2 NO MATCH: brute-forced CRC32==0xce8348b9 (len 39) and 5 other live-flat hashe
   - **EditScalarFlatInPlace round-trip PASS** (0.1→1337→restore 0.1, verified).
 - The correct flat path is proven end-to-end (resolve-by-name, read, scalar edit, restore). F-032 filed.
 - **Still no-save TODO:** UpdateRecord (CreateTDBRecord FUN_1026b8db8) so edits propagate to record-cached values; applicator rewire onto ResolveFlatOffset/EditScalarFlatInPlace; interning-safe new-flat allocation.
+
+## 2026-05-30 — Applicator rewired onto correct flat path — real-flat mod APPLIES (Conductor)
+
+- Added `ReadScalarFlat` (typed read via +0x40). Rewired `Applicator.cpp`: snapshot via `ReadScalarFlat`, write via `EditScalarFlatInPlace`, rollback via `EditScalarFlatInPlace(oldValue)` — off the broken +0x58 `ReadFlat`/`WriteFlat`. Removed dead `RestoreValue`/`SnapshotRaw`. Builds clean.
+- **End-to-end PASS (`docs/probes/logs/red4ext-mac-2026-05-30-applicator-e2e.log`):** YAML `BaseStats.AccumulatedDoTDecayRate.max: 1234.0` → parsed → resolved (`tdbOff=0x408df8`, the F-032 offset) → `[flat-edit] wrote=1` → `yaml applied: 1/1, rejected: 0`. The SAME mod would reject pre-rewire (flat absent from +0x58). The load-time scalar applicator is functionally working.
+- **Remaining (no-save, harder):**
+  - **UpdateRecord** — propagate flat edits to record-cached materializations (needed for stats/StatsContainer per F-030). Recipe in F-031: `CreateTDBRecord=FUN_1026b8db8` via a fake-DB (empty +0x58/+0x88, real flats/buffer) + `nativeType->Assign`. Crash-prone game-ABI navigation (HashMap Get / DynArray / Handle / CClass::Assign) — warrants a focused instrumented pass.
+  - **Interning-safe allocation** — buffer growth + new FlatValue (vtable clone) + tdbOffset repoint, so edits don't mutate shared pooled values.
+- **Status:** no-save scalar applicator DONE & proven (resolve+read+edit+YAML pipeline). UpdateRecord + interning-safety are the two remaining (harder) no-save pieces.

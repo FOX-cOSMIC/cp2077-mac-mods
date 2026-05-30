@@ -67,61 +67,12 @@ bool ToScalarFlatValue(const OpValue& v, red4ext_mac::FlatValue* out) {
     }
 }
 
-// Rebuild a typed FlatValue from a snapshot's raw 4 bytes for rollback.
-// ReadFlat returns FlatType::Unknown carrying the raw uint32 (the vft->FlatType
-// map is a pending Schema follow-up); WriteFlat REFUSES Unknown, so we re-clothe
-// the bytes in the scalar type we originally wrote — the type is authoritative
-// here because we only ever wrote that flat as that type.
-red4ext_mac::FlatValue RestoreValue(red4ext_mac::FlatType type, uint32_t raw) {
-    red4ext_mac::FlatValue fv;
-    fv.type = type;
-    switch (type) {
-        case red4ext_mac::FlatType::Int32: {
-            int32_t i;
-            std::memcpy(&i, &raw, sizeof(i));
-            fv.value = i;
-            break;
-        }
-        case red4ext_mac::FlatType::Float: {
-            float f;
-            std::memcpy(&f, &raw, sizeof(f));
-            fv.value = f;
-            break;
-        }
-        case red4ext_mac::FlatType::Bool:
-            fv.value = (raw & 0xFFu) != 0u;
-            break;
-        default:
-            break;  // unreachable: we only push scalar types onto the undo stack
-    }
-    return fv;
-}
-
-// One restored-write's worth of state: where, what type, and the old raw bytes.
+// One restored-write's worth of state: the flat id + its pre-edit typed value.
+// F-031: snapshot via ReadScalarFlat (typed), rollback via EditScalarFlatInPlace.
 struct UndoEntry {
     red4ext_mac::TweakDBID id;
-    red4ext_mac::FlatType  type;
-    uint32_t               oldRaw;
+    red4ext_mac::FlatValue oldValue;
 };
-
-// Extract the raw 4 bytes from a snapshot FlatValue. ReadFlat reports scalars as
-// FlatType::Unknown carrying a uint32 today, but tolerate an int32 alternative
-// too in case the vft->type map lands later and ReadFlat starts typing reads.
-uint32_t SnapshotRaw(const red4ext_mac::FlatValue& fv) {
-    if (std::holds_alternative<uint32_t>(fv.value))
-        return std::get<uint32_t>(fv.value);
-    if (std::holds_alternative<int32_t>(fv.value))
-        return static_cast<uint32_t>(std::get<int32_t>(fv.value));
-    if (std::holds_alternative<float>(fv.value)) {
-        float f = std::get<float>(fv.value);
-        uint32_t raw;
-        std::memcpy(&raw, &f, sizeof(raw));
-        return raw;
-    }
-    if (std::holds_alternative<bool>(fv.value))
-        return std::get<bool>(fv.value) ? 1u : 0u;
-    return 0u;
-}
 
 } // namespace
 
@@ -150,36 +101,37 @@ ApplyResult ApplyMod(red4ext_mac::TweakDB* db, const ModFile& mod) {
 
         const red4ext_mac::TweakDBID id = ToRuntimeId(op.target);
 
-        // ── Snapshot for atomic rollback (the spec's snapshot mechanism) ─────
-        auto snap = red4ext_mac::ReadFlat(db, id);
+        // ── Snapshot for atomic rollback (F-031: typed read off the +0x40 path)
+        auto snap = red4ext_mac::ReadScalarFlat(db, id);
         if (!snap.has_value()) {
             ++r.rejected;
             rejectedThisMod = true;
-            log_line("[applicator] reject op: flat not found (id=0x%08x len=%u name=%s)",
+            log_line("[applicator] reject op: flat not found/non-scalar (id=0x%08x len=%u name=%s)",
                      id.nameHash, id.nameLength, op.targetName.c_str());
             continue;  // keep scanning so all skips/rejects are accounted for;
                        // the whole mod is rolled back atomically at the end.
         }
-        const uint32_t oldRaw = SnapshotRaw(*snap);
 
-        // ── Commit the write ─────────────────────────────────────────────────
-        if (!red4ext_mac::WriteFlat(db, id, newVal)) {
+        // ── Commit the write: edit the flat's FlatValue in the +0x148 buffer ──
+        // NOTE: for record-cached values (e.g. stats) the change reaches gameplay
+        // only after UpdateRecord re-materializes the record (F-030) — that step
+        // is the next applicator addition; the flat itself is correctly mutated.
+        if (!red4ext_mac::EditScalarFlatInPlace(db, id, newVal)) {
             ++r.rejected;
             rejectedThisMod = true;
-            log_line("[applicator] reject op: WriteFlat failed (id=0x%08x name=%s)",
+            log_line("[applicator] reject op: EditScalarFlatInPlace failed (id=0x%08x name=%s)",
                      id.nameHash, op.targetName.c_str());
             continue;
         }
 
         ++r.applied;
-        undo.push_back(UndoEntry{id, newVal.type, oldRaw});
+        undo.push_back(UndoEntry{id, *snap});
     }
 
     // ── Atomic finalize: any rejection rolls back this mod's applied writes ──
     if (rejectedThisMod) {
         for (auto it = undo.rbegin(); it != undo.rend(); ++it) {
-            const red4ext_mac::FlatValue restore = RestoreValue(it->type, it->oldRaw);
-            if (!red4ext_mac::WriteFlat(db, it->id, restore)) {
+            if (!red4ext_mac::EditScalarFlatInPlace(db, it->id, it->oldValue)) {
                 log_line("[applicator] WARNING: rollback write failed (id=0x%08x) "
                          "-- state may be inconsistent", it->id.nameHash);
             }

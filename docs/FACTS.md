@@ -609,6 +609,18 @@ No additional stubs or changes are needed for the `.tweak` parser layer itself. 
 
 ---
 
+### F-033: Runtime baseHash accessor = record vtable +0x118 (GetTweakBaseHash) — unblocks UpdateRecord
+
+- **Date:** 2026-05-30; Ghidra decompile (read-only, static base 0x100000000), cross-validated.
+- **GetTweakBaseHash is the virtual at record `vtable + 0x118`** (NOT +0x110 — that slot is a shared empty `{return;}` stub `FUN_102b73b20`). The +0x118 fn returns a 32-bit per-type constant = the value `CreateTDBRecord (FUN_1026b8db8)` switches on. Call form: `baseHash = ((uint32_t(*)(void*))(*(void**)(*(void**)rec + 0x118)))(rec)`.
+- **Cross-validation (decompile-confirmed):** for every record type, the +0x118 constant == the factory branch's dispatch CONST, and `baseHash & 0x1f` == the factory case. Airtight.
+- **`gamedataStat_Record`:** static vtable **`0x10704f2e8`**, baseHash **`0x1885c3e0`**, factory case 0 (`FUN_1027052ac` → alloc 0x60, ctor `FUN_102b73ac0`, wire `.statType`→rec+0x48, `.value`→rec+0x54 — the +0x54 matching F-027 confirms identity). NOTE: F-026's `0x107d4a198` was a LIVE/slid address; the STATIC Stat vtable is `0x10704f2e8` (same class, different base → at runtime use `StaticToRuntime(0x10704f2e8)`).
+- **Last factory (case 0x1f):** `FUN_102afe918`. Partial vtable→baseHash table in `tools/ghidra/bh-*.out`.
+- **How to re-verify:** `tools/ghidra/bh-3.py` (full-vtable constant scanner), `bh-4.py` (vtable→baseHash builder).
+- **Invalidates:** the +0x110 inference (H-011 had it as a candidate). Resolves H-011's baseHash blocker.
+
+---
+
 ### F-027: BaseStats / Stat_Record Float value lives at p10+0x54 — first identified cinema mutation target
 
 - **Date:** 2026-05-29

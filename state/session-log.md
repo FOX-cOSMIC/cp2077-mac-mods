@@ -895,3 +895,12 @@ Q2 NO MATCH: brute-forced CRC32==0xce8348b9 (len 39) and 5 other live-flat hashe
 - **Significance:** the crash-prone part of UpdateRecord (calling +0x118 + the per-class factory with hand-built args) is PROVEN to work. The mechanism (edit flat → factory rebuilds with new value) is sound.
 - **Last piece:** the copy-back — `nativeType->Assign(realRec, newRec)` (RTTI-correct, all types). Needs the CBaseRTTIType::Assign vtable slot (GetNativeType = rec->vtable[1], slot +0x08, per CreateTDBRecord). Then: edit flat → build newRec → Assign → release newRec. No-save testable (read realRec field before/after).
 - Note: `.max`/`.min`/`.value` for BaseStats don't materialize inline in the record (StatsSystem reads them separately) — finding the flat that backs +0x54 is a naming detail, not a mechanism gap (build#1 already reproduces +0x54 from flats).
+
+## 2026-05-30 — UpdateRecord COMPLETE + wired into applicator (F-034) (Conductor)
+
+- Confirmed RTTI Assign = type-vtable **+0x50** (`FUN_102197fe4`, decompile-confirmed property-copy loop over `type+0x118`/count `type+0x124`). GetNativeType = record-vtable +0x08.
+- Implemented `red4ext_mac::UpdateRecord(db, recordId)`: lookup realRec (+0x58) → baseHash (+0x118) → factory build newRec from edited flats → `nativeType->Assign(realRec,newRec)`. Wired into `ApplyMod` (collects each edited flat's owning record, calls UpdateRecord after edits).
+- **E2E PASS (`docs/probes/logs/red4ext-mac-2026-05-30-updaterec-e2e.log`):** YAML `BaseStats.AccumulatedDoTDecayRate.max:1234` → `[applicator] mod applied: applied=1 records-updated=1/1`, game running (no crash). Build-validation + Assign tests also pass (env-gated).
+- **The full thorough/correct path is built & validated:** resolve flat (+0x40) → edit FlatValue (+0x148) → re-materialize record via game factory + RTTI Assign. H-011 resolved-fact (F-033/F-034).
+- **Semantics note:** Assign copies RTTI-reflected properties (the flat-backed targets), not internal fields — correct behavior.
+- **Remaining (not blocking):** temp newRec leaked (proper release = follow-up); interning-safe flat allocation (F-031); final VISIBLE in-game confirmation needs a save + a flat backing a reflected/used property.

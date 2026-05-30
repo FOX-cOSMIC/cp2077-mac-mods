@@ -285,6 +285,12 @@ void VerifyFlatArrayAccess(const TweakDB* db);
 // round-trip EditScalarFlatInPlace on a real Float flat (edit→verify→restore).
 void TestFlatWritePath(TweakDB* db);
 
+// F-034: re-materialize a record from current flats (factory build + RTTI Assign
+// @ vtable+0x50) so a flat edit reaches the record's reflected properties / the
+// StatsContainer seed (F-030). Call after EditScalarFlatInPlace on the record's
+// flats. Returns false if the record/accessors are unresolvable.
+bool UpdateRecord(TweakDB* db, TweakDBID recordId);
+
 // H-011 step 2a (env-gated TWEAKXL_TEST_UPDATEREC): build a record from edited
 // flats via the game's factory and byte-compare to the live record — validates
 // the baseHash accessor + factory call (game code) WITHOUT writing game state.

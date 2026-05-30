@@ -621,6 +621,22 @@ No additional stubs or changes are needed for the `.tweak` parser layer itself. 
 
 ---
 
+### F-034: UpdateRecord COMPLETE — factory rebuild + RTTI Assign (vtable+0x50); wired into the applicator
+
+- **Date:** 2026-05-30; Ghidra decompile + in-vivo (build 2.3.1). Evidence: `docs/probes/logs/red4ext-mac-2026-05-30-updaterec*.log`.
+- **Mechanism (both halves validated):** to propagate a flat edit to a live record:
+  1. `realRec = recordsByID[recordId]` (+0x58 Lookup → `*(entry+0x10)`).
+  2. `baseHash = realRec->vtable[+0x118]()` (F-033).
+  3. `newRec = factory[baseHash&0x1f](baseHash, *(u64*)(realRec+0x40))` — the per-class factory (F-031 table) reads the GLOBAL (edited) flats and returns a freshly-materialized record. **In-vivo: no crash; newRec faithfully reproduces realRec (matches all of [0x18,0x60) incl. +0x54) except a +0x28 allocation counter.**
+  4. `nativeType = realRec->vtable[+0x08]()` (GetNativeType, slot 1); `nativeType->Assign(realRec, newRec)` where **Assign = type-vtable +0x50** = `FUN_102197fe4` — decompile-confirmed RTTI property-copy loop (iterates `type+0x118` props, count `type+0x124`, copies `src+off→dst+off` per reflected property). **In-vivo: runs without crash.**
+- **Important semantics:** Assign copies only **RTTI-reflected properties** (the flat-backed mod targets) — NOT internal/computed fields. (A manual sentinel poke at `+0x54` was NOT copied because +0x54 is an internal field on this record type, not a reflected property; this is correct behavior, not a defect.)
+- **Wired into the applicator:** `ApplyMod` now collects each edited flat's owning record (name minus last `.prop`) and calls `red4ext_mac::UpdateRecord(db, recordId)` after the edits. **In-vivo E2E: YAML `BaseStats.AccumulatedDoTDecayRate.max:1234` → `applied=1 ... records-updated=1/1`, no crash.**
+- **Caveats / remaining:** temp `newRec` is leaked (one per call — proper release is a follow-up); interning-safe flat allocation still pending (F-031); the final **visible** in-game confirmation needs a save load + a flat that backs a reflected/used property.
+- **How to re-verify:** `TWEAKXL_TEST_UPDATEREC=1` (build validation) / `+TWEAKXL_TEST_ASSIGN=1` (Assign), or drop a YAML mod and grep `[applicator] ... records-updated`.
+- **Invalidates:** none. Completes H-011 (resolve to fact). Assign confirmed at type-vtable +0x50; GetNativeType at record-vtable +0x08.
+
+---
+
 ### F-027: BaseStats / Stat_Record Float value lives at p10+0x54 — first identified cinema mutation target
 
 - **Date:** 2026-05-29

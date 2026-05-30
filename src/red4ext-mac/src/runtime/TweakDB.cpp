@@ -2107,6 +2107,39 @@ uint32_t CallGetBaseHash(uintptr_t rec) {
 
 } // namespace
 
+// H-011 / F-034: re-materialize a record from current flats and copy the result
+// over the live instance via RTTI Assign — so a flat edit reaches the record's
+// reflected (flat-backed) properties and the StatsContainer seed (F-030).
+//   realRec = recordsByID[recordId];  baseHash = realRec->vtable+0x118();
+//   newRec  = factory[baseHash&0x1f](baseHash, recordId);   // built from live flats
+//   realRec->GetNativeType()->Assign(realRec, newRec);      // copy reflected props
+// newRec is leaked (one record per call; proper release is a follow-up).
+bool UpdateRecord(TweakDB* db, TweakDBID recordId) {
+    if (!db) return false;
+    const uintptr_t realRec = LookupRecordInstance(db, recordId);
+    if (!realRec) return false;
+    uint64_t recIdFull = 0;
+    SafeReadU64(realRec + 0x40, &recIdFull);                 // canonical recordID
+    const uint32_t baseHash = CallGetBaseHash(realRec);      // vtable+0x118 (F-033)
+    if (!baseHash) return false;
+
+    using FactoryFn = void* (*)(uint32_t, uint64_t);
+    void* newRec = reinterpret_cast<FactoryFn>(StaticToRuntime(kFactoryTable[baseHash & 0x1fu]))(baseHash, recIdFull);
+    if (!newRec) return false;
+
+    uint64_t rvt = 0; SafeReadU64(realRec + 0x00, &rvt);
+    uintptr_t getTypeFn = 0; SafeReadPtr(static_cast<uintptr_t>(rvt) + 0x08, &getTypeFn);   // GetNativeType (slot 1)
+    if (!getTypeFn) return false;
+    void* nativeType = reinterpret_cast<void* (*)(void*)>(getTypeFn)(reinterpret_cast<void*>(realRec));
+    if (!nativeType) return false;
+    uint64_t tvt = 0; SafeReadU64(reinterpret_cast<uintptr_t>(nativeType) + 0x00, &tvt);
+    uintptr_t assignFn = 0; SafeReadPtr(static_cast<uintptr_t>(tvt) + 0x50, &assignFn);     // CBaseRTTIType::Assign (F-034)
+    if (!assignFn || !PlausiblePtr(assignFn)) return false;
+
+    reinterpret_cast<void (*)(void*, void*, void*)>(assignFn)(nativeType, reinterpret_cast<void*>(realRec), newRec);
+    return true;
+}
+
 void TestUpdateRecordBuild(TweakDB* db) {
     if (!db) return;
     if (!std::getenv("TWEAKXL_TEST_UPDATEREC")) {
@@ -2175,6 +2208,55 @@ void TestUpdateRecordBuild(TweakDB* db) {
         if (newRec2) cmpRegion(newRec2, newRec1, fname.c_str());
         EditScalarFlatInPlace(db, fid, *snap);  // restore
     }
+
+    // ── Step 2b: prove the RTTI Assign copy-back (TWEAKXL_TEST_ASSIGN=1) ──────
+    // GetNativeType = realRec->vtable[1] (+0x08); CBaseRTTIType::Assign = type
+    // vtable +0x50 (RED4ext.SDK). Poke a sentinel into our TEMP record's +0x54,
+    // Assign temp->realRec, and verify realRec+0x54 changed; then restore.
+    if (std::getenv("TWEAKXL_TEST_ASSIGN")) {
+        // GetNativeType(realRec)
+        uint64_t rvt = 0; SafeReadU64(realRec + 0x00, &rvt);
+        uintptr_t getTypeFn = 0; SafeReadPtr(static_cast<uintptr_t>(rvt) + 0x08, &getTypeFn);
+        log_line("[updaterec-assign] realRec.vtbl=0x%llx GetNativeType@+0x08=0x%llx (static~0x%llx)",
+                 (unsigned long long)rvt, (unsigned long long)getTypeFn,
+                 (unsigned long long)(getTypeFn - GetSlide()));
+        if (!getTypeFn) { log_line("[updaterec-assign] no GetNativeType ptr"); }
+        else {
+            using GetTypeFn = void* (*)(void*);
+            void* nativeType = reinterpret_cast<GetTypeFn>(getTypeFn)(reinterpret_cast<void*>(realRec));
+            uint64_t tvt = 0; SafeReadU64(reinterpret_cast<uintptr_t>(nativeType) + 0x00, &tvt);
+            uintptr_t assignFn = 0; SafeReadPtr(static_cast<uintptr_t>(tvt) + 0x50, &assignFn);
+            log_line("[updaterec-assign] nativeType=%p typeVtbl=0x%llx Assign@+0x50=0x%llx (static~0x%llx)",
+                     nativeType, (unsigned long long)tvt, (unsigned long long)assignFn,
+                     (unsigned long long)(assignFn - GetSlide()));
+
+            // Build a fresh temp record, poke a sentinel into its +0x54.
+            uintptr_t tmp = reinterpret_cast<uintptr_t>(factory(baseHash, recIdFull));
+            if (tmp && assignFn && PlausiblePtr(assignFn)) {
+                const float kSentinel = 7777.0f;
+                uint32_t sraw; std::memcpy(&sraw, &kSentinel, 4);
+                SafeWrite(tmp + 0x54, &sraw, 4);
+                uint32_t before = 0; SafeReadU32(realRec + 0x54, &before);
+                float bf; std::memcpy(&bf,&before,4);
+                log_line("[updaterec-assign] calling Assign(nativeType, realRec, tmp) — realRec+0x54 before=%g ...", bf);
+
+                using AssignFn = void (*)(void*, void*, void*);
+                reinterpret_cast<AssignFn>(assignFn)(nativeType, reinterpret_cast<void*>(realRec), reinterpret_cast<void*>(tmp));
+
+                uint32_t after = 0; SafeReadU32(realRec + 0x54, &after);
+                float af; std::memcpy(&af,&after,4);
+                log_line("[updaterec-assign] Assign returned (no crash). realRec+0x54 after=%g %s",
+                         af, (af == kSentinel) ? "== SENTINEL (Assign copies fields!)" : "(unchanged?)");
+                // restore realRec+0x54 to its original value
+                SafeWrite(realRec + 0x54, &before, 4);
+                log_line("[updaterec-assign] restored realRec+0x54");
+            } else {
+                log_line("[updaterec-assign] skipped call (tmp=%p assignFn=0x%llx plausible=%d)",
+                         (void*)tmp, (unsigned long long)assignFn, assignFn ? PlausiblePtr(assignFn) : 0);
+            }
+        }
+    }
+
     log_line("[updaterec] done (temp records leaked, no game state written)");
 }
 

@@ -15,9 +15,12 @@
 #include "runtime/Values.hpp"    // FlatType, FlatValue, IsScalarFlatType
 #include "runtime/HashMap.hpp"   // red4ext_mac::TweakDBID
 
+#include <algorithm>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <set>
+#include <string>
 #include <variant>
 #include <vector>
 
@@ -79,6 +82,7 @@ struct UndoEntry {
 ApplyResult ApplyMod(red4ext_mac::TweakDB* db, const ModFile& mod) {
     ApplyResult r;
     std::vector<UndoEntry> undo;
+    std::set<std::string> affectedRecords;   // record names whose flats we edited
     bool rejectedThisMod = false;
 
     for (const auto& op : mod.ops) {
@@ -126,6 +130,12 @@ ApplyResult ApplyMod(red4ext_mac::TweakDB* db, const ModFile& mod) {
 
         ++r.applied;
         undo.push_back(UndoEntry{id, *snap});
+
+        // Record the owning record (flat name minus its last `.property`) so we
+        // can re-materialize it after all edits (F-034 UpdateRecord).
+        const auto dot = op.targetName.rfind('.');
+        if (dot != std::string::npos && dot > 0)
+            affectedRecords.insert(op.targetName.substr(0, dot));
     }
 
     // ── Atomic finalize: any rejection rolls back this mod's applied writes ──
@@ -146,8 +156,17 @@ ApplyResult ApplyMod(red4ext_mac::TweakDB* db, const ModFile& mod) {
         }
     } else {
         ++r.mods_ok;
-        log_line("[applicator] mod applied: %s (applied=%u skipped=%u)",
-                 mod.path.c_str(), r.applied, r.skipped);
+        // Re-materialize every edited record so its reflected (flat-backed)
+        // properties pick up the new flat values (F-034 / F-030).
+        uint32_t updated = 0;
+        for (const auto& recName : affectedRecords) {
+            red4ext_mac::TweakDBID rid{};
+            rid.nameHash   = red4ext_mac::Crc32(recName.data(), recName.size());
+            rid.nameLength = static_cast<uint8_t>(std::min<size_t>(recName.size(), 255));
+            if (red4ext_mac::UpdateRecord(db, rid)) ++updated;
+        }
+        log_line("[applicator] mod applied: %s (applied=%u skipped=%u records-updated=%u/%zu)",
+                 mod.path.c_str(), r.applied, r.skipped, updated, affectedRecords.size());
     }
 
     return r;

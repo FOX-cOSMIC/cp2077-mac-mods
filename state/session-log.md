@@ -880,3 +880,10 @@ Q2 NO MATCH: brute-forced CRC32==0xce8348b9 (len 39) and 5 other live-flat hashe
   - **UpdateRecord** — propagate flat edits to record-cached materializations (needed for stats/StatsContainer per F-030). Recipe in F-031: `CreateTDBRecord=FUN_1026b8db8` via a fake-DB (empty +0x58/+0x88, real flats/buffer) + `nativeType->Assign`. Crash-prone game-ABI navigation (HashMap Get / DynArray / Handle / CClass::Assign) — warrants a focused instrumented pass.
   - **Interning-safe allocation** — buffer growth + new FlatValue (vtable clone) + tdbOffset repoint, so edits don't mutate shared pooled values.
 - **Status:** no-save scalar applicator DONE & proven (resolve+read+edit+YAML pipeline). UpdateRecord + interning-safety are the two remaining (harder) no-save pieces.
+
+## 2026-05-30 — UpdateRecord fully RE'd; blocked on runtime baseHash (H-011) (Conductor)
+
+- Decompiled CreateTDBRecord (`FUN_1026b8db8`), its 32 factories, the record-build loop (`FUN_102b16a48`), and the TweakDB ctor/struct-init (`FUN_102b73db8`). Mechanism + factory table + empty-map init recorded in **H-011**.
+- **Key finding / blocker:** the per-class factory dispatches on the FULL 32-bit `baseHash` (a per-type constant) and does NOT store it in the record — so there's no direct runtime accessor for a record's baseHash. Resolving it (vtable→baseHash table, or murmur3-of-type-name, or build-loop instrumentation) gates BOTH impl paths (fake-DB and factory-direct), each of which then calls game functions with hand-built args (crash-prone).
+- **Decision:** not rushing a game-function-calling implementation at session end. Blueprint is complete (H-011) for a focused next pass: resolve baseHash → byte-compare-build validation (no-write) → fake-DB/factory-direct + Assign → no-save test. Decompile scripts at `tools/ghidra/` + `/tmp/dec_ur*.py`.
+- Interning-safe flat allocation (buffer growth) likewise remains (F-031 recipe).

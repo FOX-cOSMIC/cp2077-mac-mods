@@ -285,6 +285,7 @@ std::optional<FlatValue> ReadScalarFlat(const TweakDB* db, TweakDBID id);
 // entries with their FlatValue vtables/values, and round-trip-resolve entry[0]
 // by its own key. Proves the correct flat path works. Logs to red4ext-mac.log.
 void VerifyGameSeesEdit(TweakDB* db);  // ground-truth: does the GAME's GetFlat see our edit?
+void FindStatFlatByValue(TweakDB* db);  // identify HP/RAM flats by live value via game GetFlat
 void VerifyFlatArrayAccess(const TweakDB* db);
 
 // Title-screen (no-save) proof of the correct flat path: resolve real NAMED

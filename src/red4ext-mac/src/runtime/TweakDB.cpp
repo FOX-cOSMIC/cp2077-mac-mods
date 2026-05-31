@@ -2185,6 +2185,74 @@ void VerifyGameSeesEdit(TweakDB* db) {
     }
 }
 
+// FOOL-PROOF stat-flat identifier: for each candidate flat, read its LIVE value
+// via the GAME's own GetFlat (FUN_102b76708) and report which one's value is
+// physically the stat (base HP ~150-500, base RAM ~4-16). Selection is by VALUE
+// through the game's accessor, not by name shape — so the BaseStats.Health.max
+// = -1e7 sentinel trap is culled by range. No save needed. Env TWEAKXL_FIND_STAT_FLAT=1.
+void FindStatFlatByValue(TweakDB* db) {
+    if (!db || !std::getenv("TWEAKXL_FIND_STAT_FLAT")) {
+        if (db) log_line("[find-stat] skipped (set TWEAKXL_FIND_STAT_FLAT=1)");
+        return;
+    }
+    // Candidate file: TWEAKXL_STAT_CANDIDATES_FILE wins, else dylib-relative.
+    std::string path;
+    if (const char* env = std::getenv("TWEAKXL_STAT_CANDIDATES_FILE"); env && *env) {
+        path = env;
+    } else {
+        bool fe = false;
+        std::string base = ResolveCandidatesPath(&fe);          // .../tools/probes/candidate_flats.txt
+        const auto slash = base.find_last_of('/');
+        path = (slash == std::string::npos ? std::string("tools/probes")
+                                           : base.substr(0, slash)) + "/stat_candidate_flats.txt";
+    }
+    std::ifstream in(path);
+    if (!in) { log_line("[find-stat] cannot open candidates '%s'", path.c_str()); return; }
+    log_line("[find-stat] reading %s", path.c_str());
+
+    using GetFlatFn = void* (*)(void*, uint64_t);
+    GetFlatFn gGetFlat = reinterpret_cast<GetFlatFn>(StaticToRuntime(0x102b76708));
+    const uintptr_t floatVft = StaticToRuntime(0x106e925f0);
+    const uintptr_t int32Vft = StaticToRuntime(0x106e926f8);
+    const uintptr_t boolVft  = StaticToRuntime(0x106e92d78);
+
+    std::string bestHp, bestRam; double bestHpV = 0, bestRamV = 0;
+    auto consider = [](const std::string& name, double v, bool inRange,
+                       std::string& best, double& bestV, const char* hint) {
+        if (!inRange) return;
+        const bool nameMatch = name.find(hint) != std::string::npos;
+        const bool bestHasHint = !best.empty() && best.find(hint) != std::string::npos;
+        if (best.empty() || (nameMatch && !bestHasHint)) { best = name; bestV = v; }
+    };
+
+    std::string line;
+    while (std::getline(in, line)) {
+        const std::string name = StripLine(line);
+        if (name.empty()) continue;
+        TweakDBID id = MakeCompactId(name);
+        if (ResolveFlatOffset(db, id) < 0) { log_line("[find-stat] name=%s resolves=no", name.c_str()); continue; }
+        uint64_t idr = 0; std::memcpy(&idr, &id, 8);
+        void* fv = gGetFlat(db, idr);
+        if (!fv) { log_line("[find-stat] name=%s GetFlat=null", name.c_str()); continue; }
+        uint64_t vt = 0; SafeReadU64(reinterpret_cast<uintptr_t>(fv), &vt);
+        uint32_t raw = 0; SafeReadU32(reinterpret_cast<uintptr_t>(fv) + 0x08, &raw);
+        const char* tn = (vt == floatVft) ? "Float" : (vt == int32Vft) ? "Int32"
+                       : (vt == boolVft) ? "Bool" : "?";
+        float asF; std::memcpy(&asF, &raw, 4);
+        int32_t asI; std::memcpy(&asI, &raw, 4);
+        const double v = (vt == floatVft) ? (double)asF : (double)asI;
+        const bool hp  = (v >= 150.0 && v <= 500.0);
+        const bool ram = (v >= 4.0   && v <= 16.0);
+        log_line("[find-stat] name=%s resolves=yes type=%s asF=%g asI=%d HP_RANGE=%s RAM_RANGE=%s",
+                 name.c_str(), tn, asF, asI, hp ? "yes" : "no", ram ? "yes" : "no");
+        consider(name, v, hp,  bestHp,  bestHpV,  "Health");
+        consider(name, v, ram, bestRam, bestRamV, "Memory");
+    }
+    log_line("[find-stat] VERDICT hp-flat=%s(val=%g) ram-flat=%s(val=%g)",
+             bestHp.empty()  ? "<none>" : bestHp.c_str(),  bestHpV,
+             bestRam.empty() ? "<none>" : bestRam.c_str(), bestRamV);
+}
+
 void VerifyFlatArrayAccess(const TweakDB* db) {
     const FlatsArrayView fa = ReadFlatsArrayHeader(db);
     if (!fa.ok) { log_line("[flat-array] header read FAILED"); return; }

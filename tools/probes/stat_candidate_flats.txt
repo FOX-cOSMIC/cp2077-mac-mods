@@ -1,0 +1,21 @@
+# Candidate flats for FindStatFlatByValue — REAL property names from gibbed's
+# TweakDB schema (StatPool -> .initialValue; Stat -> .min/.max;
+# ConstantStatModifier -> .value/.statType/.modifierType).
+
+# ---- Player HP pool (StatPool type: .initialValue is the base value) ----
+BaseStatPools.Player_Health_Base.initialValue
+BaseStatPools.Player_Health_Base.enableDefeated
+
+# ---- Player cyberdeck RAM/Memory pool ----
+BaseStatPools.Player_Memory_Base.initialValue
+BaseStatPools.Memory.initialValue
+
+# ---- Health / Memory Stat records (.min/.max only) ----
+BaseStats.Health.min
+BaseStats.Health.max
+BaseStats.Memory.min
+BaseStats.Memory.max
+
+# ---- a few other player pools as sanity references ----
+BaseStatPools.Player_Stamina_Base.initialValue
+BaseStatPools.Player_Oxygen_Base.initialValue

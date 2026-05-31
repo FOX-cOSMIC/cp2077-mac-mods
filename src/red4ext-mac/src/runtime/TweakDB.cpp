@@ -2253,6 +2253,88 @@ void FindStatFlatByValue(TweakDB* db) {
              bestRam.empty() ? "<none>" : bestRam.c_str(), bestRamV);
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// Phase 3: self-verifying runtime stat oracle (F-037). Reaches the player's live
+// StatsContainer and reads RAM/Memory through the game's own data, so the
+// framework can REPORT "game shows RAM=X" (ground truth) and optionally write it.
+// Needs a save loaded (player exists) — runs on a poll thread. Env TWEAKXL_STAT_ORACLE=1.
+// ═════════════════════════════════════════════════════════════════════════════
+namespace {
+
+// F-037 chain root — TODO: fill from the eng-* RE (engine/gameInstance global).
+// 0 = not yet pinned (oracle no-ops). DAT_1090d9090 = PlayerSystem type object.
+constexpr uintptr_t kEngineGlobalStatic     = 0;          // <-- engine global (static)
+constexpr uintptr_t kPlayerSystemTypeGlobal = 0x1090d9090; // CClass* for PlayerSystem (verify)
+
+// engine global → +0x308 framework → +0x10 gameInstance → GetSystem(PlayerSystem)
+//   → +0x604c0 playerEntity → +0x18 StatsContainer. Heavily guarded; the only
+//   non-SafeRead step is the GetSystem vtable call into game code.
+uintptr_t GetPlayerStatsContainer() {
+    if (!kEngineGlobalStatic) return 0;
+    uintptr_t eng = 0; if (!SafeReadPtr(StaticToRuntime(kEngineGlobalStatic), &eng) || !eng) return 0;
+    uintptr_t fw = 0;  if (!SafeReadPtr(eng + 0x308, &fw) || !fw) return 0;
+    uintptr_t gi = 0;  if (!SafeReadPtr(fw + 0x10, &gi) || !gi) return 0;
+    uintptr_t gvt = 0; if (!SafeReadPtr(gi, &gvt) || !gvt) return 0;
+    uintptr_t getSysFn = 0; if (!SafeReadPtr(gvt + 0x08, &getSysFn) || !getSysFn) return 0;
+    uintptr_t psType = 0; if (!SafeReadPtr(StaticToRuntime(kPlayerSystemTypeGlobal), &psType) || !psType) return 0;
+    log_line("[oracle] eng=0x%llx fw=0x%llx gi=0x%llx getSys=0x%llx psType=0x%llx",
+             (unsigned long long)eng, (unsigned long long)fw, (unsigned long long)gi,
+             (unsigned long long)getSysFn, (unsigned long long)psType);
+    using GetSysFn = void* (*)(void*, void*);
+    void* ps = reinterpret_cast<GetSysFn>(getSysFn)(reinterpret_cast<void*>(gi), reinterpret_cast<void*>(psType));
+    if (!ps) { log_line("[oracle] GetSystem(PlayerSystem) returned null"); return 0; }
+    uintptr_t ent = 0; if (!SafeReadPtr(reinterpret_cast<uintptr_t>(ps) + 0x604c0, &ent) || !ent) {
+        log_line("[oracle] no player entity @ playerSystem+0x604c0 (no save loaded yet?)"); return 0;
+    }
+    uintptr_t cont = 0; SafeReadPtr(ent + 0x18, &cont);
+    log_line("[oracle] playerSystem=%p playerEntity=0x%llx statsContainer=0x%llx",
+             ps, (unsigned long long)ent, (unsigned long long)cont);
+    return cont;
+}
+
+// Dump the StatsContainer (F-030 layout) + identify RAM/Memory by value (~4-16).
+// Reads raw header first so the inline-vs-pointer layout can be confirmed live.
+void OracleDumpContainer(uintptr_t container) {
+    if (!container) return;
+    for (int o = 0x40; o < 0x70; o += 8) {
+        uint64_t w = 0; SafeReadU64(container + o, &w);
+        log_line("[oracle] container+0x%02x = 0x%016llx", o, (unsigned long long)w);
+    }
+    uint32_t count = 0; SafeReadU32(container + 0x5c, &count);
+    uintptr_t idArr = 0, entArr = 0;
+    SafeReadPtr(container + 0x50, &idArr);
+    SafeReadPtr(container + 0x60, &entArr);
+    log_line("[oracle] count=%u idArrPtr=0x%llx entPtr=0x%llx",
+             count, (unsigned long long)idArr, (unsigned long long)entArr);
+    if (count == 0 || count > 4096 || !idArr || !entArr) { log_line("[oracle] implausible container header"); return; }
+    for (uint32_t i = 0; i < count && i < 128; ++i) {
+        uint32_t id = 0; SafeReadU32(idArr + (uint64_t)i * 4, &id);
+        uint32_t raw = 0; SafeReadU32(entArr + (uint64_t)i * 0x10 + 0x0c, &raw);
+        float v; std::memcpy(&v, &raw, 4);
+        const bool ram = (v >= 4.0f && v <= 16.0f);
+        log_line("[oracle] stat[%u] id=0x%08x value=%g%s", i, id, v, ram ? "  <-- RAM-RANGE" : "");
+    }
+}
+
+std::once_flag g_oracle_once;
+
+} // namespace
+
+void StatOracle(TweakDB* /*db*/) {
+    if (!std::getenv("TWEAKXL_STAT_ORACLE")) { log_line("[oracle] skipped (set TWEAKXL_STAT_ORACLE=1)"); return; }
+    if (!kEngineGlobalStatic) { log_line("[oracle] engine global not yet pinned (no-op)"); return; }
+    std::call_once(g_oracle_once, [] {
+        std::thread([] {
+            log_line("[oracle] poll thread started — waiting for a loaded save (player entity)...");
+            for (int i = 0; i < 600; ++i) {            // up to ~20 min
+                uintptr_t cont = GetPlayerStatsContainer();
+                if (cont) { OracleDumpContainer(cont); break; }
+                std::this_thread::sleep_for(std::chrono::seconds(2));
+            }
+        }).detach();
+    });
+}
+
 void VerifyFlatArrayAccess(const TweakDB* db) {
     const FlatsArrayView fa = ReadFlatsArrayHeader(db);
     if (!fa.ok) { log_line("[flat-array] header read FAILED"); return; }

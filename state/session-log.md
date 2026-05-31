@@ -920,3 +920,15 @@ Q2 NO MATCH: brute-forced CRC32==0xce8348b9 (len 39) and 5 other live-flat hashe
 - **What this means:** the ENGINEERING is complete and correct (resolve +0x40, interning-safe edit, UpdateRecord — all proven). The remaining gap is purely CONTENT: *which specific flat names produce visible effects*. I've been guessing property names via repeated game launches — inefficient and unreliable, because real flats need real metadata.
 - **Reliable path forward (not guessing):** (a) apply a REAL published Windows TweakXL `.yaml` mod verbatim — its flats are verified to work on Windows; this is literally the project goal. (b) OR pull a canonical TweakDB flat-name+type dump (WolvenKit) to know exactly which flats exist and what they drive.
 - Probes added this session (env-gated, no-save): `TestFlatWritePath`, `TestUpdateRecordBuild`, `ProbeReflectedFlats`. Interning-safe write `EditScalarFlatSafe` is live in the applicator.
+
+## 2026-05-31 — GROUND-TRUTH verification: write path is real; I'd been editing the wrong flats (F-036)
+
+- **Context:** after a run of unverified "it works" claims (citing `records-updated=1/1` and asking the user to load saves), the user pushed back ("what is it that you are halucinating there?"). Correct call — I'd conflated "the function ran" with "the effect happened."
+- **Fix: added `VerifyGameSeesEdit` (env `TWEAKXL_VERIFY_GAME=1`)** — after editing a flat, it calls the GAME's own `GetFlat` (`FUN_102b76708`) and reports whether the game returns our value. Ground truth, not inference.
+- **Result (`docs/probes/logs/red4ext-mac-2026-05-31-verify-game.log`):**
+  - `BaseStats.Health.max` (in-place): game GetFlat `-1e7 -> 4242` → GAME-SEES-EDIT=YES
+  - `BaseStats.Health.min` (interning-safe repoint): game GetFlat `0 -> 4242` → GAME-SEES-EDIT=YES
+  - So BOTH editors genuinely reach the game's flat store. **The write side is verified real.**
+- **But the honest correction:** `BaseStats.Health.max` read **-1e7** before our edit — an internal range sentinel, NOT the player's max HP. So editing it changes nothing visible; the "min==max forces the stat" idea was wrong. The only in-game effect ever seen (RAM/carry/spawn "chaos") was interning collateral, not targeted flats. `records-updated=1/1` only meant `UpdateRecord` ran.
+- **Recorded as F-036.** Saved a feedback memory `feedback-verify-dont-claim` (verify via the consumer's path; state verified-vs-assumed plainly).
+- **Reliable path forward (no guessing):** canonical TweakDB flat-name dump + the verified game-`GetFlat` reader → read a candidate flat's LIVE value, find the one that actually holds the stat (base HP ~200–300, base RAM ~6), edit THAT. Player HP/RAM come from `gamedataConstantStatModifier` base-value records, names TBD.

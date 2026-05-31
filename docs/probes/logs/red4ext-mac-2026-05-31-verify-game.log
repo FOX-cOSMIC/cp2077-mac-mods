@@ -1,0 +1,460 @@
+[red4ext-mac] loader init 2026-05-31T10:29:14, base=0x10451c000 slide=0x451c000
+[singleton-access] initial poll: 0x0 (null — expected at load time; DB built later)
+[apply-trigger] polling thread started (interval=50ms, stable-threshold=3 polls, timeout=300000ms)
+[tweakxl] plugin orchestrator init
+[apply-trigger] singleton non-null at poll 60 (TweakDB=0x323540bd0)
+[apply-trigger] count stable at 843 after 3 consecutive polls
+[apply-trigger] firing callbacks (db=0x323540bd0, poll #88)
+[apply-trigger] callback batch snapshot: size=2 fired=0
+[apply-trigger] lambda entered (db=0x323540bd0)
+[tweakdb] H-008 verification: mapA(+0x58).count=193354 mapC(+0x108).count=10 verdict=flats-is-A
+[tweakdb] H-008 raw: mapA{@08=193354,@0c=193354} records{@08=843,@0c=843} mapC{@08=10,@0c=13} (F-015 lists mapC.count@0c=+0x114; F-012/F-019 use @08)
+[tweakdb] state: records.count=843 valueBufferSize=4291664
+[apply-trigger] after VerifyH008
+[hashmap] hash-function: fnv1a-8B stored=0xfdfffd70 computed=0xfdfffd70 key=<TweakDBID(0x0c47c120,len=1,off=0x000000)> bucket=0/843
+[hashmap] lookup-test: pass key=<TweakDBID(0x0c47c120,len=1)> entry=0x701e8d93a0 expected=0x701e8d93a0
+[apply-trigger] after VerifyHashFunction
+[flat-layout] flats: count=193354 stride=0x20 bufferBase=0x71b21c000 bufferSize=4291664
+[flat-layout] sample[0]: hash=0xce8348b9 key=<TweakDBID(0xce8348b9,len=39,off=0x000000)> viaTdb.vft=0x0 viaTdb.raw32=0x00000000 asI32=0 asF32=0 entry+0x10.i32=443996576 ptr@0x10=0x31a76d9a0 ptr@0x18=0x31a278398
+[flat-layout] sample[1]: hash=0x8ccf59c9 key=<TweakDBID(0x8ccf59c9,len=43,off=0x000000)> viaTdb.vft=0x0 viaTdb.raw32=0x00000000 asI32=0 asF32=0 entry+0x10.i32=445745440 ptr@0x10=0x31a918920 ptr@0x18=0x31a9577c0
+[flat-layout] sample[2]: hash=0x5bd16bfd key=<TweakDBID(0x5bd16bfd,len=28,off=0x000000)> viaTdb.vft=0x0 viaTdb.raw32=0x00000000 asI32=0 asF32=0 entry+0x10.i32=451219664 ptr@0x10=0x31ae510d0 ptr@0x18=0x31af2e920
+[flat-layout] sample[3]: hash=0x3dbd038a key=<TweakDBID(0x3dbd038a,len=49,off=0x000000)> viaTdb.vft=0x0 viaTdb.raw32=0x00000000 asI32=0 asF32=0 entry+0x10.i32=454737904 ptr@0x10=0x31b1abff0 ptr@0x18=0x31b1821f8
+[flat-layout] sample[4]: hash=0xa1d4c90d key=<TweakDBID(0xa1d4c90d,len=52,off=0x000000)> viaTdb.vft=0x0 viaTdb.raw32=0x00000000 asI32=0 asF32=0 entry+0x10.i32=443091472 ptr@0x10=0x31a690a10 ptr@0x18=0x31a716780
+[flat-layout] sample[5]: hash=0x23a86068 key=<TweakDBID(0x23a86068,len=39,off=0x000000)> viaTdb.vft=0x0 viaTdb.raw32=0x00000000 asI32=0 asF32=0 entry+0x10.i32=457327152 ptr@0x10=0x31b424230 ptr@0x18=0x31b4ebe88
+[flat-layout] verdict: flatValue-ptr-at-entry type-tag-offset:+0x00(vft) value-data-offset:+0x8 buffer-offset-source:entry-ptr tally{tdb=0 ptr@0x18=6 ptr@0x10=6 entryOff=0}/6
+[hashmap] flats-map hash-function: nameHash-direct stored=0xce8348b9 fnv8=0x0ee3fa46 fnv5=0x33c7bd12 crc8=0x289b8eb0 name=0xce8348b9
+[flat-rw] read id=<TweakDBID(0xce8348b9,len=39)> found=yes raw=0x00000002
+[flat-write] id=<TweakDBID(0xce8348b9,len=39)> type=Int32 @0x31a2783a0 old=0x00000002 new=0x00000003 width=4 verify=ok
+[flat-rw] write id=<0xce8348b9> old=0x00000002 new=0x00000003 result=ok reread=0x00000003 match=yes
+[flat-write] id=<TweakDBID(0xce8348b9,len=39)> type=Int32 @0x31a2783a0 old=0x00000003 new=0x00000002 width=4 verify=ok
+[flat-rw] restore old=0x00000002 result=ok
+[flat-rw] verdict: pass
+[apply-trigger] after VerifyFlatEntry
+[flat-probe] preflight-self(records): storedKey=0x000000010c47c120 fullKeyLookup=HIT compactRebuildLookup=HIT
+[flat-probe] preflight-self(flats): storedKey=0x00000027ce8348b9 fullKeyLookup=HIT compactRebuildLookup=HIT
+[flat-probe] preflight: records-map lookup of 'Items.Preset_Nova_Default' (hash=0xb1e27e8e) -> MISS
+[flat-probe] NOTE: 'Items.Preset_Nova_Default' absent from records map (records path verified). Flats lookup path IS verified (self-test compact HIT) — candidate MISSes are trustworthy.
+[flat-probe] candidates file: /Users/lucas_1/Programming/cp2077-mac-mods/build/src/red4ext-mac/../../../tools/probes/candidate_flats.txt (source=dylib-relative)
+[flat-probe] MISS name=Items.Preset_Nova_Default.weaponNearPlane hash=0x953d2276
+[flat-probe] MISS name=Items.Preset_Nova_Default.weaponFarPlane hash=0x3684a671
+[flat-probe] MISS name=Items.Preset_Nova_Default.weaponVignetteIntensity hash=0x625e1374
+[flat-probe] MISS name=Items.Preset_Nova_Default.weaponVignetteRadius hash=0x643b7390
+[flat-probe] MISS name=Items.Preset_Nova_Default.weaponBlurIntensity hash=0x91d9a2df
+[flat-probe] MISS name=Items.Preset_Nova_Default.minimumReloadTime hash=0x1ee75bb9
+[flat-probe] MISS name=Items.Preset_Nova_Default.scaleToPlayer hash=0x73777a62
+[flat-probe] MISS name=Items.Preset_Lexington_Default.weaponNearPlane hash=0x3f0e8643
+[flat-probe] MISS name=Items.Preset_Lexington_Default.weaponVignetteIntensity hash=0xa4ee4b24
+[flat-probe] MISS name=Items.Preset_Lexington_Default.minimumReloadTime hash=0x6d6d54cd
+[flat-probe] MISS name=Items.Preset_HMG_Default.weaponNearPlane hash=0x22689253
+[flat-probe] MISS name=Items.Preset_HMG_Default.minimumReloadTime hash=0x3d758f87
+[flat-probe] MISS name=Items.Preset_Defender_Default.weaponVignetteIntensity hash=0x200c94b3
+[flat-probe] MISS name=Items.Preset_Defender_Default.minimumReloadTime hash=0xe63a2ce2
+[flat-probe] MISS name=Items.Preset_Burya_Default.weaponNearPlane hash=0x0a4af949
+[flat-probe] MISS name=Items.Preset_Burya_Default.specialAttackCost hash=0x0892accc
+[flat-probe] MISS name=Items.Preset_Overture_Default.weaponNearPlane hash=0xba8948e3
+[flat-probe] MISS name=Items.Preset_Overture_Default.weaponVignetteIntensity hash=0xe83253fc
+[flat-probe] MISS name=Items.Preset_Quasar_Default.minimumReloadTime hash=0x8cff6bd1
+[flat-probe] MISS name=Items.Preset_Crusher_Default.minimumReloadTime hash=0xcf91e8c4
+[flat-probe] MISS name=Items.Preset_Dian_Default.weaponNearPlane hash=0xb76a2222
+[flat-probe] MISS name=Items.Preset_Pulsar_Default.weaponVignetteIntensity hash=0x1ceaf5e5
+[flat-probe] MISS name=Items.Preset_Saratoga_Default.weaponNearPlane hash=0xc8010697
+[flat-probe] MISS name=Items.Preset_Shingen_Default.weaponEdgesSharpness hash=0x9b09e172
+[flat-probe] MISS name=Items.Preset_Metel_Default.weaponNearPlane hash=0x56241019
+[flat-probe] MISS name=Items.Preset_Nova_Default.specialAttackNumber hash=0x488ed24f
+[flat-probe] MISS name=Items.Preset_Nova_Default.numberOfHandAnims hash=0xbf2c758b
+[flat-probe] MISS name=Items.Preset_Nova_Default.saveStatPools hash=0xb6ab8fa5
+[flat-probe] MISS name=Items.Preset_Nova_Default.weaponSwapOnAttackDelay hash=0x70894215
+[flat-probe] MISS name=Items.GrenadeFragRegular.delayToDetonate hash=0x1d2a9b06
+[flat-probe] MISS name=Items.GrenadeFragRegular.explodeOnImpact hash=0x3ca99f4f
+[flat-probe] MISS name=Items.GrenadeFragRegular.minimumDistanceFromFloor hash=0xc5c596fd
+[flat-probe] MISS name=Items.GrenadeFragSticky.delayToDetonate hash=0x6e3f9975
+[flat-probe] MISS name=Items.GrenadeFragSticky.explodeOnImpact hash=0x4fbc9d3c
+[flat-probe] MISS name=Items.GrenadeFlashRegular.delayToDetonate hash=0x23bb8a4c
+[flat-probe] MISS name=Items.GrenadeEMPRegular.delayToDetonate hash=0xba29944b
+[flat-probe] MISS name=Items.GrenadeEMPRegular.turretDisableDuration hash=0x4d82a039
+[flat-probe] MISS name=Items.GrenadeBiohazardRegular.delayToDetonate hash=0x6c76e2f6
+[flat-probe] MISS name=Items.GrenadeIncendiaryRegular.delayToDetonate hash=0x33d315a9
+[flat-probe] MISS name=Items.GrenadeIncendiaryRegular.freezingDuration hash=0x06a6da34
+[flat-probe] MISS name=Items.GrenadeSmokeRegular.smokeEffectRadius hash=0x6e12faae
+[flat-probe] MISS name=Items.GrenadeSmokeRegular.smokeEffectDuration hash=0x01eda64a
+[flat-probe] MISS name=Items.GrenadeReconRegular.delayToDetonate hash=0xb8eb853e
+[flat-probe] MISS name=Items.GrenadeFragRegular.startVelocity hash=0xb9659fe4
+[flat-probe] MISS name=Items.GrenadeFragRegular.lifetime hash=0x9338ef8f
+[flat-probe] MISS name=Attacks.MissileProjectile.explosionRadius hash=0xdef451b5
+[flat-probe] MISS name=Attacks.MissileProjectile.explosionRange hash=0xce06b884
+[flat-probe] MISS name=Attacks.MissileProjectile.detonationTimer hash=0x0cfdf5ea
+[flat-probe] MISS name=Attacks.MissileProjectile.gravitySimulation hash=0x338cc89d
+[flat-probe] MISS name=Attacks.HerculesProjectile.explosionRadius hash=0x17ab0995
+[flat-probe] MISS name=Attacks.HerculesProjectile.explosionRange hash=0x9d7e1ef7
+[flat-probe] MISS name=Attacks.ChimeraRocketProjectile.explosionRadius hash=0x110030aa
+[flat-probe] MISS name=Attacks.ChimeraRocketProjectile.explosionRange hash=0x80f23eb2
+[flat-probe] MISS name=Attacks.RocketChargedProjectile.explosionRadius hash=0x2d80b08b
+[flat-probe] MISS name=Attacks.EMPProjectile.explosionRadius hash=0xe6a04b11
+[flat-probe] MISS name=Attacks.ChemicalProjectile.armingDistance hash=0xc4eb8ce5
+[flat-probe] MISS name=Attacks.PlasmaProjectile.explosionRadius hash=0xee07d4ab
+[flat-probe] MISS name=Attacks.Bullet_GameEffect.chance hash=0xbcf5cb02
+[flat-probe] MISS name=Attacks.Bullet_GameEffect.attackEffectDuration hash=0x9bddf753
+[flat-probe] MISS name=Character.Player_Puppet_Base.mass hash=0xf50b4a8c
+[flat-probe] MISS name=Character.Player_Puppet_Base.sizeFront hash=0x2deb7422
+[flat-probe] MISS name=Character.Player_Puppet_Base.sizeBack hash=0xab2cee50
+[flat-probe] MISS name=Character.Player_Puppet_Base.sizeLeft hash=0xbc85c80f
+[flat-probe] MISS name=Character.Player_Puppet_Base.sizeRight hash=0x67da63c0
+[flat-probe] MISS name=Character.Player_Puppet_Base.walkTiltCoefficient hash=0x190e773e
+[flat-probe] MISS name=Character.Player_Puppet_Base.tiltAngleOnSpeed hash=0x878562d0
+[flat-probe] MISS name=Character.Player_Puppet_Base.turnInertiaDamping hash=0xdaad59f5
+[flat-probe] MISS name=Character.Player_Puppet_Base.pseudoAcceleration hash=0x5aa021d1
+[flat-probe] MISS name=Character.Player_Puppet_Base.airDeathRagdollDelay hash=0x3d6e5934
+[flat-probe] MISS name=Character.Player_Puppet_Base.speedIdleThreshold hash=0x6401249b
+[flat-probe] MISS name=Character.Player_Puppet_Base.saveStatPools hash=0x4a4558f6
+[flat-probe] MISS name=Character.Silverhand.mass hash=0xec106cb2
+[flat-probe] MISS name=Character.Silverhand.level hash=0x1bd4c9e9
+[flat-probe] MISS name=Character.johnny_replacer.mass hash=0xb87511b0
+[flat-probe] MISS name=Character.Player_Puppet_Base.combatDefaultZOffset hash=0x34fcaae5
+[flat-probe] MISS name=Character.Player_Puppet_Base.massNormalizedCoefficient hash=0xef515efe
+[flat-probe] MISS name=Character.Player_Puppet_Base.startingRecoveryBalance hash=0x8d17996d
+[flat-probe] MISS name=BaseStatusEffect.BerserkNPCBuff.expModifier hash=0x2150d839
+[flat-probe] MISS name=BaseStatusEffect.BerserkNPCBuff.costReductionPerStack hash=0x40d87d24
+[flat-probe] MISS name=BaseStatusEffect.BerserkNPCBuff.canReapply hash=0x2b2b74f8
+[flat-probe] MISS name=BaseStatusEffect.AirDrop_Burning.armorMeltMaxPercent hash=0x71b6fbde
+[flat-probe] MISS name=BaseStatusEffect.AirDrop_Burning.canReapply hash=0xc39a5942
+[flat-probe] MISS name=BaseStatusEffect.Cloaked.expModifier hash=0xe18591cb
+[flat-probe] MISS name=BaseStatusEffect.Cloaked.canReapply hash=0x440e2b87
+[flat-probe] MISS name=BaseStatusEffect.ForceKill.canReapply hash=0xddc3c5a3
+[flat-probe] MISS name=BaseStatusEffect.GlowingTattoos.canReapply hash=0xc32726c8
+[flat-probe] MISS name=BaseStatusEffect.CloakedOda.canReapply hash=0x09266ab6
+[flat-probe] MISS name=Items.GoodQualityAlcohol1.amountOfCapacityGivenForRipperdocUI hash=0x1d29ff8f
+[flat-probe] MISS name=Items.GoodQualityDrink1.amountOfCapacityGivenForRipperdocUI hash=0x54e4236f
+[flat-probe] MISS name=Items.FirstAidWhiffV0.amountOfCapacityGivenForRipperdocUI hash=0x1d7c16d4
+[flat-probe] MISS name=NewPerks.RipAndTearRanged_Buff.timeDilationStrength hash=0x4770f22e
+[flat-probe] MISS name=NewPerks.RipAndTearRanged_Buff.timeDilationDuration hash=0x17969336
+[flat-probe] MISS name=Attacks.RocketChargedExplosion.explosionRadius hash=0xe026344c
+[flat-probe] MISS name=Attacks.PanzerRainMissile.explosionRadius hash=0x2e3fdd77
+[flat-probe] MISS name=Attacks.DelamainRainMissile.explosionRadius hash=0x9dcf4756
+[flat-probe] MISS name=Attacks.RainMissile.explosionRadius hash=0x2a4f0ea1
+[flat-probe] MISS name=Items.Preset_HMG_Default.weaponVignetteIntensity hash=0x0d197da6
+[flat-probe] MISS name=Character.Player_Puppet_Base.level hash=0xdaaccf64
+[flat-probe] sweep complete: 98 candidates, hits=0, misses=98
+[apply-trigger] after VerifyCandidateFlats
+[flat-array] +0x40 SortedUniqueArray: entries=0x7198e0000 capacity=3306462 size=3306462 flags=0x0 sorted=yes
+[flat-array] expected vfts (slid): Float=0x10b3ae5f0 Int32=0x10b3ae6f8 Bool=0x10b3aed78
+[flat-array] entry[0] hash=0x00000038 len=52 tdbOff=0x2cf418 vft=0x10b3af550 type=? data=0x8ddd53ac asF=-1.36403e-30
+[flat-array] entry[1] hash=0x000006a2 len=55 tdbOff=0x10efc8 vft=0x10b3aef88 type=? data=0x0b5ef298 asF=4.29382e-32
+[flat-array] entry[2] hash=0x00000f8b len=46 tdbOff=0x2947b0 vft=0x10b3b7550 type=? data=0x22851280 asF=3.60693e-18
+[flat-array] entry[3] hash=0x0000107d len=43 tdbOff=0x2aece8 vft=0x10b3af550 type=? data=0x00000000 asF=0
+[flat-array] entry[4] hash=0x00001e21 len=59 tdbOff=0x00ca58 vft=0x10b3af198 type=? data=0x626d6f43 asF=1.09497e+21
+[flat-array] entry[5] hash=0x0000207c len=51 tdbOff=0x2e2d18 vft=0x10b3af550 type=? data=0x8601927d asF=-2.43698e-35
+[flat-array] self-resolve entry0 hash=0x00000038 len=52 -> off=0x2cf418 expect=0x2cf418 HIT
+[apply-trigger] after VerifyFlatArrayAccess
+[flat-edit] id=<0xb9ddbcdc len=20> tdbOff=0x402eb8 data@0x71b61eec0 width=4 wrote=1
+[verify-game] BaseStats.Health.max (inplace) editOk=1 gameVtbl=0x10b3ae5f0 | OUR -1e+07->4242 | GAME-GetFlat -1e+07->4242 | GAME-SEES-EDIT=YES
+[flat-edit] id=<0xb9ddbcdc len=20> tdbOff=0x402eb8 data@0x71b61eec0 width=4 wrote=1
+[flat-safe] id=<0x85d08385 len=20> 4209464 -> new FlatValue @0x40a8b8 (own copy, no interning)
+[verify-game] BaseStats.Health.min (safe) editOk=1 gameVtbl=0x10b3ae5f0 | OUR 0->4242 | GAME-GetFlat 0->4242 | GAME-SEES-EDIT=YES
+[flat-safe] id=<0x85d08385 len=20> 4237496 -> new FlatValue @0x40a8c8 (own copy, no interning)
+[apply-trigger] after VerifyGameSeesEdit
+[flat-name] === high-confidence BaseStats flats (psiberx StatService) ===
+[flat-name] MISS BaseStats.AccumulatedDoTDecayRate.value (hash=0x1f7b9140 len=39)
+[flat-name] HIT  BaseStats.AccumulatedDoTDecayRate.enumName -> off=0x0023f0 type=? data=0x22758be8 asF=3.32778e-18 asI=578128872
+[flat-name] HIT  BaseStats.AccumulatedDoTDecayRate.min -> off=0x403b38 type=Float data=0x00000000 asF=0 asI=0
+[flat-name] HIT  BaseStats.AccumulatedDoTDecayRate.max -> off=0x408df8 type=Float data=0x4479c000 asF=999 asI=1148829696
+[flat-name] HIT  BaseStats.AccumulatedDoTDecayRate.flags -> off=0x0ce7c8 type=? data=0x0b5ef298 asF=4.29382e-32 asI=190771864
+[flat-name] MISS BaseStats.Health.value (hash=0xcd0c6bcd len=22)
+[flat-name] HIT  BaseStats.Health.enumName -> off=0x0172a0 type=? data=0x6c616548 asF=1.08995e+27 asI=1818322248
+[flat-name] HIT  BaseStats.Health.min -> off=0x40a8c8 type=Float data=0x00000000 asF=0 asI=0
+[flat-name] HIT  BaseStats.Health.max -> off=0x402eb8 type=Float data=0xcb18967f asF=-1e+07 asI=-887581057
+[flat-name] HIT  BaseStats.Health.flags -> off=0x0d4e10 type=? data=0x22e2e010 asF=6.14947e-18 asI=585293840
+[flat-name] MISS BaseStats.CarryCapacity.value (hash=0xaf0c161d len=29)
+[flat-name] HIT  BaseStats.CarryCapacity.enumName -> off=0x00b478 type=? data=0x72726143 asF=4.80083e+30 asI=1920098627
+[flat-name] HIT  BaseStats.CarryCapacity.min -> off=0x403b38 type=Float data=0x00000000 asF=0 asI=0
+[flat-name] HIT  BaseStats.CarryCapacity.max -> off=0x402eb8 type=Float data=0xcb18967f asF=-1e+07 asI=-887581057
+[flat-name] HIT  BaseStats.CarryCapacity.flags -> off=0x0d5710 type=? data=0x22e2e610 asF=6.1501e-18 asI=585295376
+[flat-name] MISS BaseStats.ADSSpeedPercentBonus.value (hash=0x208546d5 len=36)
+[flat-name] HIT  BaseStats.ADSSpeedPercentBonus.enumName -> off=0x0015b8 type=? data=0x227586d8 asF=3.32751e-18 asI=578127576
+[flat-name] HIT  BaseStats.ADSSpeedPercentBonus.min -> off=0x40a748 type=Float data=0x4b18967f asF=1e+07 asI=1259902591
+[flat-name] HIT  BaseStats.ADSSpeedPercentBonus.max -> off=0x402eb8 type=Float data=0xcb18967f asF=-1e+07 asI=-887581057
+[flat-name] HIT  BaseStats.ADSSpeedPercentBonus.flags -> off=0x0d52f0 type=? data=0x22e2e350 asF=6.14981e-18 asI=585294672
+[flat-name] high-confidence: 16/20 HIT
+[flat-name] candidate-file +0x40 sweep: 25/98 HIT (file=/Users/lucas_1/Programming/cp2077-mac-mods/build/src/red4ext-mac/../../../tools/probes/candidate_flats.txt)
+[flat-edit] id=<0x0000a994 len=74> tdbOff=0x404048 data@0x71b620050 width=4 wrote=1
+[flat-edit] id=<0x0000a994 len=74> tdbOff=0x404048 data@0x71b620050 width=4 wrote=1
+[flat-edit-test] Float flat hash=0x0000a994 len=74 off=0x404048 orig=0.1 wrote=1 after=1337 restored=0.1 PASS
+[apply-trigger] after TestFlatWritePath
+[updaterec] skipped (set TWEAKXL_TEST_UPDATEREC=1)
+[apply-trigger] after TestUpdateRecordBuild
+[reflected] skipped (set TWEAKXL_PROBE_REFLECTED=1)
+[apply-trigger] after ProbeReflectedFlats
+[flat-dump] flat-buffer base=0x71b21c000 size=4291664
+[flat-dump] map=+0x58 count=193354 bucketCount=193354 stride=32 entries=0x71b634000
+[flat-dump] deep-walking 500 of 193354 entries
+[flat-dump] walked 500 entries, 139 unique vfts
+[flat-dump] === deep p10 dump (256 bytes) entry[0] key=0x0000002b000032a5 p10=0x31b7da880 ===
+[flat-dump]   p10[+0x00] = 000000010b595740 000000031b7da880 | asF: 4.186e-32 2.098e-22 | asI: 190404416 461219968
+[flat-dump]   p10[+0x10] = 00000003226d5790 0000000000000000 | asF: 3.217e-18 0 | asI: 577591184 0
+[flat-dump]   p10[+0x20] = 0000000000000000 00000000000362ef | asF: 0 3.11e-40 | asI: 0 221935
+[flat-dump]   p10[+0x30] = 0000000000000000 0000000000000000 | asF: 0 0 | asI: 0 0
+[flat-dump]   p10[+0x40] = 0000002b000032a5 d0af2f35a677ee39 | asF: 1.817e-41 -8.602e-16 | asI: 12965 -1502089671
+[flat-dump]   p10[+0x50] = a962498f00000000 0000000010293932 | asF: 0 3.337e-29 | asI: 0 271137074
+[flat-dump]   p10[+0x60] = 482d1439b66ef9d6 6aecd9d800000000 | asF: -3.561e-06 0 | asI: -1234241066 0
+[flat-dump]   p10[+0x70] = 0000000050404031 e0a740316559d55c | asF: 1.29e+10 6.429e+22 | asI: 1346388017 1700386140
+[flat-dump]   p10[+0x80] = 878d7b4300000000 00000000e0a74032 | asF: 0 -9.641e+19 | asI: 0 -525909966
+[flat-dump]   p10[+0x90] = 000000010b581520 000000031b7da910 | asF: 4.162e-32 2.098e-22 | asI: 190321952 461220112
+[flat-dump]   p10[+0xa0] = 0000000323672f58 0000000000000000 | asF: 1.253e-17 0 | asI: 593964888 0
+[flat-dump]   p10[+0xb0] = 0000000000000000 0000000000036305 | asF: 0 3.11e-40 | asI: 0 221957
+[flat-dump]   p10[+0xc0] = 0000000000000000 0000000000000000 | asF: 0 0 | asI: 0 0
+[flat-dump]   p10[+0xd0] = 0000003400034e4c a0e3343d61c9a87e | asF: 3.036e-40 4.65e+20 | asI: 216652 1640605822
+[flat-dump]   p10[+0xe0] = a25f1dd200000000 00000000b0922c41 | asF: 0 -1.064e-09 | asI: 0 -1332597695
+[flat-dump]   p10[+0xf0] = 70773b3cf13e5620 1ebc506700000000 | asF: -9.425e+29 0 | asI: -247572960 0
+[flat-dump] buffer-scan: 3259 distinct 4-aligned offsets in [5,500] over 4194304 bytes
+[flat-dump] === REVERSE-SCAN: vfts whose bufOffs land on gameplay-float slots ===
+[flat-dump] === FLOAT-typed clusters (sorted by absolute floatRange count) ===
+[flat-dump] === Per-cluster type classification (top by freq) ===
+[flat-dump] type[0]: vft=0x10b56e5b8 freq=74 dominant=String [F=0 I=8 S=16 B=0 C=0 Z=1]
+[flat-dump] e[5] hash=0x000084da len=32 p10=0x31b7f2970 vft=0x10b56e5b8 +8=000000031b7f2970 +10=00000003236746f8 +18=0000000000000000 +20=0000000000000000 +28=00000000000362f4 +30=0000000000000000 +38=0000000000000000 +40=00000020000084da [asF: +8=2.111e-22 +10=1.254e-17 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=4.766e-41]
+[flat-dump] e[11] hash=0x00017796 len=35 p10=0x31b7f2ac0 vft=0x10b56e5b8 +8=000000031b7f2ac0 +10=0000000323674e48 +18=0000000000000000 +20=0000000000000000 +28=00000000000362fa +30=0000000000000000 +38=0000000000000000 +40=0000002300017796 [asF: +8=2.111e-22 +10=1.254e-17 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=1.347e-40]
+[flat-dump] e[21] hash=0x00032e1b len=35 p10=0x31b7f2ba0 vft=0x10b56e5b8 +8=000000031b7f2ba0 +10=0000000323677f00 +18=0000000000000000 +20=0000000000000000 +28=0000000000036304 +30=0000000000000000 +38=0000000000000000 +40=0000002300032e1b [asF: +8=2.111e-22 +10=1.255e-17 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=2.92e-40]
+[flat-dump] type[1]: vft=0x10b572820 freq=19 dominant=String [F=0 I=1 S=8 B=0 C=0 Z=0]
+[flat-dump] e[69] hash=0x0012a4c1 len=40 p10=0x7001cf6f40 vft=0x10b572820 +8=0000007001cf6f40 +10=00000003236781b0 +18=0000000000000000 +20=0000000000000000 +28=0000000000036334 +30=0000000000000000 +38=0000000000000000 +40=000000280012a4c1 [asF: +8=7.62e-38 +10=1.255e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=1.712e-39]
+[flat-dump] e[216] hash=0x003f89fa len=52 p10=0x70135216d0 vft=0x10b572820 +8=00000070135216d0 +10=0000000323676658 +18=0000000000000000 +20=0000000000000000 +28=00000000000363c7 +30=0000000000000000 +38=0000000000000000 +40=00000034003f89fa [asF: +8=2.652e-27 +10=1.254e-17 +18=0 +20=0 +28=3.113e-40 +30=0 +38=0 +40=5.835e-39]
+[flat-dump] e[233] hash=0x0044e64c len=20 p10=0x7013521e70 vft=0x10b572820 +8=0000007013521e70 +10=0000000323677f68 +18=0000000000000000 +20=0000000000000000 +28=00000000000363d8 +30=0000000000000000 +38=0000000000000000 +40=000000140044e64c [asF: +8=2.652e-27 +10=1.255e-17 +18=0 +20=0 +28=3.113e-40 +30=0 +38=0 +40=6.327e-39]
+[flat-dump] type[2]: vft=0x10b59e788 freq=19 dominant=String [F=0 I=1 S=2 B=0 C=0 Z=1]
+[flat-dump] e[49] hash=0x000a10f0 len=35 p10=0x31b7dac70 vft=0x10b59e788 +8=000000031b7dac70 +10=0000000323672780 +18=0000000000000000 +20=0000000000000000 +28=0000000000036320 +30=0000000000000000 +38=0000000000000000 +40=00000023000a10f0 [asF: +8=2.098e-22 +10=1.253e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=9.244e-40]
+[flat-dump] e[75] hash=0x001517e7 len=39 p10=0x31b7dae20 vft=0x10b59e788 +8=000000031b7dae20 +10=0000000323672e88 +18=0000000000000000 +20=0000000000000000 +28=000000000003633a +30=0000000000000000 +38=0000000000000000 +40=00000027001517e7 [asF: +8=2.098e-22 +10=1.253e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=1.937e-39]
+[flat-dump] e[95] hash=0x001b289e len=41 p10=0x31b7daf40 vft=0x10b59e788 +8=000000031b7daf40 +10=0000000323677260 +18=0000000000000000 +20=0000000000000000 +28=000000000003634e +30=0000000000000000 +38=0000000000000000 +40=00000029001b289e [asF: +8=2.098e-22 +10=1.255e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=2.494e-39]
+[flat-dump] type[3]: vft=0x10b5a8f20 freq=15 dominant=String [F=0 I=0 S=3 B=0 C=0 Z=1]
+[flat-dump] e[1] hash=0x00003392 len=34 p10=0x3240f4190 vft=0x10b5a8f20 +8=00000003240f4190 +10=00000003226db1d8 +18=0000000000000000 +20=0000000000000000 +28=00000000000362f0 +30=0000000000000000 +38=0000000000000000 +40=0000002200003392 [asF: +8=3.106e-17 +10=3.221e-18 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=1.85e-41]
+[flat-dump] e[4] hash=0x00007e2e len=27 p10=0x3240f4eb0 vft=0x10b5a8f20 +8=00000003240f4eb0 +10=00000003226d6350 +18=0000000000000000 +20=0000000000000000 +28=00000000000362f3 +30=0000000000000000 +38=0000000000000000 +40=0000001b00007e2e [asF: +8=3.107e-17 +10=3.217e-18 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=4.526e-41]
+[flat-dump] e[16] hash=0x0002266a len=21 p10=0x3240f5db0 vft=0x10b5a8f20 +8=00000003240f5db0 +10=0000000323678630 +18=0000000000000000 +20=0000000000000000 +28=00000000000362ff +30=0000000000000000 +38=0000000000000000 +40=000000150002266a [asF: +8=3.109e-17 +10=1.255e-17 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=1.975e-40]
+[flat-dump] type[4]: vft=0x10b5a01a0 freq=14 dominant=String [F=0 I=1 S=4 B=0 C=0 Z=0]
+[flat-dump] e[13] hash=0x0001c7de len=57 p10=0x323597870 vft=0x10b5a01a0 +8=0000000323597870 +10=00000003236776c8 +18=0000000000000000 +20=0000000000000000 +28=00000000000362fc +30=0000000000000000 +38=0000000000000000 +40=000000390001c7de [asF: +8=1.179e-17 +10=1.255e-17 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=1.635e-40]
+[flat-dump] e[37] hash=0x000604b6 len=43 p10=0x323597a60 vft=0x10b5a01a0 +8=0000000323597a60 +10=00000003236770c8 +18=0000000000000000 +20=0000000000000000 +28=0000000000036314 +30=0000000000000000 +38=0000000000000000 +40=0000002b000604b6 [asF: +8=1.179e-17 +10=1.255e-17 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=5.527e-40]
+[flat-dump] e[42] hash=0x00082589 len=55 p10=0x323597c50 vft=0x10b5a01a0 +8=0000000323597c50 +10=00000003236743b8 +18=0000000000000000 +20=0000000000000000 +28=0000000000036319 +30=0000000000000000 +38=0000000000000000 +40=0000003700082589 [asF: +8=1.179e-17 +10=1.254e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=7.481e-40]
+[flat-dump] type[5]: vft=0x10b5cc698 freq=12 dominant=String [F=0 I=1 S=3 B=0 C=0 Z=0]
+[flat-dump] e[48] hash=0x000a0e8a len=36 p10=0x31b7f2eb0 vft=0x10b5cc698 +8=000000031b7f2eb0 +10=0000000323676f48 +18=0000000000000000 +20=0000000000000000 +28=000000000003631f +30=0000000000000000 +38=0000000000000000 +40=00000024000a0e8a [asF: +8=2.111e-22 +10=1.255e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=9.236e-40]
+[flat-dump] e[72] hash=0x00136638 len=36 p10=0x31b7f31c0 vft=0x10b5cc698 +8=000000031b7f31c0 +10=00000003236756e8 +18=0000000000000000 +20=0000000000000000 +28=0000000000036337 +30=0000000000000000 +38=0000000000000000 +40=0000002400136638 [asF: +8=2.111e-22 +10=1.254e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=1.782e-39]
+[flat-dump] e[171] hash=0x0030d83c len=37 p10=0x31b7f3e00 vft=0x10b5cc698 +8=000000031b7f3e00 +10=00000003236745e8 +18=0000000000000000 +20=0000000000000000 +28=000000000003639a +30=0000000000000000 +38=0000000000000000 +40=000000250030d83c [asF: +8=2.111e-22 +10=1.254e-17 +18=0 +20=0 +28=3.112e-40 +30=0 +38=0 +40=4.486e-39]
+[flat-dump] type[6]: vft=0x10b569668 freq=12 dominant=String [F=0 I=0 S=4 B=0 C=0 Z=0]
+[flat-dump] e[12] hash=0x00019984 len=62 p10=0x7002fe7cf0 vft=0x10b569668 +8=0000007002fe7cf0 +10=0000000323678200 +18=0000000000000000 +20=0000000000000000 +28=00000000000362fb +30=0000000000000000 +38=0000000000000000 +40=0000003e00019984 [asF: +8=3.739e-37 +10=1.255e-17 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=1.469e-40]
+[flat-dump] e[23] hash=0x00036896 len=61 p10=0x7002e77c70 vft=0x10b569668 +8=0000007002e77c70 +10=0000000323675308 +18=0000000000000000 +20=0000000000000000 +28=0000000000036306 +30=0000000000000000 +38=0000000000000000 +40=0000003d00036896 [asF: +8=3.401e-37 +10=1.254e-17 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=3.13e-40]
+[flat-dump] e[33] hash=0x000545b7 len=71 p10=0x7002cbd780 vft=0x10b569668 +8=0000007002cbd780 +10=0000000323675590 +18=0000000000000000 +20=0000000000000000 +28=0000000000036310 +30=0000000000000000 +38=0000000000000000 +40=00000047000545b7 [asF: +8=2.995e-37 +10=1.254e-17 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=4.842e-40]
+[flat-dump] type[7]: vft=0x10b581520 freq=11 dominant=String [F=0 I=0 S=4 B=0 C=0 Z=0]
+[flat-dump] e[22] hash=0x00034e4c len=52 p10=0x31b7da910 vft=0x10b581520 +8=000000031b7da910 +10=0000000323672f58 +18=0000000000000000 +20=0000000000000000 +28=0000000000036305 +30=0000000000000000 +38=0000000000000000 +40=0000003400034e4c [asF: +8=2.098e-22 +10=1.253e-17 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=3.036e-40]
+[flat-dump] e[155] hash=0x002d289d len=41 p10=0x31b7db450 vft=0x10b581520 +8=000000031b7db450 +10=0000000323673a90 +18=0000000000000000 +20=0000000000000000 +28=000000000003638a +30=0000000000000000 +38=0000000000000000 +40=00000029002d289d [asF: +8=2.099e-22 +10=1.253e-17 +18=0 +20=0 +28=3.112e-40 +30=0 +38=0 +40=4.147e-39]
+[flat-dump] e[162] hash=0x002ef9a5 len=28 p10=0x31b7db600 vft=0x10b581520 +8=000000031b7db600 +10=0000000323677140 +18=0000000000000000 +20=0000000000000000 +28=0000000000036391 +30=0000000000000000 +38=0000000000000000 +40=0000001c002ef9a5 [asF: +8=2.099e-22 +10=1.255e-17 +18=0 +20=0 +28=3.112e-40 +30=0 +38=0 +40=4.314e-39]
+[flat-dump] type[8]: vft=0x10b5d4c58 freq=11 dominant=String [F=0 I=0 S=3 B=0 C=0 Z=0]
+[flat-dump] e[54] hash=0x000b945b len=48 p10=0x3227cf040 vft=0x10b5d4c58 +8=00000003227cf040 +10=0000000323674440 +18=0000000000000000 +20=0000000000000000 +28=0000000000036325 +30=0000000000000000 +38=0000000000000000 +40=00000030000b945b [asF: +8=3.428e-18 +10=1.254e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=1.063e-39]
+[flat-dump] e[55] hash=0x000c503b len=47 p10=0x3227cf0f0 vft=0x10b5d4c58 +8=00000003227cf0f0 +10=0000000323673df0 +18=0000000000000000 +20=0000000000000000 +28=0000000000036326 +30=0000000000000000 +38=0000000000000000 +40=0000002f000c503b [asF: +8=3.428e-18 +10=1.254e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=1.131e-39]
+[flat-dump] e[84] hash=0x001852e7 len=37 p10=0x3227cf250 vft=0x10b5d4c58 +8=00000003227cf250 +10=00000003236762e0 +18=0000000000000000 +20=0000000000000000 +28=0000000000036343 +30=0000000000000000 +38=0000000000000000 +40=00000025001852e7 [asF: +8=3.428e-18 +10=1.254e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=2.234e-39]
+[flat-dump] type[9]: vft=0x10b582360 freq=11 dominant=String [F=0 I=1 S=3 B=0 C=0 Z=0]
+[flat-dump] e[7] hash=0x0000e891 len=38 p10=0x31b9d8890 vft=0x10b582360 +8=000000031b9d8890 +10=0000000323675e90 +18=0000000000000000 +20=0000000000000000 +28=00000000000362f6 +30=0000000000000000 +38=0000000000000000 +40=000000260000e891 [asF: +8=2.606e-22 +10=1.254e-17 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=8.343e-41]
+[flat-dump] e[143] hash=0x002a03c9 len=37 p10=0x31b9d8e30 vft=0x10b582360 +8=000000031b9d8e30 +10=0000000323672fe8 +18=0000000000000000 +20=0000000000000000 +28=000000000003637e +30=0000000000000000 +38=0000000000000000 +40=00000025002a03c9 [asF: +8=2.607e-22 +10=1.253e-17 +18=0 +20=0 +28=3.112e-40 +30=0 +38=0 +40=3.858e-39]
+[flat-dump] e[149] hash=0x002bab1c len=40 p10=0x31b9d8ed0 vft=0x10b582360 +8=000000031b9d8ed0 +10=0000000323676890 +18=0000000000000000 +20=0000000000000000 +28=0000000000036384 +30=0000000000000000 +38=0000000000000000 +40=00000028002bab1c [asF: +8=2.607e-22 +10=1.254e-17 +18=0 +20=0 +28=3.112e-40 +30=0 +38=0 +40=4.01e-39]
+[flat-dump] type[10]: vft=0x10b5a02d0 freq=10 dominant=Int32 [F=0 I=1 S=0 B=0 C=0 Z=0]
+[flat-dump] e[2] hash=0x00006a7f len=31 p10=0x322b33b80 vft=0x10b5a02d0 +8=0000000322b33b80 +10=00000003226de980 +18=0000000000000000 +20=0000000000000000 +28=00000000000362f1 +30=0000000000000000 +38=0000000000000000 +40=0000001f00006a7f [asF: +8=4.858e-18 +10=3.224e-18 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=3.82e-41]
+[flat-dump] e[83] hash=0x00180f88 len=45 p10=0x322b33d80 vft=0x10b5a02d0 +8=0000000322b33d80 +10=0000000323676728 +18=0000000000000000 +20=0000000000000000 +28=0000000000036342 +30=0000000000000000 +38=0000000000000000 +40=0000002d00180f88 [asF: +8=4.858e-18 +10=1.254e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=2.21e-39]
+[flat-dump] e[217] hash=0x003fb3cf len=61 p10=0x322b33f80 vft=0x10b5a02d0 +8=0000000322b33f80 +10=00000003236747c8 +18=0000000000000000 +20=0000000000000000 +28=00000000000363c8 +30=0000000000000000 +38=0000000000000000 +40=0000003d003fb3cf [asF: +8=4.859e-18 +10=1.254e-17 +18=0 +20=0 +28=3.113e-40 +30=0 +38=0 +40=5.85e-39]
+[flat-dump] type[11]: vft=0x10b5e3c98 freq=10 dominant=String [F=0 I=0 S=1 B=0 C=0 Z=0]
+[flat-dump] e[70] hash=0x0012e6fd len=22 p10=0x7001cf73c0 vft=0x10b5e3c98 +8=0000007001cf73c0 +10=0000000323676c00 +18=0000000000000000 +20=0000000000000000 +28=0000000000036335 +30=0000000000000000 +38=0000000000000000 +40=000000160012e6fd [asF: +8=7.621e-38 +10=1.255e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=1.736e-39]
+[flat-dump] e[82] hash=0x0017b5ef len=39 p10=0x7001cf7850 vft=0x10b5e3c98 +8=0000007001cf7850 +10=0000000323673758 +18=0000000000000000 +20=0000000000000000 +28=0000000000036341 +30=0000000000000000 +38=0000000000000000 +40=000000270017b5ef [asF: +8=7.621e-38 +10=1.253e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=2.177e-39]
+[flat-dump] e[134] hash=0x0027b5b7 len=24 p10=0x7001cf8170 vft=0x10b5e3c98 +8=0000007001cf8170 +10=0000000323678558 +18=0000000000000000 +20=0000000000000000 +28=0000000000036375 +30=0000000000000000 +38=0000000000000000 +40=000000180027b5b7 [asF: +8=7.623e-38 +10=1.255e-17 +18=0 +20=0 +28=3.112e-40 +30=0 +38=0 +40=3.647e-39]
+[flat-dump] type[12]: vft=0x10b5e3dc8 freq=9 dominant=String [F=0 I=1 S=2 B=0 C=0 Z=0]
+[flat-dump] e[91] hash=0x0019a450 len=45 p10=0x3227cf300 vft=0x10b5e3dc8 +8=00000003227cf300 +10=0000000323672a28 +18=0000000000000000 +20=0000000000000000 +28=000000000003634a +30=0000000000000000 +38=0000000000000000 +40=0000002d0019a450 [asF: +8=3.428e-18 +10=1.253e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=2.355e-39]
+[flat-dump] e[140] hash=0x0028f8ed len=39 p10=0x3227cf510 vft=0x10b5e3dc8 +8=00000003227cf510 +10=0000000323674b28 +18=0000000000000000 +20=0000000000000000 +28=000000000003637b +30=0000000000000000 +38=0000000000000000 +40=000000270028f8ed [asF: +8=3.428e-18 +10=1.254e-17 +18=0 +20=0 +28=3.112e-40 +30=0 +38=0 +40=3.763e-39]
+[flat-dump] e[279] hash=0x0053c4f7 len=45 p10=0x3227cfbf0 vft=0x10b5e3dc8 +8=00000003227cfbf0 +10=0000000323677e58 +18=0000000000000000 +20=0000000000000000 +28=0000000000036406 +30=0000000000000000 +38=0000000000000000 +40=0000002d0053c4f7 [asF: +8=3.429e-18 +10=1.255e-17 +18=0 +20=0 +28=3.114e-40 +30=0 +38=0 +40=7.693e-39]
+[flat-dump] type[13]: vft=0x10b57d250 freq=9 dominant=String [F=0 I=0 S=1 B=0 C=0 Z=0]
+[flat-dump] e[8] hash=0x0000f1e8 len=32 p10=0x31b7f29e0 vft=0x10b57d250 +8=000000031b7f29e0 +10=0000000323677750 +18=0000000000000000 +20=0000000000000000 +28=00000000000362f7 +30=0000000000000000 +38=0000000000000000 +40=000000200000f1e8 [asF: +8=2.111e-22 +10=1.255e-17 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=8.678e-41]
+[flat-dump] e[40] hash=0x0006e07a len=37 p10=0x31b7f2d60 vft=0x10b57d250 +8=000000031b7f2d60 +10=0000000323677780 +18=0000000000000000 +20=0000000000000000 +28=0000000000036317 +30=0000000000000000 +38=0000000000000000 +40=000000250006e07a [asF: +8=2.111e-22 +10=1.255e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=6.315e-40]
+[flat-dump] e[66] hash=0x0010c1da len=35 p10=0x31b7f3150 vft=0x10b57d250 +8=000000031b7f3150 +10=0000000323675a70 +18=0000000000000000 +20=0000000000000000 +28=0000000000036331 +30=0000000000000000 +38=0000000000000000 +40=000000230010c1da [asF: +8=2.111e-22 +10=1.254e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=1.539e-39]
+[flat-dump] type[14]: vft=0x10b56de98 freq=7 dominant=Int32 [F=0 I=2 S=1 B=0 C=0 Z=0]
+[flat-dump] e[47] hash=0x00099453 len=63 p10=0x3240f9350 vft=0x10b56de98 +8=00000003240f9350 +10=0000000323676150 +18=0000000000000000 +20=0000000000000000 +28=000000000003631e +30=0000000000000000 +38=0000000000000000 +40=0000003f00099453 [asF: +8=3.113e-17 +10=1.254e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=8.797e-40]
+[flat-dump] e[99] hash=0x001bf749 len=64 p10=0x3240f9530 vft=0x10b56de98 +8=00000003240f9530 +10=0000000323678648 +18=0000000000000000 +20=0000000000000000 +28=0000000000036352 +30=0000000000000000 +38=0000000000000000 +40=00000040001bf749 [asF: +8=3.113e-17 +10=1.255e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=2.568e-39]
+[flat-dump] e[181] hash=0x00331b45 len=63 p10=0x3240f9dd0 vft=0x10b56de98 +8=00000003240f9dd0 +10=0000000323677410 +18=0000000000000000 +20=0000000000000000 +28=00000000000363a4 +30=0000000000000000 +38=0000000000000000 +40=0000003f00331b45 [asF: +8=3.114e-17 +10=1.255e-17 +18=0 +20=0 +28=3.113e-40 +30=0 +38=0 +40=4.693e-39]
+[flat-dump] type[15]: vft=0x10b5e8348 freq=6 dominant=String [F=0 I=0 S=1 B=0 C=0 Z=0]
+[flat-dump] e[25] hash=0x00039839 len=44 p10=0x31b7daa30 vft=0x10b5e8348 +8=000000031b7daa30 +10=0000000323677f50 +18=0000000000000000 +20=0000000000000000 +28=0000000000036308 +30=0000000000000000 +38=0000000000000000 +40=0000002c00039839 [asF: +8=2.098e-22 +10=1.255e-17 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=3.301e-40]
+[flat-dump] e[94] hash=0x001ad1ff len=43 p10=0x31b7daeb0 vft=0x10b5e8348 +8=000000031b7daeb0 +10=00000003236752c0 +18=0000000000000000 +20=0000000000000000 +28=000000000003634d +30=0000000000000000 +38=0000000000000000 +40=0000002b001ad1ff [asF: +8=2.098e-22 +10=1.254e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=2.463e-39]
+[flat-dump] e[315] hash=0x005fd53b len=29 p10=0x31b7dc260 vft=0x10b5e8348 +8=000000031b7dc260 +10=0000000323678098 +18=0000000000000000 +20=0000000000000000 +28=000000000003642a +30=0000000000000000 +38=0000000000000000 +40=0000001d005fd53b [asF: +8=2.099e-22 +10=1.255e-17 +18=0 +20=0 +28=3.114e-40 +30=0 +38=0 +40=8.801e-39]
+[flat-dump] type[16]: vft=0x10b5d8908 freq=6 dominant=String [F=0 I=0 S=1 B=0 C=0 Z=0]
+[flat-dump] e[44] hash=0x0008be0b len=38 p10=0x3227cef90 vft=0x10b5d8908 +8=00000003227cef90 +10=0000000323678188 +18=0000000000000000 +20=0000000000000000 +28=000000000003631b +30=0000000000000000 +38=0000000000000000 +40=000000260008be0b [asF: +8=3.428e-18 +10=1.255e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=8.029e-40]
+[flat-dump] e[98] hash=0x001beb72 len=27 p10=0x3227cf3b0 vft=0x10b5d8908 +8=00000003227cf3b0 +10=00000003236757b8 +18=0000000000000000 +20=0000000000000000 +28=0000000000036351 +30=0000000000000000 +38=0000000000000000 +40=0000001b001beb72 [asF: +8=3.428e-18 +10=1.254e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=2.564e-39]
+[flat-dump] e[393] hash=0x00782d87 len=39 p10=0x31b7a05d0 vft=0x10b5d8908 +8=000000031b7a05d0 +10=0000000323677a08 +18=0000000000000000 +20=0000000000000000 +28=0000000000036478 +30=0000000000000000 +38=0000000000000000 +40=0000002700782d87 [asF: +8=2.068e-22 +10=1.255e-17 +18=0 +20=0 +28=3.115e-40 +30=0 +38=0 +40=1.104e-38]
+[flat-dump] type[17]: vft=0x10b57b370 freq=6 dominant=String [F=0 I=0 S=2 B=0 C=0 Z=0]
+[flat-dump] e[39] hash=0x0006992b len=47 p10=0x31b7dabe0 vft=0x10b57b370 +8=000000031b7dabe0 +10=0000000323677248 +18=0000000000000000 +20=0000000000000000 +28=0000000000036316 +30=0000000000000000 +38=0000000000000000 +40=0000002f0006992b [asF: +8=2.098e-22 +10=1.255e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=6.06e-40]
+[flat-dump] e[169] hash=0x003086f4 len=48 p10=0x31b7db720 vft=0x10b57b370 +8=000000031b7db720 +10=0000000323674268 +18=0000000000000000 +20=0000000000000000 +28=0000000000036398 +30=0000000000000000 +38=0000000000000000 +40=00000030003086f4 [asF: +8=2.099e-22 +10=1.254e-17 +18=0 +20=0 +28=3.112e-40 +30=0 +38=0 +40=4.457e-39]
+[flat-dump] e[201] hash=0x0039f1c2 len=61 p10=0x31b7dba80 vft=0x10b57b370 +8=000000031b7dba80 +10=0000000323676698 +18=0000000000000000 +20=0000000000000000 +28=00000000000363b8 +30=0000000000000000 +38=0000000000000000 +40=0000003d0039f1c2 [asF: +8=2.099e-22 +10=1.254e-17 +18=0 +20=0 +28=3.113e-40 +30=0 +38=0 +40=5.321e-39]
+[flat-dump] type[18]: vft=0x10b5e31e8 freq=5 dominant=String [F=0 I=0 S=2 B=0 C=0 Z=0]
+[flat-dump] e[58] hash=0x000cf31d len=22 p10=0x31b7f2f90 vft=0x10b5e31e8 +8=000000031b7f2f90 +10=0000000323676f88 +18=0000000000000000 +20=0000000000000000 +28=0000000000036329 +30=0000000000000000 +38=0000000000000000 +40=00000016000cf31d [asF: +8=2.111e-22 +10=1.255e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=1.189e-39]
+[flat-dump] e[107] hash=0x001e901c len=24 p10=0x31b7f3690 vft=0x10b5e31e8 +8=000000031b7f3690 +10=0000000323672cf8 +18=0000000000000000 +20=0000000000000000 +28=000000000003635a +30=0000000000000000 +38=0000000000000000 +40=00000018001e901c [asF: +8=2.111e-22 +10=1.253e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=2.807e-39]
+[flat-dump] e[240] hash=0x0046f210 len=22 p10=0x31b7f4500 vft=0x10b5e31e8 +8=000000031b7f4500 +10=00000003236787c8 +18=0000000000000000 +20=0000000000000000 +28=00000000000363df +30=0000000000000000 +38=0000000000000000 +40=000000160046f210 [asF: +8=2.112e-22 +10=1.255e-17 +18=0 +20=0 +28=3.113e-40 +30=0 +38=0 +40=6.515e-39]
+[flat-dump] type[19]: vft=0x10b5e2868 freq=5 dominant=String [F=0 I=0 S=4 B=0 C=0 Z=0]
+[flat-dump] e[34] hash=0x0005dedf len=67 p10=0x31b9d8930 vft=0x10b5e2868 +8=000000031b9d8930 +10=0000000323675e30 +18=0000000000000000 +20=0000000000000000 +28=0000000000036311 +30=0000000000000000 +38=0000000000000000 +40=000000430005dedf [asF: +8=2.606e-22 +10=1.254e-17 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=5.391e-40]
+[flat-dump] e[41] hash=0x000767bf len=45 p10=0x31b9d89d0 vft=0x10b5e2868 +8=000000031b9d89d0 +10=0000000323675fb0 +18=0000000000000000 +20=0000000000000000 +28=0000000000036318 +30=0000000000000000 +38=0000000000000000 +40=0000002d000767bf [asF: +8=2.606e-22 +10=1.254e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=6.801e-40]
+[flat-dump] e[80] hash=0x001722bd len=66 p10=0x31b9d8bb0 vft=0x10b5e2868 +8=000000031b9d8bb0 +10=0000000323676ae8 +18=0000000000000000 +20=0000000000000000 +28=000000000003633f +30=0000000000000000 +38=0000000000000000 +40=00000042001722bd [asF: +8=2.606e-22 +10=1.255e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=2.125e-39]
+[flat-dump] type[20]: vft=0x10b5a8340 freq=5 dominant=String [F=0 I=0 S=2 B=0 C=0 Z=0]
+[flat-dump] e[68] hash=0x0011e3e2 len=47 p10=0x31b9d8a70 vft=0x10b5a8340 +8=000000031b9d8a70 +10=0000000323677428 +18=0000000000000000 +20=0000000000000000 +28=0000000000036333 +30=0000000000000000 +38=0000000000000000 +40=0000002f0011e3e2 [asF: +8=2.606e-22 +10=1.255e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=1.643e-39]
+[flat-dump] e[78] hash=0x001533de len=37 p10=0x31b9d8b10 vft=0x10b5a8340 +8=000000031b9d8b10 +10=0000000323675128 +18=0000000000000000 +20=0000000000000000 +28=000000000003633d +30=0000000000000000 +38=0000000000000000 +40=00000025001533de [asF: +8=2.606e-22 +10=1.254e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=1.947e-39]
+[flat-dump] e[197] hash=0x00382dcb len=47 p10=0x31b9d91f0 vft=0x10b5a8340 +8=000000031b9d91f0 +10=0000000323678258 +18=0000000000000000 +20=0000000000000000 +28=00000000000363b4 +30=0000000000000000 +38=0000000000000000 +40=0000002f00382dcb [asF: +8=2.607e-22 +10=1.255e-17 +18=0 +20=0 +28=3.113e-40 +30=0 +38=0 +40=5.159e-39]
+[flat-dump] type[21]: vft=0x10b5dc6c8 freq=5 dominant=Unknown [F=0 I=0 S=0 B=0 C=0 Z=0]
+[flat-dump] e[28] hash=0x00044422 len=48 p10=0x31b7daac0 vft=0x10b5dc6c8 +8=000000031b7daac0 +10=0000000323674468 +18=0000000000000000 +20=0000000000000000 +28=000000000003630b +30=0000000000000000 +38=0000000000000000 +40=0000003000044422 [asF: +8=2.098e-22 +10=1.254e-17 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=3.918e-40]
+[flat-dump] e[30] hash=0x00046dbd len=50 p10=0x31b7dab50 vft=0x10b5dc6c8 +8=000000031b7dab50 +10=0000000323674de8 +18=0000000000000000 +20=0000000000000000 +28=000000000003630d +30=0000000000000000 +38=0000000000000000 +40=0000003200046dbd [asF: +8=2.098e-22 +10=1.254e-17 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=4.067e-40]
+[flat-dump] e[211] hash=0x003e089e len=36 p10=0x31b7dbcc0 vft=0x10b5dc6c8 +8=000000031b7dbcc0 +10=00000003236720b0 +18=0000000000000000 +20=0000000000000000 +28=00000000000363c2 +30=0000000000000000 +38=0000000000000000 +40=00000024003e089e [asF: +8=2.099e-22 +10=1.253e-17 +18=0 +20=0 +28=3.113e-40 +30=0 +38=0 +40=5.697e-39]
+[flat-dump] type[22]: vft=0x10b5731a0 freq=5 dominant=Int32 [F=0 I=2 S=1 B=0 C=0 Z=0]
+[flat-dump] e[18] hash=0x000240f0 len=39 p10=0x324097a30 vft=0x10b5731a0 +8=0000000324097a30 +10=0000000323678768 +18=0000000000000000 +20=0000000000000000 +28=0000000000036301 +30=0000000000000000 +38=0000000000000000 +40=00000027000240f0 [asF: +8=2.981e-17 +10=1.255e-17 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=2.07e-40]
+[flat-dump] e[115] hash=0x0022293d len=41 p10=0x3240901b8 vft=0x10b5731a0 +8=00000003240901b8 +10=00000003236773e0 +18=0000000000000000 +20=0000000000000000 +28=0000000000036362 +30=0000000000000000 +38=0000000000000000 +40=000000290022293d [asF: +8=2.971e-17 +10=1.255e-17 +18=0 +20=0 +28=3.112e-40 +30=0 +38=0 +40=3.137e-39]
+[flat-dump] e[126] hash=0x002491b5 len=33 p10=0x324092030 vft=0x10b5731a0 +8=0000000324092030 +10=0000000323672f18 +18=0000000000000000 +20=0000000000000000 +28=000000000003636d +30=0000000000000000 +38=0000000000000000 +40=00000021002491b5 [asF: +8=2.973e-17 +10=1.253e-17 +18=0 +20=0 +28=3.112e-40 +30=0 +38=0 +40=3.358e-39]
+[flat-dump] type[23]: vft=0x10b5858f8 freq=5 dominant=Int32 [F=0 I=1 S=1 B=0 C=0 Z=0]
+[flat-dump] e[53] hash=0x000b7256 len=37 p10=0x322b33c80 vft=0x10b5858f8 +8=0000000322b33c80 +10=0000000323676c50 +18=0000000000000000 +20=0000000000000000 +28=0000000000036324 +30=0000000000000000 +38=0000000000000000 +40=00000025000b7256 [asF: +8=4.858e-18 +10=1.255e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=1.051e-39]
+[flat-dump] e[135] hash=0x0027e073 len=73 p10=0x322b33e80 vft=0x10b5858f8 +8=0000000322b33e80 +10=0000000323673520 +18=0000000000000000 +20=0000000000000000 +28=0000000000036376 +30=0000000000000000 +38=0000000000000000 +40=000000490027e073 [asF: +8=4.858e-18 +10=1.253e-17 +18=0 +20=0 +28=3.112e-40 +30=0 +38=0 +40=3.662e-39]
+[flat-dump] e[228] hash=0x004294f9 len=54 p10=0x322b34080 vft=0x10b5858f8 +8=0000000322b34080 +10=0000000323674a38 +18=0000000000000000 +20=0000000000000000 +28=00000000000363d3 +30=0000000000000000 +38=0000000000000000 +40=00000036004294f9 [asF: +8=4.859e-18 +10=1.254e-17 +18=0 +20=0 +28=3.113e-40 +30=0 +38=0 +40=6.115e-39]
+[flat-dump] type[24]: vft=0x10b5af418 freq=5 dominant=Unknown [F=0 I=0 S=0 B=0 C=0 Z=0]
+[flat-dump] e[20] hash=0x0002df00 len=24 p10=0x70138c9b60 vft=0x10b5af418 +8=00000070138c9b60 +10=0000000323674930 +18=0000000000000000 +20=0000000000000000 +28=0000000000036303 +30=0000000000000000 +38=0000000000000000 +40=000000180002df00 [asF: +8=3.549e-27 +10=1.254e-17 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=2.637e-40]
+[flat-dump] e[105] hash=0x001e62f0 len=29 p10=0x7001cf7ce0 vft=0x10b5af418 +8=0000007001cf7ce0 +10=0000000323674048 +18=0000000000000000 +20=0000000000000000 +28=0000000000036358 +30=0000000000000000 +38=0000000000000000 +40=0000001d001e62f0 [asF: +8=7.622e-38 +10=1.254e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=2.791e-39]
+[flat-dump] e[243] hash=0x00480250 len=31 p10=0x7013522ec0 vft=0x10b5af418 +8=0000007013522ec0 +10=0000000323675c20 +18=0000000000000000 +20=0000000000000000 +28=00000000000363e2 +30=0000000000000000 +38=0000000000000000 +40=0000001f00480250 [asF: +8=2.653e-27 +10=1.254e-17 +18=0 +20=0 +28=3.113e-40 +30=0 +38=0 +40=6.613e-39]
+[flat-dump] type[25]: vft=0x10b5abdd0 freq=5 dominant=String [F=0 I=0 S=2 B=0 C=0 Z=0]
+[flat-dump] e[108] hash=0x001f26b6 len=42 p10=0x31b7f3700 vft=0x10b5abdd0 +8=000000031b7f3700 +10=0000000323674e10 +18=0000000000000000 +20=0000000000000000 +28=000000000003635b +30=0000000000000000 +38=0000000000000000 +40=0000002a001f26b6 [asF: +8=2.111e-22 +10=1.254e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=2.861e-39]
+[flat-dump] e[239] hash=0x0046c912 len=42 p10=0x31b7f4490 vft=0x10b5abdd0 +8=000000031b7f4490 +10=0000000323673c58 +18=0000000000000000 +20=0000000000000000 +28=00000000000363de +30=0000000000000000 +38=0000000000000000 +40=0000002a0046c912 [asF: +8=2.112e-22 +10=1.254e-17 +18=0 +20=0 +28=3.113e-40 +30=0 +38=0 +40=6.501e-39]
+[flat-dump] e[272] hash=0x00506ec6 len=41 p10=0x31b7f4960 vft=0x10b5abdd0 +8=000000031b7f4960 +10=00000003236776f8 +18=0000000000000000 +20=0000000000000000 +28=00000000000363ff +30=0000000000000000 +38=0000000000000000 +40=0000002900506ec6 [asF: +8=2.112e-22 +10=1.255e-17 +18=0 +20=0 +28=3.114e-40 +30=0 +38=0 +40=7.387e-39]
+[flat-dump] type[26]: vft=0x10b58e190 freq=5 dominant=Unknown [F=0 I=0 S=0 B=0 C=0 Z=1]
+[flat-dump] e[10] hash=0x000155a9 len=47 p10=0x31b7f2a50 vft=0x10b58e190 +8=000000031b7f2a50 +10=00000003236774d0 +18=0000000000000000 +20=0000000000000000 +28=00000000000362f9 +30=0000000000000000 +38=0000000000000000 +40=0000002f000155a9 [asF: +8=2.111e-22 +10=1.255e-17 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=1.226e-40]
+[flat-dump] e[224] hash=0x0041e30e len=46 p10=0x31b7f4340 vft=0x10b58e190 +8=000000031b7f4340 +10=0000000323678408 +18=0000000000000000 +20=0000000000000000 +28=00000000000363cf +30=0000000000000000 +38=0000000000000000 +40=0000002e0041e30e [asF: +8=2.111e-22 +10=1.255e-17 +18=0 +20=0 +28=3.113e-40 +30=0 +38=0 +40=6.051e-39]
+[flat-dump] e[282] hash=0x00548156 len=40 p10=0x31b7f4c70 vft=0x10b58e190 +8=000000031b7f4c70 +10=0000000323672b40 +18=0000000000000000 +20=0000000000000000 +28=0000000000036409 +30=0000000000000000 +38=0000000000000000 +40=0000002800548156 [asF: +8=2.112e-22 +10=1.253e-17 +18=0 +20=0 +28=3.114e-40 +30=0 +38=0 +40=7.761e-39]
+[flat-dump] type[27]: vft=0x10b5bb898 freq=5 dominant=Int32 [F=0 I=2 S=0 B=0 C=0 Z=0]
+[flat-dump] e[6] hash=0x0000a2a7 len=32 p10=0x3240aff60 vft=0x10b5bb898 +8=00000003240aff60 +10=0000000323673c70 +18=0000000000000000 +20=0000000000000000 +28=00000000000362f5 +30=0000000000000000 +38=0000000000000000 +40=000000200000a2a7 [asF: +8=3.014e-17 +10=1.254e-17 +18=0 +20=0 +28=3.11e-40 +30=0 +38=0 +40=5.835e-41]
+[flat-dump] e[92] hash=0x001a2210 len=45 p10=0x31b7b00a8 vft=0x10b5bb898 +8=000000031b7b00a8 +10=0000000323676a28 +18=0000000000000000 +20=0000000000000000 +28=000000000003634b +30=0000000000000000 +38=0000000000000000 +40=0000002d001a2210 [asF: +8=2.076e-22 +10=1.255e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=2.4e-39]
+[flat-dump] e[141] hash=0x00294624 len=47 p10=0x31b7b01b0 vft=0x10b5bb898 +8=000000031b7b01b0 +10=0000000323677cf8 +18=0000000000000000 +20=0000000000000000 +28=000000000003637c +30=0000000000000000 +38=0000000000000000 +40=0000002f00294624 [asF: +8=2.076e-22 +10=1.255e-17 +18=0 +20=0 +28=3.112e-40 +30=0 +38=0 +40=3.79e-39]
+[flat-dump] type[28]: vft=0x10b5baa58 freq=4 dominant=Unknown [F=0 I=0 S=0 B=0 C=0 Z=1]
+[flat-dump] e[45] hash=0x000945c3 len=54 p10=0x31b7f2e40 vft=0x10b5baa58 +8=000000031b7f2e40 +10=0000000323677390 +18=0000000000000000 +20=0000000000000000 +28=000000000003631c +30=0000000000000000 +38=0000000000000000 +40=00000036000945c3 [asF: +8=2.111e-22 +10=1.255e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=8.515e-40]
+[flat-dump] e[97] hash=0x001baf7a len=63 p10=0x31b7f3540 vft=0x10b5baa58 +8=000000031b7f3540 +10=0000000323673b90 +18=0000000000000000 +20=0000000000000000 +28=0000000000036350 +30=0000000000000000 +38=0000000000000000 +40=0000003f001baf7a [asF: +8=2.111e-22 +10=1.254e-17 +18=0 +20=0 +28=3.111e-40 +30=0 +38=0 +40=2.543e-39]
+[flat-dump] e[168] hash=0x00304069 len=57 p10=0x31b7f3d20 vft=0x10b5baa58 +8=000000031b7f3d20 +10=0000000323675aa0 +18=0000000000000000 +20=0000000000000000 +28=0000000000036397 +30=0000000000000000 +38=0000000000000000 +40=0000003900304069 [asF: +8=2.111e-22 +10=1.254e-17 +18=0 +20=0 +28=3.112e-40 +30=0 +38=0 +40=4.431e-39]
+[flat-dump] type[29]: vft=0x10b59b6b8 freq=4 dominant=Int32 [F=0 I=1 S=1 B=0 C=0 Z=1]
+[flat-dump] e[125] hash=0x00243be6 len=54 p10=0x3240f8390 vft=0x10b59b6b8 +8=00000003240f8390 +10=0000000323674a58 +18=0000000000000000 +20=0000000000000000 +28=000000000003636c +30=0000000000000000 +38=0000000000000000 +40=0000003600243be6 [asF: +8=3.112e-17 +10=1.254e-17 +18=0 +20=0 +28=3.112e-40 +30=0 +38=0 +40=3.328e-39]
+[flat-dump] e[189] hash=0x00359cb7 len=45 p10=0x3240f3170 vft=0x10b59b6b8 +8=00000003240f3170 +10=0000000323675358 +18=0000000000000000 +20=0000000000000000 +28=00000000000363ac +30=0000000000000000 +38=0000000000000000 +40=0000002d00359cb7 [asF: +8=3.105e-17 +10=1.254e-17 +18=0 +20=0 +28=3.113e-40 +30=0 +38=0 +40=4.923e-39]
+[flat-dump] e[288] hash=0x00560f46 len=58 p10=0x3240f4fd0 vft=0x10b59b6b8 +8=00000003240f4fd0 +10=00000003236785d0 +18=0000000000000000 +20=0000000000000000 +28=000000000003640f +30=0000000000000000 +38=0000000000000000 +40=0000003a00560f46 [asF: +8=3.108e-17 +10=1.255e-17 +18=0 +20=0 +28=3.114e-40 +30=0 +38=0 +40=7.903e-39]
+[apply-trigger] after DumpFlatsSample
+[name-vft] reading names from /Users/lucas_1/Programming/cp2077-mac-mods/build/src/red4ext-mac/../../../reference/tweakxl-data/record_names.txt
+[name-vft] resolved 63699/63711 names (hits=63699 misses=12), 269 distinct vtables
+[name-vft] === per-vtable record clusters (sample names reveal type) ===
+[name-vft] vft=0x10b56e5b8 freq=6891 samples=[AIQuickHackStatusEffect.RevealPosition_inline1, AttackModifier.ChopperMinTBH, AttackModifier.MinTBHModifier, AttackModifier.MinotaurHGMMinTBH, AttackModifier.SmartGunTBHModifier, Attacks.AirDropThermalDamageOverTime_inline0, Attacks.ChemicalDamageOverTime_inline0, Attacks.ChemicalProjectileCharged_inline0]
+[name-vft] vft=0x10b572820 freq=6668 samples=[Character.AdamSmasher_Puppet_Photomode, Character.Afterlife_Barman, Character.AldecaldosFemale, Character.AldecaldosMale, Character.Alex_Puppet_Photomode, Character.Alt, Character.AltJohnny_Puppet_Photomode, Character.Alt_Puppet_Photomode]
+[name-vft] vft=0x10b5e3c98 freq=4835 samples=[Ammo.AmmoBase, Ammo.HandgunAmmo, Ammo.RifleAmmo, Ammo.ShotgunAmmo, Ammo.SniperRifleAmmo, Ammo.Special, Ammo.Standard, FunctionalTests.Base_Short_Scope_FunctionalTests]
+[name-vft] vft=0x10b5a01a0 freq=3494 samples=[AbilityActions.BerserkActivation, ActionSamples.GoToWeapon, ActionSamples.Reload, ActionSamples.ReloadInCover_Sample, ActionSamples.ReloadShotgun, ActionSamples.Reload_Sample, ActionSamples.SingleMeleeAttackCharge01, ActionSamples.SingleMeleeAttackCharge01RecoverMiss]
+[name-vft] vft=0x10b5af418 freq=1997 samples=[Items.ArmoredOuterChestClothing, Items.Avg_10_Int_Netrunner_Face_1, Items.Avg_10_Int_Netrunner_Feet, Items.Avg_10_Int_Netrunner_Head, Items.Avg_10_Int_Netrunner_InnerToso, Items.Avg_10_Int_Netrunner_Legs, Items.Avg_10_Int_Netrunner_OuterTorso, Items.Balaclava]
+[name-vft] vft=0x10b5ac290 freq=1952 samples=[Ammo.AmmoLootTable, Ammo.HandgunAmmoLootTable, Ammo.RifleAmmoLootTable, Ammo.ShotgunAmmoLootTable, Ammo.SniperAmmoLootTable, Items.KnifeLootTable, Items.KnifeTypesLoot, Items.NeurotoxinKnifeLootTable]
+[name-vft] vft=0x10b5bb898 freq=1870 samples=[AIQuickHackStatusEffect.NetrunnerStaticNoise_inline3, AIQuickHackStatusEffect.NetrunnerStaticNoise_inline4, Ability.CanUseOpticalCamoOda_inline5, Ability.CanUseOpticalCamoOda_inline6, Ability.CanUseOpticalCamoOda_inline7, Ability.CanUseOpticalCamoOda_inline8, Ability.CanUseOpticalCamo_inline11, Ability.CanUseOpticalCamo_inline12]
+[name-vft] vft=0x10b5acfa0 freq=1822 samples=[FunctionalTests.Base_Overture_HighDamage_FunctionalTests, FunctionalTests.Preset_BaseLexington_FunctionalTests, FunctionalTests.Preset_Lexington_LowDamage_FunctionalTests, FunctionalTests.Preset_Satara_FunctionalTest, Items.AdvancedMantisBladesBase, Items.AdvancedMantisBladesChemicalEpic, Items.AdvancedMantisBladesChemicalEpicPlus, Items.AdvancedMantisBladesChemicalLegendary]
+[name-vft] vft=0x10b5cd278 freq=1559 samples=[CyberwareAction.UseBloodPump, ItemAction.ConsumableDisassemble, ItemAction.Consume, ItemAction.Disassemble, ItemAction.Drink, ItemAction.Eat, ItemAction.GadgetDisassemble, ItemAction.JunkDisassemble]
+[name-vft] vft=0x10b59e788 freq=1499 samples=[Vendors.BaseMoney, Vendors.CasinoCashierBaseMoney, Vendors.ClothingWare, Vendors.NetrunnerTrainer_EP1_inline0, Vendors.NetrunnerTrainer_EP1_inline1, Vendors.NetrunnerTrainer_EP1_inline10, Vendors.NetrunnerTrainer_EP1_inline2, Vendors.NetrunnerTrainer_EP1_inline3]
+[name-vft] vft=0x10b56b7a8 freq=1377 samples=[Vehicle.PlayerBike, Vehicle.PlayerCar, Vehicle.VehicleDroneCarrier, Vehicle.Vehicle_2w_Default, Vehicle.Vehicle_4w_Default, Vehicle.aldecado_archer_quartz_heat_3, Vehicle.aldecado_thorton_colby_heat_3, Vehicle.aldecado_thorton_galena_heat_1]
+[name-vft] vft=0x10b581d70 freq=1305 samples=[Items.PlasmaFxPackage_inline0, Items.PlasmaFxPackage_inline1, Items.PlasmaFxPackage_inline10, Items.PlasmaFxPackage_inline11, Items.PlasmaFxPackage_inline12, Items.PlasmaFxPackage_inline13, Items.PlasmaFxPackage_inline14, Items.PlasmaFxPackage_inline2]
+[name-vft] vft=0x10b59e198 freq=1269 samples=[BaseStats.ADSSpeedPercentBonus, BaseStats.ADSSpeedPercentBonusModifierHelper, BaseStats.AccumulatedDoTDecayDelayOnChange, BaseStats.AccumulatedDoTDecayEnabled, BaseStats.AccumulatedDoTDecayEndThrehold, BaseStats.AccumulatedDoTDecayRate, BaseStats.AccumulatedDoTDecayStartDelay, BaseStats.AccumulatedDoTDecayStartThreshold]
+[name-vft] vft=0x10b5a1bc0 freq=1128 samples=[AIQuickHackStatusEffect.BaseBuffQuickhack, AIQuickHackStatusEffect.BuffCamo, AIQuickHackStatusEffect.BuffCapabilities, AIQuickHackStatusEffect.BuffDamageReduction, AIQuickHackStatusEffect.BuffICE, AIQuickHackStatusEffect.BuffLocomotion, AIQuickHackStatusEffect.BuffSturdiness, AIQuickHackStatusEffect.HackBlind]
+[name-vft] vft=0x10b585568 freq=1081 samples=[AIActionTarget.CombatTarget, AIActionTarget.CustomWorldPosition, AIActionTarget.FriendlyTarget, AIActionTarget.ObjectOfInterest, AIActionTarget.Player, AIActionTarget.PointOfInterest, AIActionTarget.StimTarget, AIActionTarget.TopThreat]
+[name-vft] vft=0x10b58e190 freq=1023 samples=[AIQuickHack.HackCounter_Smasher_inline14, AIQuickHackStatusEffect.HackBurning_inline5, AIQuickHackStatusEffect.NetrunnerStaticNoise_inline0, AIQuickHackStatusEffect.NetrunnerStaticNoise_inline2, Ability.CanUseOpticalCamoOda_inline4, Ability.CanUseOpticalCamo_inline10, Ability.CanUseOpticalCamo_inline16, Ability.CanUseOpticalCamo_inline21]
+[name-vft] vft=0x10b5a85a0 freq=993 samples=[Ability.CanGuardBreak_inline5, Ability.HasToxicBlood_inline3, AdamSmasher.EMP_Shield_Rocket_Barrage_inline4, AdamSmasher.EMP_Shield_Rocket_Barrage_inline6, BaseStatusEffect.AirDrop_Burning_inline20, BaseStatusEffect.CarFood_inline4, BaseStatusEffect.CarFood_inline5, BaseStatusEffect.Cassidy_Swap_Buff_inline14]
+[name-vft] vft=0x10b56f068 freq=944 samples=[Character.AldecaldosFemale_inline1, Character.AldecaldosMale_inline1, Character.AnimalsPrimaryHandgunPool, Character.AnimalsSMGPool, Character.AnimalsSecondaryHandgunPool, Character.AnimalsShotgunPool, Character.Arasaka2020RifleSMGPool, Character.ArasakaAssaultRiflePool]
+[name-vft] vft=0x10b595f90 freq=894 samples=[AIQuickHack.HackCounter_Smasher_inline10, AIQuickHack.HackCounter_Smasher_inline13, AIQuickHackStatusEffect.HackDeathStaticNoise_inline3, Ability.HasElectricCoating_inline3, Ability.HasFireproofSkin_inline3, Ability.HasHealthMonitorBomb_inline7, Ability.HasICECounterHack_Smasher_inline5, Ability.HasToxicCleanser_inline3]
+[name-vft] vft=0x10b5cd3a8 freq=883 samples=[Items.ARSMGLMGMod1_Epic_Recipe, Items.ARSMGLMGMod1_Legendary_Recipe, Items.ARSMGLMGMod1_Rare_Recipe, Items.ARSMGLMGMod1_Uncommon_Recipe, Items.ARSMGLMGMod2_Epic_Recipe, Items.ARSMGLMGMod2_Legendary_Recipe, Items.ARSMGLMGMod2_Rare_Recipe, Items.ARSMGLMGMod2_Uncommon_Recipe]
+[name-vft] vft=0x10b56b418 freq=672 samples=[Items.AntiVirus_inline4, Items.BerserkC1MK1_inline0, Items.BerserkC1MK2_inline0, Items.BerserkC1MK3_inline0, Items.BerserkC2MK1_inline0, Items.BerserkC2MK2_inline0, Items.BerserkC2MK3_inline0, Items.BerserkC2MK4_inline0]
+[name-vft] vft=0x10b5a1110 freq=630 samples=[Items.BladeModList_Slot1_inline0, Items.BladeModList_Slot1_inline1, Items.BladeModList_Slot1_inline10, Items.BladeModList_Slot1_inline11, Items.BladeModList_Slot1_inline2, Items.BladeModList_Slot1_inline3, Items.BladeModList_Slot1_inline4, Items.BladeModList_Slot1_inline5]
+[name-vft] vft=0x10b581520 freq=612 samples=[AttackModifier.AlliedDamage, AttackModifier.BaseAlliedDamage, AttackModifier.BaseBulletExplosionDamage, AttackModifier.ChemicalAlliedDamage, AttackModifier.ChemicalEnemyDamage, AttackModifier.DualShotgunMinTBH, AttackModifier.ElectricAlliedDamage, AttackModifier.ElectricEnemyDamage]
+[name-vft] vft=0x10b5bab88 freq=609 samples=[Attacks.BodySlamAttackAbstract, Attacks.BodySlamAttackLevel1, Attacks.BodySlamAttackLevel2, Attacks.BodySlamAttackLevel3, Attacks.ChimeraExplosion, Attacks.ChimeraMeleeExplosion, Attacks.ChimeraMeleeShockwave, Attacks.ChimeraMeleeShockwave02]
+[name-vft] vft=0x10b5858f8 freq=583 samples=[AdamSmasherBoss.NPCParryData, AdamSmasherBoss.ParryMeleeAttack01Definition_inline3, AnimalsBoss_Fists.AnimalsBossFistCombo01MeleeAttackLight01AttackData, AnimalsBoss_Fists.AnimalsBossFistCombo01MeleeAttackLight02AttackData, AnimalsBoss_Fists.AnimalsBossFistCombo01MeleeAttackLight03AttackData, AnimalsBoss_Fists.AnimalsBossFistCombo01MeleeAttackLight04AttackData, AnimalsBoss_Fists.AnimalsBossFistCombo02MeleeAttackLight01AttackData, AnimalsBoss_Fists.AnimalsBossFis
+[name-vft] vft=0x10b5dc7f8 freq=554 samples=[AnimalsBoss_Fists.KerenzikovDodgeCompositeSelector, AnimalsBoss_Fists.PatternSequence01, AnimalsBoss_Fists.PatternSequence02, AnimalsBoss_Hammer.KerenzikovDodgeCompositeSelector, CorpoNetrunner.ShootingSpotBehaviorComposite, CorpoNetrunner.WeaponHandlingComposite, Corpo_Fists.DeflectReactionCompositeSelectorDefinition, Corpo_Fists.DodgeAfterHitReactionCompositeSelectorDefinition]
+[name-vft] vft=0x10b5b3c20 freq=515 samples=[ArchetypeData.AndroidRangedT2, ArchetypeData.FastMeleeT2, ArchetypeData.FastMeleeT3, ArchetypeData.FastRangedT2, ArchetypeData.FastRangedT3, ArchetypeData.FastShotgunnerT2, ArchetypeData.FastShotgunnerT3, ArchetypeData.FastSniperT3]
+[name-vft] vft=0x10b57c8d0 freq=510 samples=[CityFluffScreens.City_bls_idy_highway_welcome_10x1, CityFluffScreens.City_bls_idy_highway_welcome_10x3, CityFluffScreens.City_bls_idy_highway_welcome_12x1, CityFluffScreens.City_bls_idy_highway_welcome_1x1, CityFluffScreens.City_bls_idy_highway_welcome_20x3, CityFluffScreens.City_bls_idy_highway_welcome_21x9, CityFluffScreens.City_bls_idy_highway_welcome_34x1, CityFluffScreens.City_bls_idy_highway_welcome_4x1]
+[name-vft] vft=0x10b592068 freq=507 samples=[Interactions.ActionDemolition, Interactions.ActionEngineering, Interactions.ActionHacking, Interactions.ActionJuryRig, Interactions.Activate, Interactions.ActivateCover, Interactions.AdamSmasherRipInteraction, Interactions.AmbientSounds]
+[name-vft] vft=0x10b5a8470 freq=507 samples=[Ability.CanGuardBreak_inline4, Ability.HasToxicBlood_inline2, AdamSmasher.EMP_Shield_Rocket_Barrage_inline3, AdamSmasher.EMP_Shield_Rocket_Barrage_inline5, BaseStatusEffect.AirDrop_Burning_inline19, BaseStatusEffect.CarFood_inline3, BaseStatusEffect.Cassidy_Swap_Buff_inline13, BaseStatusEffect.ChimeraMeleeMod_BladeDismembers_inline11]
+[name-vft] vft=0x10b5baa58 freq=507 samples=[ArchetypeType.AndroidRangedT2, ArchetypeType.FastMeleeT2, ArchetypeType.FastMeleeT3, ArchetypeType.FastRangedT2, ArchetypeType.FastRangedT3, ArchetypeType.FastShotgunnerT2, ArchetypeType.FastShotgunnerT3, ArchetypeType.FastSniperT3]
+[name-vft] vft=0x10b5c2210 freq=489 samples=[AIQuickHack.AIHackDeath, AIQuickHack.AIQuickHack, AIQuickHack.BuffCamo, AIQuickHack.BuffICE, AIQuickHack.HackBlind, AIQuickHack.HackBlind_Hard, AIQuickHack.HackBlind_VeryHard, AIQuickHack.HackBlind_Wagner]
+[name-vft] vft=0x10b5a8340 freq=444 samples=[Items.AdvancedBerserkAbilityUIData, Items.AdvancedBiomonitorCommonPlus_inline4, Items.AdvancedBiomonitorCommon_inline4, Items.AdvancedBiomonitorEpicPlus_inline4, Items.AdvancedBiomonitorEpic_inline4, Items.AdvancedBiomonitorLegendaryPlusPlus_inline4, Items.AdvancedBiomonitorLegendaryPlus_inline4, Items.AdvancedBiomonitorLegendary_inline4]
+[name-vft] vft=0x10b5d1768 freq=439 samples=[ArasakaWaterfront.ArasakaWaterfront, ArasakaWaterfront.CaliforniaAve, ArasakaWaterfront.DrakeAve, ArasakaWaterfront.EisenhowerSt, ArasakaWaterfront.FletcherSt, ArasakaWaterfront.GoldsmithSt, ArasakaWaterfront.HarborNorth, ArasakaWaterfront.HarborSouth]
+[name-vft] vft=0x10b5a7d50 freq=433 samples=[AdamSmasher.AdamSmasherStealthDotDamage, Attacks.AccumulatedDoTTick, Attacks.AirDropThermalDamageOverTime, Attacks.AndroidDeathExplosion, Attacks.BarbedWire, Attacks.BarbedWireElectric, Attacks.BarbedWireNoEntity, Attacks.BaseBiotechExplosion]
+[name-vft] vft=0x10b5d9d38 freq=423 samples=[Camera.VehicleTPP_2w_Preset_High_Close, Camera.VehicleTPP_2w_Preset_High_DriverCombatClose, Camera.VehicleTPP_2w_Preset_High_DriverCombatFar, Camera.VehicleTPP_2w_Preset_High_DriverCombatMedium, Camera.VehicleTPP_2w_Preset_High_Far, Camera.VehicleTPP_2w_Preset_High_Medium, Camera.VehicleTPP_2w_Preset_Low_Close, Camera.VehicleTPP_2w_Preset_Low_DriverCombatClose]
+[name-vft] vft=0x10b5d74d8 freq=422 samples=[Condition.AdamEmergency, Condition.AdamInCEOFloor, Condition.AdamPhase1, Condition.AdamPhase2, Condition.AdamPhase3, Condition.AdamSmashed, Condition.AdamSmasherCounterState, Condition.AdamSmasherDestroyedPlate]
+[name-vft] vft=0x10b5e2998 freq=416 samples=[CombatDecorator.CoverPresetDecoratorSelector, CorpoAndroid.CommandForceShootSelector, CorpoAndroid.CoverPresetDecoratorSelector, CorpoAndroid.RingSelector, CorpoAndroid.ShootSelector, CorpoAndroid.SimpleRingSelector, CorpoAndroid.StrafeSelector, CorpoAndroid_Sniper.CoverCommandForceShootSelector]
+[name-vft] vft=0x10b58d5b0 freq=400 samples=[Ability.CanCauseBurn_inline1, Ability.CanCauseBurn_inline5, Ability.CanCauseElectrocution_inline1, Ability.CanCauseElectrocution_inline5, Ability.CanCausePoison_inline1, Ability.CanCausePoison_inline5, Ability.DealsChemicalDamage_inline1, Ability.DealsChemicalDamage_inline4]
+[name-vft] vft=0x10b5731a0 freq=397 samples=[Items.Base_Achilles_NPC_Data, Items.Base_Achilles_Nusa_NPC_Data, Items.Base_Achilles_inline10, Items.Base_Ajax_NPC_Data, Items.Base_Ajax_inline1, Items.Base_Ashura_NPC_Data, Items.Base_Ashura_inline9, Items.Base_Assault_Rifle_NPC_Data]
+[name-vft] === targeted record byte dumps (find the Float slot) ===
+[record-dump] === 'BaseStats.ADSSpeedPercentBonus' (hash=0x3744c308) p10=0x31b2f6e80 vft=0x10b59e198 ===
+[record-dump]   +0x00 = 000000010b59e198 000000031b2f6e80 | asF: 4.19624e-32 1.45114e-22 | asI: 190439832 456093312
+[record-dump]   +0x10 = 000000031b2a8a40 0000000000000000 | asF: 1.41067e-22 0 | asI: 455772736 0
+[record-dump]   +0x20 = 0000000000000000 0000000000040579 | asF: 0 3.69305e-40 | asI: 0 263545
+[record-dump]   +0x30 = 0000000000000000 0000000000000000 | asF: 0 0 | asI: 0 0
+[record-dump]   +0x40 = 0000001e3744c308 08000033e0d52aa2 | asF: 1.17279e-05 -1.22882e+20 | asI: 927253256 -522900830
+[record-dump]   +0x50 = 43d654b400000000 0000000008000033 | asF: 0 3.85188e-34 | asI: 0 134217779
+[record-dump]   +0x60 = c0150027ec6a71e1 b041710000000000 | asF: -1.13371e+27 0 | asI: -328568351 0
+[record-dump]   +0x70 = 00000000a890012a f078032c99ad4865 | asF: -1.59877e-14 -1.7917e-23 | asI: -1466957526 -1716696987
+[record-dump] === 'BaseStats.AccumulatedDoTDecayRate' (hash=0x30bcf5ba) p10=0x31b2f1c00 vft=0x10b59e198 ===
+[record-dump]   +0x00 = 000000010b59e198 000000031b2f1c00 | asF: 4.19624e-32 1.44847e-22 | asI: 190439832 456072192
+[record-dump]   +0x10 = 000000031b3cf248 0000000000000000 | asF: 1.56293e-22 0 | asI: 456979016 0
+[record-dump]   +0x20 = 0000000000000000 000000000003f285 | asF: 0 3.62506e-40 | asI: 0 258693
+[record-dump]   +0x30 = 0000000000000000 0000000000000000 | asF: 0 0 | asI: 0 0
+[record-dump]   +0x40 = 0000002130bcf5ba 080000369ec78934 | asF: 1.37486e-09 -2.11267e-20 | asI: 817690042 -1631090380
+[record-dump]   +0x50 = 3dc4f72200000000 0000000008000036 | asF: 0 3.85188e-34 | asI: 0 134217782
+[record-dump]   +0x60 = f823002a83ce8706 8fb1968000000000 | asF: -1.21386e-36 0 | asI: -2083617018 0
+[record-dump]   +0x70 = 000000000800002d 0800002f9c409805 | asF: 3.85188e-34 -6.3724e-22 | asI: 134217773 -1673488379
+[record-dump] === 'BaseStats.AccumulatedDoTDecayStartDelay' (hash=0x43f5bc75) p10=0x31b2fe540 vft=0x10b59e198 ===
+[record-dump]   +0x00 = 000000010b59e198 000000031b2fe540 | asF: 4.19624e-32 1.45497e-22 | asI: 190439832 456123712
+[record-dump]   +0x10 = 000000031b18b590 0000000000000000 | asF: 1.26318e-22 0 | asI: 454604176 0
+[record-dump]   +0x20 = 0000000000000000 0000000000042ad8 | asF: 0 3.82711e-40 | asI: 0 273112
+[record-dump]   +0x30 = 0000000000000000 0000000000000000 | asF: 0 0 | asI: 0 0
+[record-dump]   +0x40 = 0000002743f5bc75 0800003c6961a375 | asF: 491.472 1.70488e+25 | asI: 1140178037 1768006517
+[record-dump]   +0x50 = ca62dd6300000000 000000000800003c | asF: 0 3.85189e-34 | asI: 0 134217788
+[record-dump]   +0x60 = 202400308e47dd9c ab0525f100000000 | asF: -2.46353e-30 0 | asI: -1907892836 0
+[record-dump]   +0x70 = 0000000008000033 08000035f80c1630 | asF: 3.85188e-34 -1.13652e+34 | asI: 134217779 -133425616
+[record-dump] === 'AttackModifier.ChopperMinTBH' (hash=0xaf67970d) p10=0x31a537670 vft=0x10b56e5b8 ===
+[record-dump]   +0x00 = 000000010b56e5b8 000000031a537670 | asF: 4.13877e-32 4.37295e-23 | asI: 190244280 441677424
+[record-dump]   +0x10 = 000000031a5ea238 0000000000000000 | asF: 4.60396e-23 0 | asI: 442409528 0
+[record-dump]   +0x20 = 0000000000000000 0000000000056800 | asF: 0 4.96486e-40 | asI: 0 354304
+[record-dump]   +0x30 = 0000000000000000 0000000000000000 | asF: 0 0 | asI: 0 0
+[record-dump]   +0x40 = 0000001caf67970d 80d0342526c119c0 | asF: -2.1063e-10 1.3399e-15 | asI: -1352165619 650189248
+[record-dump]   +0x50 = bb0fee6700000000 00000000b0922c29 | asF: 0 -1.06354e-09 | asI: 0 -1332597719
+[record-dump]   +0x60 = d0414022fc5c57f5 0000000000000000 | asF: -4.57636e+36 0 | asI: -61057035 0
+[record-dump]   +0x70 = 000000010b56e5b8 000000031a5376e0 | asF: 4.13877e-32 4.37298e-23 | asI: 190244280 441677536
+[record-dump] === 'AttackModifier.AlliedDamage' (hash=0x4431818c) p10=0x31b0a4070 vft=0x10b581520 ===
+[record-dump]   +0x00 = 000000010b581520 000000031b0a4070 | asF: 4.1616e-32 1.14359e-22 | asI: 190321952 453656688
+[record-dump]   +0x10 = 000000031b18bba0 0000000000000000 | asF: 1.26338e-22 0 | asI: 454605728 0
+[record-dump]   +0x20 = 0000000000000000 0000000000042b9a | asF: 0 3.82983e-40 | asI: 0 273306
+[record-dump]   +0x30 = 0000000000000000 0000000000000000 | asF: 0 0 | asI: 0 0
+[record-dump]   +0x40 = 0000001b4431818c d0af2f24d1bd02ac | asF: 710.024 -1.01474e+11 | asI: 1144095116 -776142164
+[record-dump]   +0x50 = 7adfbb0800000000 00000000b0922c28 | asF: 0 -1.06354e-09 | asI: 0 -1332597720
+[record-dump]   +0x60 = d0af2f23550ca65a 76d1973500000000 | asF: 9.66538e+12 0 | asI: 1426892378 0
+[record-dump]   +0x70 = 0000000070642e25 202d2e2496122d4c | asF: 2.82473e+29 -1.18081e-25 | asI: 1885613605 -1777193652
+[record-dump] === 'Attacks.BodySlamAttackLevel1' (hash=0x786decdf) p10=0x700185ec80 vft=0x10b5bab88 ===
+[record-dump]   +0x00 = 000000010b5bab88 000000700185ec80 | asF: 4.23069e-32 4.91958e-38 | asI: 190557064 25554048
+[record-dump]   +0x10 = 000000031aba8ef8 0000000000000000 | asF: 7.71588e-23 0 | asI: 448433912 0
+[record-dump]   +0x20 = 0000000000000000 000000000004c5cf | asF: 0 4.38302e-40 | asI: 0 312783
+[record-dump]   +0x30 = 0000000000000000 0000000000000000 | asF: 0 0 | asI: 0 0
+[record-dump]   +0x40 = 0000001c786decdf 08000029f75a119e | asF: 1.93028e+34 -4.42296e+33 | asI: 2020469983 -145092194
+[record-dump]   +0x50 = 603d2b6b00000000 00000000d0af2f27 | asF: 0 -2.35128e+10 | asI: 0 -793825497
+[record-dump]   +0x60 = d0a6302727163166 2f2c508e00000000 | asF: 2.08435e-15 0 | asI: 655765862 0
+[record-dump]   +0x70 = 000000000875122a b81e12253f9e359c | asF: 7.37484e-34 1.23601 | asI: 141890090 1067333020
+[record-dump] === 'Vehicle.PlayerCar' (hash=0xf2b18b3f) p10=0x701e7652a0 vft=0x10b56b7a8 ===
+[record-dump]   +0x00 = 000000010b56b7a8 000000701e7652a0 | asF: 4.13531e-32 1.30402e-20 | asI: 190232488 511070880
+[record-dump]   +0x10 = 0000000319eed398 0000000000000000 | asF: 2.46941e-23 0 | asI: 435082136 0
+[record-dump]   +0x20 = 0000000000000000 0000000000062dea | asF: 0 5.67484e-40 | asI: 0 404970
+[record-dump]   +0x30 = 0000000000000000 0000000000000000 | asF: 0 0 | asI: 0 0
+[record-dump]   +0x40 = 00000011f2b18b3f 480815243467f2c4 | asF: -7.03324e+30 2.16019e-07 | asI: -223245505 879227588
+[record-dump]   +0x50 = 3b35e6a300000000 000000000875121b | asF: 0 7.37483e-34 | asI: 0 141890075
+[record-dump]   +0x60 = 08731d1b628429a9 a19a5bea00000000 | asF: 1.21899e+21 0 | asI: 1652828585 0
+[record-dump]   +0x70 = 000000003036171f 0875121b71f9731a | asF: 6.62441e-10 2.47043e+30 | asI: 808851231 1912173338
+[record-dump] === 'Items.Preset_Lexington_Military' (hash=0xc0935673) p10=0x7020600720 vft=0x10b5acfa0 ===
+[record-dump]   +0x00 = 000000010b5acfa0 0000007020600720 | asF: 4.21415e-32 1.89759e-19 | asI: 190500768 543164192
+[record-dump]   +0x10 = 000000031a3a3708 0000000000000000 | asF: 3.85084e-23 0 | asI: 440022792 0
+[record-dump]   +0x20 = 0000000000000000 0000000000059a84 | asF: 0 5.14607e-40 | asI: 0 367236
+[record-dump]   +0x30 = 0000000000000000 0000000000000000 | asF: 0 0 | asI: 0 0
+[record-dump]   +0x40 = 0000001fc0935673 a82d2932dc6fc924 | asF: -4.6043 -2.69975e+17 | asI: -1064085901 -596653788
+[record-dump]   +0x50 = de5476b300000000 0000000008751229 | asF: 0 7.37484e-34 | asI: 0 141890089
+[record-dump]   +0x60 = 0875122987e5b9b9 a016f89400000000 | asF: -3.45652e-34 0 | asI: -2014987847 0
+[record-dump]   +0x70 = 000000008871292d 087512299498e30a | asF: -7.25717e-34 -1.54376e-26 | asI: -2005849811 -1801919734
+[apply-trigger] after MapNamesToVftables
+[cinema] skipped (set TWEAKXL_CINEMA_NAME + TWEAKXL_CINEMA_VALUE to fire)
+[apply-trigger] after CinemaMutateStat
+[cinema-bulk] skipped (set TWEAKXL_CINEMA_BULK=1 to enable)
+[apply-trigger] after CinemaBulkMutateStats
+[apply-trigger] after ScanMemoryForFloat
+[scan] skipped (set TWEAKXL_SCAN_FLOAT_A=<float> to enable)
+[unleash] skipped (set TWEAKXL_UNLEASH=1 to enable)
+[apply-trigger] after CinemaUnleash
+[apply-trigger] system callbacks done; user mods can apply now
+[tweakxl] mods dir: /Users/lucas_1/Library/Application Support/Steam/steamapps/common/Cyberpunk 2077/r6/tweaks
+[tweakxl] mods dir not found / not a directory — nothing to apply
+[tweakxl] mods scanned: 0 (yaml=0, tweak=0)

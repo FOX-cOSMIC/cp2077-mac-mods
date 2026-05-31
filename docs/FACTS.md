@@ -597,6 +597,21 @@ No additional stubs or changes are needed for the `.tweak` parser layer itself. 
 
 ---
 
+### F-036: WRITE PATH verified by the GAME's OWN GetFlat — but BaseStats.Health.min/max are NOT the visible HP (correcting earlier over-claims)
+
+- **Date:** 2026-05-31; in-vivo (`docs/probes/logs/red4ext-mac-2026-05-31-verify-game.log`), `VerifyGameSeesEdit`.
+- **Ground truth (the game's own accessor, not our inference):** after editing a flat, calling the game's `GetFlat` (`FUN_102b76708`) returns OUR value — for BOTH editors:
+  - `BaseStats.Health.max` (in-place): game GetFlat `-1e7 -> 4242` ✓
+  - `BaseStats.Health.min` (interning-safe repoint): game GetFlat `0 -> 4242` ✓
+  - So `EditScalarFlatInPlace` AND `EditScalarFlatSafe` (alloc+repoint) BOTH genuinely reach the game's flat store. The write side is REAL.
+- **CORRECTION of earlier over-claims:** `records-updated=1/1` only means `UpdateRecord` *ran*, NOT that a meaningful value changed. And `BaseStats.Health.max` read **-1e7** before our edit — it is an internal range sentinel, **NOT the player's max HP**. So editing `BaseStats.Health.min/max` changes nothing visible; the "min==max forces the stat" theory was wrong. The only in-game effect ever observed (the RAM/carry/spawn "chaos") was interning COLLATERAL, not targeted flats working.
+- **What this means:** the engine (resolve → write → game-visible) is verified. The unsolved part is purely CONTENT: the player's HP/RAM are driven by `gamedataConstantStatModifier` records (base-value modifiers), whose exact names we don't have. Picking flats by guessing property names is the wrong method.
+- **Reliable method going forward:** use the verified game-`GetFlat` reader to READ a flat's current value (ground truth), and a canonical TweakDB flat-name dump to know which records/flats exist — find the flat whose live value is the real stat (e.g. base HP, base RAM), then edit THAT. No guessing, no save needed to verify the write.
+- **How to re-verify:** `TWEAKXL_VERIFY_GAME=1`; grep `[verify-game] ... GAME-SEES-EDIT=YES`.
+- **Invalidates:** the implicit claim (F-034 wiring) that applying a flat mod produces a gameplay effect — it produces a *flat* change the game's GetFlat sees, but whether that drives a visible stat depends on picking the right flat.
+
+---
+
 ### F-032: Correct flat path VALIDATED in-vivo — named resolve, real values, scalar edit round-trip (no save)
 
 - **Date:** 2026-05-30; build 2.3.1; title-screen test (`TestFlatWritePath`, evidence `docs/probes/logs/red4ext-mac-2026-05-30-flatwrite.log`)

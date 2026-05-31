@@ -2138,6 +2138,53 @@ bool EditScalarFlatInPlace(TweakDB* db, TweakDBID flatId, FlatValue v) {
     return ok;
 }
 
+// GROUND TRUTH: after editing a flat, ask the GAME's own GetFlat accessor
+// (FUN_102b76708) what value it returns — does the game see our edit? Tests both
+// editors (in-place + interning-safe) and compares to our own re-read. This is
+// the honest verification: if the game's GetFlat doesn't return our value, our
+// edit is NOT reaching the game, regardless of what our own reader says.
+// Env-gated TWEAKXL_VERIFY_GAME=1. Edits are restored after.
+void VerifyGameSeesEdit(TweakDB* db) {
+    if (!db || !std::getenv("TWEAKXL_VERIFY_GAME")) {
+        if (db) log_line("[verify-game] skipped (set TWEAKXL_VERIFY_GAME=1)");
+        return;
+    }
+    using GetFlatFn = void* (*)(void*, uint64_t);
+    GetFlatFn gGetFlat = reinterpret_cast<GetFlatFn>(StaticToRuntime(0x102b76708));
+    auto idRaw = [](TweakDBID id){ uint64_t r=0; std::memcpy(&r,&id,8); return r; };
+
+    auto gameValue = [&](TweakDBID id, uint64_t* vtOut) -> double {
+        void* fv = gGetFlat(db, idRaw(id));
+        if (!fv) { if (vtOut)*vtOut=0; return -1e30; }
+        uint64_t vt=0; SafeReadU64(reinterpret_cast<uintptr_t>(fv), &vt); if (vtOut)*vtOut=vt;
+        uint32_t raw=0; SafeReadU32(reinterpret_cast<uintptr_t>(fv)+0x08, &raw);
+        float f; std::memcpy(&f,&raw,4); return f;
+    };
+    auto ourValue = [&](TweakDBID id) -> double {
+        int64_t off = ResolveFlatOffset(db, id);
+        if (off < 0 || !db->flatDataBuffer) return -1e30;
+        uint32_t raw=0; SafeReadU32(reinterpret_cast<uintptr_t>(db->flatDataBuffer)+off+0x08, &raw);
+        float f; std::memcpy(&f,&raw,4); return f;
+    };
+
+    struct Case { const char* name; bool useSafe; };
+    Case cases[] = { {"BaseStats.Health.max", false}, {"BaseStats.Health.min", true} };
+    for (auto& c : cases) {
+        TweakDBID id = MakeCompactId(c.name);
+        if (ResolveFlatOffset(db, id) < 0) { log_line("[verify-game] %s does NOT resolve", c.name); continue; }
+        auto snap = ReadScalarFlat(db, id);
+        uint64_t gvt=0;
+        double gBefore = gameValue(id,&gvt), oBefore = ourValue(id);
+        FlatValue nv; nv.type = FlatType::Float; nv.value = 4242.0f;
+        bool ok = c.useSafe ? EditScalarFlatSafe(db, id, nv) : EditScalarFlatInPlace(db, id, nv);
+        double gAfter = gameValue(id,nullptr), oAfter = ourValue(id);
+        log_line("[verify-game] %s (%s) editOk=%d gameVtbl=0x%llx | OUR %g->%g | GAME-GetFlat %g->%g | GAME-SEES-EDIT=%s",
+                 c.name, c.useSafe?"safe":"inplace", ok?1:0, (unsigned long long)gvt,
+                 oBefore, oAfter, gBefore, gAfter, (gAfter==4242.0)?"YES":"NO");
+        if (snap.has_value()) { c.useSafe ? EditScalarFlatSafe(db,id,*snap) : EditScalarFlatInPlace(db,id,*snap); }
+    }
+}
+
 void VerifyFlatArrayAccess(const TweakDB* db) {
     const FlatsArrayView fa = ReadFlatsArrayHeader(db);
     if (!fa.ok) { log_line("[flat-array] header read FAILED"); return; }

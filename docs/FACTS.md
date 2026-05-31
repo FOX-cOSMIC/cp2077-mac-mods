@@ -774,3 +774,17 @@ No additional stubs or changes are needed for the `.tweak` parser layer itself. 
 - **Implication:** the runtime stat oracle (read player's live HP/RAM via the game's getters) needs: pin the engine global (Ghidra), implement the GetSystem vtable call (crash-prone), then the StatPools path for HP. RAM via StatsContainer is the nearer-term target.
 - **How to re-verify:** `tools/ghidra/pl-*.py`.
 - **Invalidates:** none. Extends F-030 (the read path) with the player-acquisition chain.
+
+---
+
+### F-038: GetSystem = gameInstance vtable+0x10; PlayerSystem type @ *(0x1090d9090); but NO flat engine/gameInstance global exists on macOS
+
+- **Date:** 2026-05-31; Ghidra (read-only), instruction-level confirmed.
+- **GetSystem** = `gameInstance->vtable[+0x10](gameInstance, CClass* systemType)` → returns a RAW system pointer (x0=gameInstance, x1=type). Confirmed at `FUN_101d97f30`, `FUN_103d09064`, `FUN_103827a88`. (NOT +0x08 — corrected the oracle.)
+- **GetGameInstance** = any system/object `->vtable[+0x80]()`; also `gameInstance` is cached at `system+0x40` (IGameSystem base). So gameInstance is recoverable from ANY game-system instance.
+- **PlayerSystem type object** = `*(0x1090d9090)` (CClass* for "gamePlayerSystem"; populated by ctor `FUN_1039a7384` which builds it at `&DAT_108853fa0`). Read at runtime; expect non-null after init.
+- **CGameEngine RTTI:** type-hash fn `FUN_103f22e38`, CClass `&DAT_10897f190` (cached `DAT_1090ddb18`, size 0x380).
+- **HARD NEGATIVE (exhaustive, high confidence):** the Windows RED4ext chain `*(engineGlobal)+0x308→framework, +0x10→gameInstance` does **NOT** exist on macOS. Whole-binary scan of all 345,127 functions: **0** globals re-read as the engine; gameInstance is only ever carried in CONTEXT fields (`ctx+0x228`, `ctx+0x418`, script-frame+0x40). No `CGameEngine`/`BaseGameEngine` instance global, no flat `gameInstance` global. The one global with a +0x10 chain (`0x108bac7a0`) is an unrelated subsystem.
+- **Implication:** the runtime stat oracle cannot bootstrap `gameInstance` from a flat global by pure reads. It needs ONE game-system/object instance pointer from a flat global (none pinned) OR a code hook to capture gameInstance — and `__TEXT` hooking is blocked (FA-001). See **FA-012**.
+- **How to re-verify:** `tools/ghidra/eng-*.py`.
+- **Invalidates:** the `kEngineGlobalStatic` placeholder in the oracle (F-037) — retire it.

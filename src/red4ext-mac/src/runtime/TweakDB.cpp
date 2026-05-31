@@ -2261,10 +2261,14 @@ void FindStatFlatByValue(TweakDB* db) {
 // ═════════════════════════════════════════════════════════════════════════════
 namespace {
 
-// F-037 chain root — TODO: fill from the eng-* RE (engine/gameInstance global).
-// 0 = not yet pinned (oracle no-ops). DAT_1090d9090 = PlayerSystem type object.
-constexpr uintptr_t kEngineGlobalStatic     = 0;          // <-- engine global (static)
-constexpr uintptr_t kPlayerSystemTypeGlobal = 0x1090d9090; // CClass* for PlayerSystem (verify)
+// F-038: there is NO flat engine/gameInstance global on macOS (exhaustive scan).
+// So this chain can't be bootstrapped from a flat global by pure reads — it needs
+// ONE system-instance pointer from a flat global (none pinned) or a code hook
+// (blocked, FA-001). kEngineGlobalStatic stays 0 → oracle no-ops. The GetSystem
+// mechanics (vtable+0x10) + PlayerSystem type (*0x1090d9090) below ARE correct;
+// only the ROOT is missing (FA-012). Kept wired for when a root is pinned.
+constexpr uintptr_t kEngineGlobalStatic     = 0;           // <-- UNPINNED (FA-012)
+constexpr uintptr_t kPlayerSystemTypeGlobal = 0x1090d9090; // CClass* for PlayerSystem (F-038)
 
 // engine global → +0x308 framework → +0x10 gameInstance → GetSystem(PlayerSystem)
 //   → +0x604c0 playerEntity → +0x18 StatsContainer. Heavily guarded; the only
@@ -2275,7 +2279,7 @@ uintptr_t GetPlayerStatsContainer() {
     uintptr_t fw = 0;  if (!SafeReadPtr(eng + 0x308, &fw) || !fw) return 0;
     uintptr_t gi = 0;  if (!SafeReadPtr(fw + 0x10, &gi) || !gi) return 0;
     uintptr_t gvt = 0; if (!SafeReadPtr(gi, &gvt) || !gvt) return 0;
-    uintptr_t getSysFn = 0; if (!SafeReadPtr(gvt + 0x08, &getSysFn) || !getSysFn) return 0;
+    uintptr_t getSysFn = 0; if (!SafeReadPtr(gvt + 0x10, &getSysFn) || !getSysFn) return 0;  // GetSystem = vtable+0x10 (F-038)
     uintptr_t psType = 0; if (!SafeReadPtr(StaticToRuntime(kPlayerSystemTypeGlobal), &psType) || !psType) return 0;
     log_line("[oracle] eng=0x%llx fw=0x%llx gi=0x%llx getSys=0x%llx psType=0x%llx",
              (unsigned long long)eng, (unsigned long long)fw, (unsigned long long)gi,

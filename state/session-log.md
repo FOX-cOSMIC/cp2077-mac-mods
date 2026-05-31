@@ -946,3 +946,10 @@ Q2 NO MATCH: brute-forced CRC32==0xce8348b9 (len 39) and 5 other live-flat hashe
 - PlayerSystem pool storage @ 0x1073d63d0 is the ALLOCATOR pool (not a flat instance pointer) — no TweakDB-style shortcut.
 - **HP is a StatPool (separate StatPoolsSystem), not a Stat** — the StatsContainer holds RAM/Memory; HP needs the StatPools path. Recorded F-037.
 - **Honest status:** the self-verifying oracle is achievable but needs more focused work: pin the engine global (Ghidra), implement the crash-prone GetSystem vtable call, recover stat-type-ids by value at runtime, then add the StatPools path for HP. Checkpointing for the user's call on continuing the depth.
+
+## 2026-05-31 — Oracle hit a HARD WALL: no flat gameInstance root on macOS (F-038/FA-012)
+
+- Engine-global RE returned: GetSystem = gameInstance vtable+0x10 (fixed the oracle's +0x08 bug); PlayerSystem type = *(0x1090d9090); GetGameInstance = any-system vtable+0x80 / system+0x40.
+- **But the decisive negative:** exhaustive scan (all 345,127 functions) → the Windows `engine→+0x308→framework→+0x10→gameInstance` chain does NOT exist on macOS. gameInstance is only carried in context fields, never a flat global. So the oracle cannot bootstrap gameInstance from pure memory reads.
+- To reach the player you'd need ONE system-instance pointer from a flat global (none pinned) OR a code hook to capture gameInstance — and __TEXT hooking is blocked (FA-001). Recorded F-038 + FA-012.
+- **Oracle status:** mechanics correct, root missing → `kEngineGlobalStatic=0`, no-op. The self-verifying stat oracle is blocked without further RE (pin a system-instance root / pool-navigate / heap-scan).

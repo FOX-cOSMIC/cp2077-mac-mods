@@ -761,3 +761,16 @@ No additional stubs or changes are needed for the `.tweak` parser layer itself. 
 - **Invalidates:** none. Supersedes the prior assumption that `+0x18` carried the FlatValue (corrected in F-023).
 
 ---
+
+---
+
+### F-037: Player StatsContainer runtime chain (RAM/Memory) — mapped except the engine root; HP is a separate StatPools path
+
+- **Date:** 2026-05-31; Ghidra (read-only), decompile-confirmed unless noted.
+- **Chain to the player's StatsContainer (holds Stats like Memory/RAM):**
+  `engine = *(<engine global>)` [⚠ NOT pinned] → `framework = *(engine+0x308)` → `gameInstance = *(framework+0x10)` → `playerSystem = gameInstance->vtable[+0x08](GetSystem)(gameInstance, PlayerSystemType)` → `playerEntity = *(playerSystem+0x604c0)` → `statsContainer = *(playerEntity+0x18)` → `value = FUN_103a7b8e8(statsContainer, statTypeId)`.
+- **Confirmed:** `playerEntity=*(playerSystem+0x604c0)` (handle.instance; refcount@+0x604c8, lock@+0x604d0) via `GetLocalPlayerMainGameObject`=`FUN_103fd1c18`. `statsContainer=*(entity+0x18)` via `FUN_103831e74` (also virtual getter obj->vtable[+0x150]). PlayerSystem registered "gamePlayerSystem", size 0x70. StatsDataSystem "gameStatsDataSystem" size 0x150 (type @ DAT_1090d96a8). framework@engine+0x308 / gameInstance@framework+0x10 from RED4ext.SDK (H-010 layout match).
+- **Gaps:** (1) the **engine/gameInstance root global is NOT pinned** — `StaticPoolStorage<PoolGMPL_PlayerSystem>::storage` @ `0x1073d63d0` is the ALLOCATOR pool (used by Allocate/Free), NOT a direct instance pointer, so no flat-global shortcut. Must pin `CGameEngine::Get`'s global or capture gameInstance. (2) **Stat-type IDs** (Health/Memory) are full name-hash enum values (e.g. 0x493, 0x6ae), NOT statically recoverable — recover at runtime by value-matching. (3) **HP (Health) is a StatPool, NOT a Stat** — it lives in the separate `StatPoolsSystem` (`game::StatPoolsSystem`, RTTI hash 0x10740aff8; pool `PoolGMPL_RPG_StatPools::storage` @ `0x1073d5e60`; native `GetStatPoolValue`), distinct from the StatsContainer. The chain above reads **Memory/RAM**; HP needs the StatPools path.
+- **Implication:** the runtime stat oracle (read player's live HP/RAM via the game's getters) needs: pin the engine global (Ghidra), implement the GetSystem vtable call (crash-prone), then the StatPools path for HP. RAM via StatsContainer is the nearer-term target.
+- **How to re-verify:** `tools/ghidra/pl-*.py`.
+- **Invalidates:** none. Extends F-030 (the read path) with the player-acquisition chain.

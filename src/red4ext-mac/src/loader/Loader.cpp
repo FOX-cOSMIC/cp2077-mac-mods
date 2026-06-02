@@ -105,6 +105,10 @@ static void red4ext_mac_loader_init() {
         log_line("[apply-trigger] after VerifyGameSeesEdit");
         red4ext_mac::FindStatFlatByValue(db); // identify HP/RAM flats by live value (env-gated)
         log_line("[apply-trigger] after FindStatFlatByValue");
+        red4ext_mac::DumpStatModifiers(db); // F-030: walk Health/Memory modifier graph (env-gated)
+        log_line("[apply-trigger] after DumpStatModifiers");
+        red4ext_mac::IdentifyStatModifiers(db); // F-039: find/double stored Memory(RAM) modifier (env-gated)
+        log_line("[apply-trigger] after IdentifyStatModifiers");
         red4ext_mac::StatOracle(db); // F-037: self-verifying runtime stat oracle (env-gated, poll thread)
         log_line("[apply-trigger] after StatOracle");
         red4ext_mac::TestFlatWritePath(db);   // F-031 — named-flat resolve + scalar edit round-trip (no save)

@@ -2253,6 +2253,89 @@ void FindStatFlatByValue(TweakDB* db) {
              bestRam.empty() ? "<none>" : bestRam.c_str(), bestRamV);
 }
 
+// Identify which item/cyberware "Memory Boost" modifier records carry a stored
+// ConstantStatModifier whose statType is the Memory (cyberdeck RAM) stat, so we
+// can double its .value to visibly raise RAM. Unlike base HP/RAM (computed at
+// entity-init, F-039), these are STORED scalar flats with KNOWN names
+// (`Items.*_inlineN`), so we read/edit them by name. Reads <record>.statType (a
+// TweakDBID flat; value 8 bytes @ fv+0x08), .value (Float), .modifierType (CName)
+// via the game's own GetFlat. With TWEAKXL_DOUBLE_STATS=1, doubles each matching
+// .value (interning-safe) + UpdateRecord. Env TWEAKXL_ID_MEM_MODS=1. No save.
+void IdentifyStatModifiers(TweakDB* db) {
+    if (!db || !std::getenv("TWEAKXL_ID_MEM_MODS")) {
+        if (db) log_line("[mem-mod] skipped (set TWEAKXL_ID_MEM_MODS=1)");
+        return;
+    }
+    if (!db->flatDataBuffer) { log_line("[mem-mod] no flat buffer"); return; }
+    std::string path;
+    if (const char* env = std::getenv("TWEAKXL_MEMMOD_FILE"); env && *env) {
+        path = env;
+    } else {
+        bool fe = false;
+        std::string base = ResolveCandidatesPath(&fe);
+        const auto slash = base.find_last_of('/');
+        path = (slash == std::string::npos ? std::string("tools/probes")
+                                           : base.substr(0, slash)) + "/memory_modifier_records.txt";
+    }
+    std::ifstream in(path);
+    if (!in) { log_line("[mem-mod] cannot open %s", path.c_str()); return; }
+    log_line("[mem-mod] reading %s", path.c_str());
+
+    const bool doDouble = std::getenv("TWEAKXL_DOUBLE_STATS") != nullptr;
+    const uint32_t MEMORY_STAT = 0x4c58e91c, HEALTH_STAT = 0x68effe3a;
+    const uint32_t MEMORY_POOL = 0x41af9eeb, HEALTH_POOL = 0xf319225a;
+
+    using GetFlatFn = void* (*)(void*, uint64_t);
+    GetFlatFn gGetFlat = reinterpret_cast<GetFlatFn>(StaticToRuntime(0x102b76708));
+    const uintptr_t floatVft = StaticToRuntime(0x106e925f0);
+    auto idRaw = [](TweakDBID id){ uint64_t r = 0; std::memcpy(&r, &id, 8); return r; };
+
+    int scanned = 0, matches = 0;
+    std::string line;
+    while (std::getline(in, line)) {
+        const std::string rec = StripLine(line);
+        if (rec.empty()) continue;
+        ++scanned;
+        // statType is a TweakDBID flat: the 8-byte target id lives at fv+0x08.
+        TweakDBID stId = MakeCompactId(rec + ".statType");
+        if (ResolveFlatOffset(db, stId) < 0) continue;           // not a stat modifier
+        void* sfv = gGetFlat(db, idRaw(stId));
+        if (!sfv) continue;
+        uint64_t stVal = 0; SafeReadU64(reinterpret_cast<uintptr_t>(sfv) + 0x08, &stVal);
+        const uint32_t stHash = static_cast<uint32_t>(stVal & 0xffffffffu);
+        const char* which = stHash == MEMORY_STAT ? "Memory" : stHash == HEALTH_STAT ? "Health"
+                          : stHash == MEMORY_POOL ? "MemoryPool" : stHash == HEALTH_POOL ? "HealthPool"
+                          : nullptr;
+        if (!which) continue;                                    // targets some other stat
+        // .value (Float)
+        TweakDBID vId = MakeCompactId(rec + ".value");
+        void* vfv = gGetFlat(db, idRaw(vId));
+        uint64_t vvt = 0; uint32_t vraw = 0; float val = 0; bool isFloat = false;
+        if (vfv) {
+            SafeReadU64(reinterpret_cast<uintptr_t>(vfv), &vvt);
+            SafeReadU32(reinterpret_cast<uintptr_t>(vfv) + 0x08, &vraw);
+            if (vvt == floatVft) { std::memcpy(&val, &vraw, 4); isFloat = true; }
+        }
+        // .modifierType (CName) — raw hash for context (Additive vs Multiplier).
+        TweakDBID mId = MakeCompactId(rec + ".modifierType");
+        void* mfv = gGetFlat(db, idRaw(mId));
+        uint64_t mhash = 0; if (mfv) SafeReadU64(reinterpret_cast<uintptr_t>(mfv) + 0x08, &mhash);
+        ++matches;
+        log_line("[mem-mod] MATCH %s statType=%s value=%s%g modType=0x%llx valueFlat{hash=0x%08x len=%u}%s",
+                 rec.c_str(), which, isFloat ? "" : "(non-float)", val,
+                 (unsigned long long)mhash, vId.nameHash, vId.nameLength,
+                 (doDouble && isFloat) ? " [DOUBLING]" : "");
+        if (doDouble && isFloat) {
+            FlatValue nv; nv.type = FlatType::Float; nv.value = val * 2.0f;
+            const bool ok = EditScalarFlatSafe(db, vId, nv);
+            UpdateRecord(db, MakeCompactId(rec));
+            log_line("[mem-mod]   -> EditScalarFlatSafe(%g->%g) ok=%d + UpdateRecord",
+                     val, val * 2.0f, ok ? 1 : 0);
+        }
+    }
+    log_line("[mem-mod] done scanned=%d matches=%d (double=%d)", scanned, matches, doDouble ? 1 : 0);
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // Phase 3: self-verifying runtime stat oracle (F-037). Reaches the player's live
 // StatsContainer and reads RAM/Memory through the game's own data, so the
@@ -2459,6 +2542,184 @@ bool UpdateRecord(TweakDB* db, TweakDBID recordId) {
 
     reinterpret_cast<void (*)(void*, void*, void*)>(assignFn)(nativeType, reinterpret_cast<void*>(realRec), newRec);
     return true;
+}
+
+// ── Stat modifier-graph dumper (Phase A2, F-030 seeder content) ──────────────
+// The player's max HP / cyberdeck RAM magnitude is NOT a single base flat: the
+// seeder (FUN_103a99a60) gathers a stat record's modifier list and folds it
+// (base + additives, × multipliers) into the StatsContainer at entity-init.
+// Ghidra trace (re-seeder-1..3): a Stat record holds modifier-list FLAT-ID
+// fields at object offsets +0x48 / +0x54 / +0x60; each resolves (exactly like
+// FUN_100a261ac: flatDataBuffer + TdbOffsetOf) to a DynArray {data@0, count@0xc}
+// of modifier TweakDBIDs. Each modifier (ConstantStatModifier) carries a Float
+// `.value` flat. This probe walks that graph for Health/Memory and prints every
+// modifier's value + the RAW flat-id of its `.value` — so we can target the
+// dominant base modifier by VALUE, and (TWEAKXL_DOUBLE_STATS=1) double it via
+// EditScalarFlatSafe + UpdateRecord using the raw id (no name needed — inline
+// modifier names are synthetic). Env-gated TWEAKXL_DUMP_STAT_MODIFIERS=1. No
+// save needed: records exist at TweakDB-init, which is our apply point (F-018).
+void DumpStatModifiers(TweakDB* db) {
+    if (!db || !std::getenv("TWEAKXL_DUMP_STAT_MODIFIERS")) {
+        if (db) log_line("[stat-mod] skipped (set TWEAKXL_DUMP_STAT_MODIFIERS=1)");
+        return;
+    }
+    const uint8_t* buf = db->flatDataBuffer;
+    if (!buf) { log_line("[stat-mod] no flat buffer"); return; }
+    const bool doDouble = std::getenv("TWEAKXL_DOUBLE_STATS") != nullptr;
+    const uintptr_t floatVft = StaticToRuntime(0x106e925f0);
+    log_line("[stat-mod] begin (buf=%p floatVft=0x%llx double=%d)",
+             (const void*)buf, (unsigned long long)floatVft, doDouble ? 1 : 0);
+
+    auto readId = [&](uintptr_t addr, TweakDBID* out) -> bool {
+        uint64_t raw = 0; if (!SafeReadU64(addr, &raw)) return false;
+        std::memcpy(out, &raw, 8); return true;
+    };
+    // Raw hex of a memory region (diagnostic: lets us decode offline if a field
+    // heuristic misses, and see lazy-resolution state of the modifier-list fields).
+    auto hexDump = [&](const char* tag, uintptr_t base, uint64_t lo, uint64_t hi) {
+        for (uint64_t o = lo; o < hi; o += 0x10) {
+            uint64_t a = 0, b = 0;
+            const bool oka = SafeReadU64(base + o, &a);
+            const bool okb = SafeReadU64(base + o + 8, &b);
+            log_line("[stat-mod]   %s +0x%02llx: %016llx %016llx", tag,
+                     (unsigned long long)o,
+                     (unsigned long long)(oka ? a : 0), (unsigned long long)(okb ? b : 0));
+        }
+    };
+    // Resolve a record's flat-id FIELD to its DynArray (data ptr, element count).
+    auto resolveArray = [&](const TweakDBID& fid, uintptr_t* dataOut, uint32_t* cntOut) -> bool {
+        const uint32_t off = TdbOffsetOf(fid);
+        if (off == 0) return false;
+        const uintptr_t arr = reinterpret_cast<uintptr_t>(buf) + off;
+        uintptr_t dataPtr = 0; uint32_t cnt = 0;
+        if (!SafeReadPtr(arr + 0x00, &dataPtr)) return false;
+        if (!SafeReadU32(arr + 0x0c, &cnt)) return false;
+        *dataOut = dataPtr; *cntOut = cnt; return true;
+    };
+    // Decode a record FIELD as a Float scalar flat (vtable==Float). Returns the
+    // live value and the raw flat-id (so it can be edited by id, no name).
+    auto tryFloatField = [&](uintptr_t addr, float* vOut, TweakDBID* idOut) -> bool {
+        TweakDBID fid; if (!readId(addr, &fid)) return false;
+        const uint32_t off = TdbOffsetOf(fid);
+        if (off == 0) return false;
+        const uintptr_t fv = reinterpret_cast<uintptr_t>(buf) + off;
+        uint64_t vt = 0; if (!SafeReadU64(fv, &vt)) return false;
+        if (vt != floatVft) return false;
+        uint32_t raw = 0; if (!SafeReadU32(fv + 0x08, &raw)) return false;
+        float f; std::memcpy(&f, &raw, 4);
+        if (!std::isfinite(f)) return false;
+        *vOut = f; *idOut = fid; return true;
+    };
+
+    // Inline float scan: read 4-byte floats DIRECTLY from a record's materialized
+    // fields. The seeder reads some modifier values inline (modRec+0x6c..) rather
+    // than via a flat-id field, so a flat-only scan would miss the magnitude.
+    // Tag values that fall in plausible base-HP / base-RAM ranges (greppable).
+    auto rangeTag = [](float f) -> const char* {
+        const float a = f < 0 ? -f : f;
+        if (a >= 80.0f && a <= 700.0f) return " <<HP?";
+        if (a >= 3.0f  && a <= 24.0f)  return " <<RAM?";
+        return "";
+    };
+    auto inlineFloatScan = [&](const char* tag, uintptr_t rec, uint64_t lo, uint64_t hi) {
+        for (uint64_t o = lo; o < hi; o += 4) {
+            uint32_t raw = 0; if (!SafeReadU32(rec + o, &raw)) continue;
+            float f; std::memcpy(&f, &raw, 4);
+            if (!std::isfinite(f)) continue;
+            const float a = f < 0 ? -f : f;
+            if (a < 0.01f || a > 1.0e8f) continue;             // skip 0 / pointers / junk
+            log_line("[stat-mod]   %s inlineF@+0x%03llx=%g%s", tag, (unsigned long long)o, f, rangeTag(f));
+        }
+    };
+    // Resolve a record FIELD (8 bytes @ rec+off) as a flat-id -> DynArray, REQUIRING
+    // the first element to itself be a resolvable record id (so it's a genuine
+    // record-reference array, not a coincidental layout).
+    auto recordArrayAt = [&](uintptr_t rec, uint64_t off, uintptr_t* dataOut, uint32_t* cntOut) -> bool {
+        TweakDBID fid; if (!readId(rec + off, &fid)) return false;
+        uintptr_t data = 0; uint32_t cnt = 0;
+        if (!resolveArray(fid, &data, &cnt)) return false;
+        if (cnt < 1 || cnt > 64 || !PlausiblePtr(data)) return false;
+        TweakDBID e0; if (!readId(data, &e0)) return false;
+        if (!LookupRecordInstance(db, e0)) return false;       // 1st element must be a record
+        *dataOut = data; *cntOut = cnt; return true;
+    };
+    // Dump a record's value-bearing fields: flat-backed floats (with raw id, so it
+    // can be edited by id) AND inline floats.
+    auto dumpLeaf = [&](const char* tag, uintptr_t M) {
+        for (uint64_t mo = 0x40; mo <= 0x90; mo += 8) {
+            float f; TweakDBID vid;
+            if (tryFloatField(M + mo, &f, &vid))
+                log_line("[stat-mod]   %s flatF@+0x%02llx=%g valueFlat{hash=0x%08x len=%u}%s",
+                         tag, (unsigned long long)mo, f, vid.nameHash, vid.nameLength, rangeTag(f));
+        }
+        inlineFloatScan(tag, M, 0x40, 0x90);
+        hexDump(tag, M, 0x40, 0x80);   // raw: statType (TweakDBID) + modifierType (CName)
+    };
+
+    const char* names[] = {
+        "Character.Player_Puppet_Base",            // player char -> base stat modifier groups
+        "Modifiers.Health", "Modifiers.HealthBoost",
+        "BaseStats.Health", "BaseStats.Memory",
+        "BaseStatPools.Player_Health_Base", "BaseStatPools.Player_Memory_Base",
+        "BaseStatPools.Memory",
+    };
+
+    for (const char* nm : names) {
+        TweakDBID rid = MakeCompactId(nm);
+        const uintptr_t rec = LookupRecordInstance(db, rid);
+        log_line("[stat-mod] === %s rec=%p (hash=0x%08x len=%u) ===",
+                 nm, (void*)rec, rid.nameHash, rid.nameLength);
+        if (!rec) continue;
+        hexDump("rawrec", rec, 0x00, 0x90);
+        inlineFloatScan("top", rec, 0x40, 0x90);
+
+        // Broad scan for record-reference array fields (the modifier-source list is
+        // at +0x288 per FUN_102ac0c70/FUN_102ac0a90; scan widely to be robust).
+        for (uint64_t off = 0x40; off <= 0x300; off += 8) {
+            uintptr_t data = 0; uint32_t cnt = 0;
+            if (!recordArrayAt(rec, off, &data, &cnt)) continue;
+            log_line("[stat-mod]   recArray@+0x%03llx count=%u", (unsigned long long)off, cnt);
+            const uint32_t lim = cnt < 24 ? cnt : 24;
+            for (uint32_t i = 0; i < lim; ++i) {
+                TweakDBID gid; if (!readId(data + static_cast<uint64_t>(i) * 8, &gid)) break;
+                const uintptr_t G = LookupRecordInstance(db, gid);
+                log_line("[stat-mod]     grp[%u]{hash=0x%08x len=%u} G=%p",
+                         i, gid.nameHash, gid.nameLength, (void*)G);
+                if (!G) continue;
+                dumpLeaf("    grp", G);
+                // one level deeper: this group's own record-array fields = modifiers
+                for (uint64_t go = 0x40; go <= 0x90; go += 8) {
+                    uintptr_t mdata = 0; uint32_t mcnt = 0;
+                    if (!recordArrayAt(G, go, &mdata, &mcnt)) continue;
+                    log_line("[stat-mod]       modArray@+0x%02llx count=%u", (unsigned long long)go, mcnt);
+                    const uint32_t mlim = mcnt < 24 ? mcnt : 24;
+                    for (uint32_t j = 0; j < mlim; ++j) {
+                        TweakDBID mid; if (!readId(mdata + static_cast<uint64_t>(j) * 8, &mid)) break;
+                        const uintptr_t M = LookupRecordInstance(db, mid);
+                        log_line("[stat-mod]         mod[%u]{hash=0x%08x len=%u} M=%p",
+                                 j, mid.nameHash, mid.nameLength, (void*)M);
+                        if (M) dumpLeaf("        mod", M);
+                    }
+                }
+            }
+        }
+
+        // Chase single-TweakDBID reference fields (pool.stat, pool.+0x60) one level.
+        for (uint64_t off = 0x48; off <= 0x70; off += 8) {
+            TweakDBID fid; if (!readId(rec + off, &fid)) continue;
+            const uint32_t o = TdbOffsetOf(fid);
+            if (o == 0) continue;
+            uint64_t val = 0;
+            if (!SafeReadU64(reinterpret_cast<uintptr_t>(buf) + o, &val)) continue;
+            TweakDBID ref; std::memcpy(&ref, &val, 8);
+            const uintptr_t R = LookupRecordInstance(db, ref);
+            if (!R) continue;
+            log_line("[stat-mod]   ref@+0x%02llx -> {hash=0x%08x len=%u} R=%p",
+                     (unsigned long long)off, ref.nameHash, ref.nameLength, (void*)R);
+            dumpLeaf("   ref", R);
+        }
+    }
+    log_line("[stat-mod] done (double=%d, dump-only this build)", doDouble ? 1 : 0);
 }
 
 // Find which candidate flats actually back an RTTI-reflected record field (i.e.

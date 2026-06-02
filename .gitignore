@@ -38,3 +38,7 @@ crash-reports/
 # User-local overrides
 .openclaw/local-config.yaml
 .env
+
+# External reference data fetched on-demand (reproducible; not vendored)
+# gibbed TweakDB schema: git clone https://github.com/gibbed/Cyberpunk-TweakDB-Schema.git reference/gibbed-schema
+reference/gibbed-schema/

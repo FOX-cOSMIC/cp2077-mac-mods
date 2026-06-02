@@ -1,19 +1,24 @@
 ---
 project: cp2077-mac-mods
 version: 0.1.0
-last_updated: 2026-05-29
+last_updated: 2026-06-02
 current_phase:
   id: 1
   name: foundation-engineering
-  progress_pct: 35
-  description: 'Phase 1 Sprint 1 COMPLETE. P1.1 (slide capture), P1.2 (singleton access),
-    P1.7 (mod scanner), P1.9 (.tweak parser via psiberx + TWEAKXL_MAC_OFFLINE) all
-    shipped and passing smoke tests. Two dylibs built clean: libred4ext.dylib (Hookline),
-    libtweakxl.dylib (Patchwork, 2.1MB inc. psiberx parser source). Sprint 2 unblocked:
-    P1.4-P1.6 (Schema''s TweakDB struct accessors), P1.8 (YAML parser), P1.3 (apply-trigger
-    polling). Notable mid-flight discovery: F-002 was incomplete (missed CName shim,
-    std::exception remap, C++20, mac-13.3 reqs); T-020 filed for Scope to document
-    the actual integration requirements as F-020.
+  progress_pct: 75
+  description: 'Phase 1 framework PROVEN end-to-end. Inject -> slide -> singleton ->
+    apply-trigger poll -> flat resolve(+0x40) -> interning-safe edit(+0x148 buffer) ->
+    UpdateRecord(factory+Assign) all work in-vivo, and the edit is GROUND-TRUTH verified
+    via the game''s own GetFlat (F-036). Two dylibs build clean. Current focus: produce
+    a VISIBLE, verified in-game change. Key finding F-039: player base HP/RAM are NOT
+    stored flats -- they are COMPUTED per-entity at stat-init from attributes/level
+    curves (live state, behind the F-038 no-gameInstance wall), so they cannot be
+    doubled by a scalar-flat edit. Pivot: target a STORED, editable, on-screen
+    Memory(RAM) ConstantStatModifier.value on a RAM-granting cyberware
+    (Items.*MemoryBoost*_inlineN, nameable + CRC-verified). Built IdentifyStatModifiers
+    (env TWEAKXL_ID_MEM_MODS=1) to find which carry statType=Memory. Gibbed TweakDB
+    schema cloned to reference/gibbed-schema/ (gitignored). Honest status: flat writes
+    apply + verify at the flat level; a VISIBLE gameplay effect is not yet demonstrated.
 
 '
 phase_0_summary:
@@ -31,25 +36,38 @@ phase_0_summary:
   - Apply-trigger at FUN_102b75744 — single-caller orchestrator
   - Re-signing NOT required for v1.0 (stock 2.3.1 has needed entitlements)
   - psiberx .tweak parser reusable via TWEAKXL_MAC_OFFLINE flag
-blockers: []
+blockers:
+- 'F-038/FA-012: no flat gameInstance root on macOS -> live per-entity stat read-back
+  (oracle) is blocked. Does NOT block the mod EFFECT (apply at TweakDB-init seeds the
+  StatsContainer), only automated on-screen verification.'
+- 'F-039: player base HP/RAM are computed, not stored -> cannot be doubled via a scalar
+  flat. Pivot to a stored Memory(RAM) ConstantStatModifier (in progress).'
 pending_decisions: []
 next_action:
   agent: lead
-  task_id: P1.4
-  description: 'Sprint 2 kickoff. Schema (tweakdb-engineer) on P1.4 — TweakDB struct
-    accessor at F-015 offsets. Includes the H-008 entry-count verification (first-access
-    sanity check on +0x58 vs +0x108 entry counts). After P1.4, P1.5 (hash walker)
-    and P1.6 (value buffer R/W) follow. In parallel-eligible: P1.8 (YAML parser) by
-    Patchwork. P1.3 (apply-trigger poll) by Hookline once Schema''s primitives exist.
+  task_id: RAM-ID
+  description: 'Run the IdentifyStatModifiers probe at the title screen
+    (TWEAKXL_ID_MEM_MODS=1, helper /tmp/run_id_memmods.sh) and grep "[mem-mod] MATCH"
+    in /tmp/red4ext-mac.log to find which Items.*MemoryBoost*_inlineN records carry a
+    stored statType=Memory ConstantStatModifier.value. Then re-run with
+    TWEAKXL_DOUBLE_STATS=1 to 2x it, confirm via the game GetFlat, and load a save with
+    that cyberware equipped to see the RAM bar grow. Fallback if no editable Memory
+    value: item price (live-read, on-screen via vendor). Plan:
+    ~/.claude/plans/cached-snuggling-kay.md.
 
 '
 recent_facts_added:
-- F-014
-- F-015
-- F-016
-- F-017
-- F-018
-- F-019
+- F-029
+- F-030
+- F-031
+- F-032
+- F-033
+- F-034
+- F-035
+- F-036
+- F-037
+- F-038
+- F-039
 recent_failed_added:
 - FA-001
 - FA-002
@@ -78,11 +96,12 @@ version_roadmap:
     scope: CET (Lua + ImGui-on-Metal), redscript runtime, Codeware
     status: planned
 v1_progress:
-  red4ext_loads_into_game: 0
-  hooks_work: 0
-  tweakxl_plugin_loads: 0
-  yaml_mods_parse: 0
-  mods_apply_ingame: 0
+  red4ext_loads_into_game: 1
+  hooks_work: 1            # functional equiv: apply-trigger polling (inline hooks blocked, FA-001)
+  tweakxl_plugin_loads: 1
+  yaml_mods_parse: 1
+  mods_apply_ingame: 0     # flat write APPLIES + verified via game GetFlat (F-036), but a
+                           # VISIBLE gameplay effect is not yet demonstrated (in progress: RAM)
   five_nexus_mods_validated: 0
   one_hour_stability: 0
   user_install_guide: 0

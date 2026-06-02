@@ -4,6 +4,15 @@ You have just been spawned into this project. You probably have no memory of pri
 
 ---
 
+## ⮕ Latest state (2026-06-02) — read this first
+
+- **Framework is proven end-to-end.** inject → slide → singleton → apply-trigger poll → flat resolve (`+0x40`) → interning-safe edit (`+0x148` buffer) → `UpdateRecord` (factory+Assign). The edit is **ground-truth verified via the game's own `GetFlat`** (F-036).
+- **Goal in flight:** produce a *visible, verified* in-game change. **F-039:** player base HP/RAM are **computed per-entity** (attributes/level curves at stat-init), **not stored flats** → can't be doubled by a scalar edit, and live read-back is behind the F-038 no-`gameInstance` wall.
+- **Current approach:** edit a **stored** Memory(RAM) `ConstantStatModifier.value` on a RAM-granting cyberware (`Items.*MemoryBoost*_inlineN`, nameable, CRC-verified). Probe `IdentifyStatModifiers` (env `TWEAKXL_ID_MEM_MODS=1`, helper `/tmp/run_id_memmods.sh`) finds which carry `statType=Memory`; then re-run with `TWEAKXL_DOUBLE_STATS=1` to 2× + verify via game `GetFlat`; user loads a save to see the RAM bar. **Next action is in `state/status.yaml`.**
+- **Reference:** gibbed TweakDB schema at `reference/gibbed-schema/` (gitignored — `git clone https://github.com/gibbed/Cyberpunk-TweakDB-Schema.git reference/gibbed-schema`). Active plan: `~/.claude/plans/cached-snuggling-kay.md`. Probes are env-gated in `src/red4ext-mac/src/runtime/TweakDB.cpp`, wired in `Loader.cpp`.
+
+---
+
 ## Step 1 — Read These Files in Order
 
 1. `AGENTS.md` (repo root) — universal entry, conventions, constraints

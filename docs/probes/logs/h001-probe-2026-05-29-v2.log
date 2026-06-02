@@ -1,7 +1,7 @@
 [H001] 1780037068.120594000  dylib loaded
 [H001] log = /tmp/h001-probe.log
 [H001] ========== Cyberpunk2077 binary detected ==========
-[H001]   path    = /Users/lucas_1/Library/Application Support/Steam/steamapps/common/Cyberpunk 2077/Cyberpunk2077.app/Contents/MacOS/Cyberpunk2077
+[H001]   path    = $HOME/Library/Application Support/Steam/steamapps/common/Cyberpunk 2077/Cyberpunk2077.app/Contents/MacOS/Cyberpunk2077
 [H001]   base    = 0x0000000100b10000
 [H001]   slide   = 0x0000000000b10000
 [H001]   __TEXT  = [0x100b10000, 0x1078f0000)  size=112512 KB

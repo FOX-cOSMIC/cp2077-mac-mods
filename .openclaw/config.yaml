@@ -8,7 +8,7 @@
 
 project:
   name: cp2077-mac-mods
-  root: /Users/lucas_1/Programming/cp2077-mac-mods
+  root: $HOME/Programming/cp2077-mac-mods
   description: Port RED4ext + TweakXL to macOS Apple Silicon for Cyberpunk 2077
 
 # Default workflow per the OpenClaw code-agent convention.

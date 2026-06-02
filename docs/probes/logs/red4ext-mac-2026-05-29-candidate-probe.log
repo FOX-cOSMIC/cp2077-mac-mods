@@ -34,7 +34,7 @@
 [flat-probe] preflight-self(flats): storedKey=0x00000027ce8348b9 fullKeyLookup=HIT compactRebuildLookup=HIT
 [flat-probe] preflight: records-map lookup of 'Items.Preset_Nova_Default' (hash=0xb1e27e8e) -> MISS
 [flat-probe] NOTE: 'Items.Preset_Nova_Default' absent from records map (records path verified). Flats lookup path IS verified (self-test compact HIT) — candidate MISSes are trustworthy.
-[flat-probe] candidates file: /Users/lucas_1/Programming/cp2077-mac-mods/tools/probes/candidate_flats.txt (source=TWEAKXL_CANDIDATES_FILE)
+[flat-probe] candidates file: $HOME/Programming/cp2077-mac-mods/tools/probes/candidate_flats.txt (source=TWEAKXL_CANDIDATES_FILE)
 [flat-probe] MISS name=Items.Preset_Nova_Default.weaponNearPlane hash=0x953d2276
 [flat-probe] MISS name=Items.Preset_Nova_Default.weaponFarPlane hash=0x3684a671
 [flat-probe] MISS name=Items.Preset_Nova_Default.weaponVignetteIntensity hash=0x625e1374
@@ -136,6 +136,6 @@
 [flat-probe] sweep complete: 98 candidates, hits=0, misses=98
 [apply-trigger] after VerifyCandidateFlats
 [apply-trigger] system callbacks done; user mods can apply now
-[tweakxl] mods dir: /Users/lucas_1/Library/Application Support/Steam/steamapps/common/Cyberpunk 2077/r6/tweaks
+[tweakxl] mods dir: $HOME/Library/Application Support/Steam/steamapps/common/Cyberpunk 2077/r6/tweaks
 [tweakxl] mods dir not found / not a directory — nothing to apply
 [tweakxl] mods scanned: 0 (yaml=0, tweak=0)

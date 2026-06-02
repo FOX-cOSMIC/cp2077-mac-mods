@@ -41,7 +41,7 @@ The following entries carry forward hard-won lessons from ~17 prior Claude sessi
 ### FA-002: Offline binary patching of `tweakdb.bin`
 
 - **Date:** 2025-10-XX
-- **Tried by:** prior Claude sessions (project `cp2077-tweakxl-mac` at `/Users/lucas_1/cp2077-tweakxl-mac/`)
+- **Tried by:** prior Claude sessions (project `cp2077-tweakxl-mac` at `$HOME/cp2077-tweakxl-mac/`)
 - **Source:** REVISED_PLAN.md, mac-port-plan.md in that repo
 - **Approach:** Build a CLI tool that reads `tweakdb.bin`, applies mod operations on disk, writes a modified `tweakdb.bin` before launch.
 - **Why it failed:** Three problems:

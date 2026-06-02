@@ -102,7 +102,7 @@ The `doc-keeper` may mark an entry invalid by appending:
   - `grep -rn 'TWEAKXL_MAC_OFFLINE' reference/windows-tweakxl/` confirmed: flag appears in CMakeLists.txt (definition), build flags.make (definition), Source.hpp (usage), and mac-port-plan.md (documentation). No other usage sites.
 - **How to re-verify:**
   ```bash
-  cd /Users/lucas_1/Programming/cp2077-mac-mods
+  cd $HOME/Programming/cp2077-mac-mods
   grep -rn 'TWEAKXL_MAC_OFFLINE' reference/windows-tweakxl/
   grep '#include' reference/windows-tweakxl/src/Red/TweakDB/Source/Parser.cpp
   grep '#include' reference/windows-tweakxl/src/Red/TweakDB/Source/Grammar.hpp
@@ -143,7 +143,7 @@ No additional stubs or changes are needed for the `.tweak` parser layer itself. 
   This empirically confirms F-001's static conclusion: the stock binary's `disable-library-validation` + `allow-dyld-environment-variables` entitlements are sufficient for DYLD injection. No re-signing was required.
 - **How to re-verify:**
   ```bash
-  cd /Users/lucas_1/Programming/cp2077-mac-mods
+  cd $HOME/Programming/cp2077-mac-mods
   tools/run-h001-probe.sh    # builds libh001_probe.dylib, injects via DYLD_INSERT_LIBRARIES, tails /tmp/h001-probe.log
   # Success = "[H001] dylib loaded" + at least one "image detected" block in the log.
   ```

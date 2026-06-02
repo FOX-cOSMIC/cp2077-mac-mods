@@ -2,7 +2,7 @@
 [singleton-access] initial poll: 0x0 (null — expected at load time; DB built later)
 [apply-trigger] polling thread started (interval=50ms, stable-threshold=3 polls, timeout=300000ms)
 [tweakxl] plugin orchestrator init
-[S_API] SteamAPI_Init(): Loaded '/Users/lucas_1/Library/Application Support/Steam/Steam.AppBundle/Steam/Contents/MacOS/steamclient.dylib' OK.
+[S_API] SteamAPI_Init(): Loaded '$HOME/Library/Application Support/Steam/Steam.AppBundle/Steam/Contents/MacOS/steamclient.dylib' OK.
 May 29 15:17:17  Cyberpunk2077[21896] <Error>: GameServicesSteam: Failed to initialize Steam
 [S_API FAIL] Tried to access Steam interface SteamUser023 before SteamAPI_Init succeeded.
 [apply-trigger] singleton non-null at poll 56 (TweakDB=0x322cd1020)
@@ -338,7 +338,7 @@ May 29 15:17:17  Cyberpunk2077[21896] <Error>: GameServicesSteam: Failed to init
 [flat-probe] sweep complete: 297 candidates, hits=0, misses=297
 [apply-trigger] after VerifyCandidateFlats
 [apply-trigger] system callbacks done; user mods can apply now
-[tweakxl] mods dir: /Users/lucas_1/Library/Application Support/Steam/steamapps/common/Cyberpunk 2077/r6/tweaks
+[tweakxl] mods dir: $HOME/Library/Application Support/Steam/steamapps/common/Cyberpunk 2077/r6/tweaks
 [tweakxl] mods dir not found / not a directory — nothing to apply
 [tweakxl] mods scanned: 0 (yaml=0, tweak=0)
 [S_API FAIL] Tried to access Steam interface SteamFriends017 before SteamAPI_Init succeeded.

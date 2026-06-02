@@ -4,8 +4,8 @@ This project follows the **OpenClaw multi-agent convention**. The primary entry 
 
 ## Claude-Specific Notes
 
-- **Working dir:** `/Users/lucas_1/Programming/cp2077-mac-mods/`
-- **Memory:** A pointer to this project is saved at `~/.claude/projects/-Users-lucas-1/memory/project_cp2077_mac_modding.md`
+- **Working dir:** `$HOME/Programming/cp2077-mac-mods/`
+- **Memory:** A pointer to this project is saved in your Claude memory dir (`~/.claude/projects/<home-slug>/memory/project_cp2077_mac_modding.md`)
 - **Subagents:** Use the Explore subagent for codebase exploration, general-purpose for complex multi-step research, Plan for design questions
 - **Skills:** `init`, `review`, `security-review`, `simplify` are available — use them when matching
 - **Do not** write to `state/status.yaml` directly. Update via the `doc-keeper` agent role only.

@@ -593,7 +593,7 @@ tasks:
     owner: doc-keeper
     subject: Archive old project dirs
     description: |
-      Archived to /Users/lucas_1/Programming/_archive-2026-05-28/ on 2026-05-28.
+      Archived to $HOME/Programming/_archive-2026-05-28/ on 2026-05-28.
       Contents: new-claude/, cp2077-tweakxl-mac/, cp2077-tweak-xl-mac/,
       cp2077-tweak-xl/ (still symlinked from reference/windows-tweakxl),
       Planning/, claud.md, memory-offset-verification.md.

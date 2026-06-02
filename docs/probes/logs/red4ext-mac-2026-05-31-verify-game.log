@@ -34,7 +34,7 @@
 [flat-probe] preflight-self(flats): storedKey=0x00000027ce8348b9 fullKeyLookup=HIT compactRebuildLookup=HIT
 [flat-probe] preflight: records-map lookup of 'Items.Preset_Nova_Default' (hash=0xb1e27e8e) -> MISS
 [flat-probe] NOTE: 'Items.Preset_Nova_Default' absent from records map (records path verified). Flats lookup path IS verified (self-test compact HIT) — candidate MISSes are trustworthy.
-[flat-probe] candidates file: /Users/lucas_1/Programming/cp2077-mac-mods/build/src/red4ext-mac/../../../tools/probes/candidate_flats.txt (source=dylib-relative)
+[flat-probe] candidates file: $HOME/Programming/cp2077-mac-mods/build/src/red4ext-mac/../../../tools/probes/candidate_flats.txt (source=dylib-relative)
 [flat-probe] MISS name=Items.Preset_Nova_Default.weaponNearPlane hash=0x953d2276
 [flat-probe] MISS name=Items.Preset_Nova_Default.weaponFarPlane hash=0x3684a671
 [flat-probe] MISS name=Items.Preset_Nova_Default.weaponVignetteIntensity hash=0x625e1374
@@ -174,7 +174,7 @@
 [flat-name] HIT  BaseStats.ADSSpeedPercentBonus.max -> off=0x402eb8 type=Float data=0xcb18967f asF=-1e+07 asI=-887581057
 [flat-name] HIT  BaseStats.ADSSpeedPercentBonus.flags -> off=0x0d52f0 type=? data=0x22e2e350 asF=6.14981e-18 asI=585294672
 [flat-name] high-confidence: 16/20 HIT
-[flat-name] candidate-file +0x40 sweep: 25/98 HIT (file=/Users/lucas_1/Programming/cp2077-mac-mods/build/src/red4ext-mac/../../../tools/probes/candidate_flats.txt)
+[flat-name] candidate-file +0x40 sweep: 25/98 HIT (file=$HOME/Programming/cp2077-mac-mods/build/src/red4ext-mac/../../../tools/probes/candidate_flats.txt)
 [flat-edit] id=<0x0000a994 len=74> tdbOff=0x404048 data@0x71b620050 width=4 wrote=1
 [flat-edit] id=<0x0000a994 len=74> tdbOff=0x404048 data@0x71b620050 width=4 wrote=1
 [flat-edit-test] Float flat hash=0x0000a994 len=74 off=0x404048 orig=0.1 wrote=1 after=1337 restored=0.1 PASS
@@ -329,7 +329,7 @@
 [flat-dump] e[189] hash=0x00359cb7 len=45 p10=0x3240f3170 vft=0x10b59b6b8 +8=00000003240f3170 +10=0000000323675358 +18=0000000000000000 +20=0000000000000000 +28=00000000000363ac +30=0000000000000000 +38=0000000000000000 +40=0000002d00359cb7 [asF: +8=3.105e-17 +10=1.254e-17 +18=0 +20=0 +28=3.113e-40 +30=0 +38=0 +40=4.923e-39]
 [flat-dump] e[288] hash=0x00560f46 len=58 p10=0x3240f4fd0 vft=0x10b59b6b8 +8=00000003240f4fd0 +10=00000003236785d0 +18=0000000000000000 +20=0000000000000000 +28=000000000003640f +30=0000000000000000 +38=0000000000000000 +40=0000003a00560f46 [asF: +8=3.108e-17 +10=1.255e-17 +18=0 +20=0 +28=3.114e-40 +30=0 +38=0 +40=7.903e-39]
 [apply-trigger] after DumpFlatsSample
-[name-vft] reading names from /Users/lucas_1/Programming/cp2077-mac-mods/build/src/red4ext-mac/../../../reference/tweakxl-data/record_names.txt
+[name-vft] reading names from $HOME/Programming/cp2077-mac-mods/build/src/red4ext-mac/../../../reference/tweakxl-data/record_names.txt
 [name-vft] resolved 63699/63711 names (hits=63699 misses=12), 269 distinct vtables
 [name-vft] === per-vtable record clusters (sample names reveal type) ===
 [name-vft] vft=0x10b56e5b8 freq=6891 samples=[AIQuickHackStatusEffect.RevealPosition_inline1, AttackModifier.ChopperMinTBH, AttackModifier.MinTBHModifier, AttackModifier.MinotaurHGMMinTBH, AttackModifier.SmartGunTBHModifier, Attacks.AirDropThermalDamageOverTime_inline0, Attacks.ChemicalDamageOverTime_inline0, Attacks.ChemicalProjectileCharged_inline0]
@@ -455,6 +455,6 @@
 [unleash] skipped (set TWEAKXL_UNLEASH=1 to enable)
 [apply-trigger] after CinemaUnleash
 [apply-trigger] system callbacks done; user mods can apply now
-[tweakxl] mods dir: /Users/lucas_1/Library/Application Support/Steam/steamapps/common/Cyberpunk 2077/r6/tweaks
+[tweakxl] mods dir: $HOME/Library/Application Support/Steam/steamapps/common/Cyberpunk 2077/r6/tweaks
 [tweakxl] mods dir not found / not a directory — nothing to apply
 [tweakxl] mods scanned: 0 (yaml=0, tweak=0)

@@ -42,3 +42,8 @@ crash-reports/
 # External reference data fetched on-demand (reproducible; not vendored)
 # gibbed TweakDB schema: git clone https://github.com/gibbed/Cyberpunk-TweakDB-Schema.git reference/gibbed-schema
 reference/gibbed-schema/
+
+# Local-only reference symlinks (point to machine-specific paths; not portable)
+reference/example-mods
+reference/ghidra
+reference/windows-tweakxl

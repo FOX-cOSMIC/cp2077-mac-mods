@@ -8,9 +8,9 @@ These are **symlinks** to original source locations, not copies. Reasons:
 
 | Symlink | Points to | Purpose |
 |---------|-----------|---------|
-| `ghidra/` | `/Users/lucas_1/Programming/Ghidra/` | Ghidra project + exported C decomp |
-| `example-mods/` | `/Users/lucas_1/Programming/adtional-modding-data/` | Real Nexus mods, modding support files |
-| `windows-tweakxl/` | `/Users/lucas_1/Programming/OLD/cp2077-tweak-xl/` | psiberx's original TweakXL source (compatibility reference) |
+| `ghidra/` | `$HOME/Programming/Ghidra/` | Ghidra project + exported C decomp |
+| `example-mods/` | `$HOME/Programming/adtional-modding-data/` | Real Nexus mods, modding support files |
+| `windows-tweakxl/` | `$HOME/Programming/OLD/cp2077-tweak-xl/` | psiberx's original TweakXL source (compatibility reference) |
 
 ## Rules
 

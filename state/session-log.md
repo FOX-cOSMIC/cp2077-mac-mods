@@ -21,7 +21,7 @@ Format:
 ## 2026-05-28 — Project re-org and OpenClaw-ready bootstrap (Claude)
 
 - **Goal:** Replace the scattered 6-month-old project state (multiple directories, contradictory findings, 17+ session summaries) with a clean, agent-portable repo.
-- **Outcome:** Fresh repo at `/Users/lucas_1/Programming/cp2077-mac-mods/` with:
+- **Outcome:** Fresh repo at `$HOME/Programming/cp2077-mac-mods/` with:
   - Full directory skeleton (docs/, state/, src/, reference/, tools/, .openclaw/)
   - Top-level entry docs: AGENTS.md, CLAUDE.md, README.md, ARCHITECTURE.md, HANDOFF.md, BUILD.md
   - Seven agent role definitions in `.openclaw/agents/`
@@ -38,7 +38,7 @@ Format:
 ## 2026-05-28 — Archived superseded directories (Claude)
 
 - **Goal:** Move all old project material out of active locations into a single archive folder.
-- **Outcome:** Created `/Users/lucas_1/Programming/_archive-2026-05-28/` containing:
+- **Outcome:** Created `$HOME/Programming/_archive-2026-05-28/` containing:
   - `new-claude/` (110MB, 17+ session summaries)
   - `cp2077-tweakxl-mac/` (730KB, old offline-patching attempt)
   - `cp2077-tweak-xl-mac/` (older port iteration)

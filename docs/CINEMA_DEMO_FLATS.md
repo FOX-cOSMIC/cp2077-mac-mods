@@ -108,7 +108,7 @@ mkdir -p "$TWEAKS"
 #   $TWEAKS/_cinema_smoke.yaml
 
 # Launch with the loader injected (libtweakxl pulls libred4ext via its rpath dep):
-DYLIB="/Users/lucas_1/Programming/cp2077-mac-mods/build/src/tweakxl-mac/libtweakxl.dylib"
+DYLIB="$HOME/Programming/cp2077-mac-mods/build/src/tweakxl-mac/libtweakxl.dylib"
 DYLD_INSERT_LIBRARIES="$DYLIB" "$GAME_DIR/Cyberpunk2077.app/Contents/MacOS/Cyberpunk2077"
 
 # In-game: load a save, then

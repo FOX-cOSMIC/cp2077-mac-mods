@@ -21,7 +21,7 @@ This file documents the intended build flow so future agents can populate it as 
 ## Build
 
 ```bash
-cd /Users/lucas_1/Programming/cp2077-mac-mods
+cd $HOME/Programming/cp2077-mac-mods
 
 # Configure
 cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug

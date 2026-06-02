@@ -78,7 +78,7 @@ A `CODE` entry in a `__DATA` or `__DATA_CONST` dump is a writable function point
 ## Build Only (without launching the game)
 
 ```bash
-cd /Users/lucas_1/Programming/cp2077-mac-mods
+cd $HOME/Programming/cp2077-mac-mods
 cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug
 cmake --build build --target h001_probe
 # output: build/src/red4ext-mac/libh001_probe.dylib

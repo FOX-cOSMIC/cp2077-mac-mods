@@ -109,6 +109,16 @@ static void red4ext_mac_loader_init() {
         log_line("[apply-trigger] after DumpStatModifiers");
         red4ext_mac::IdentifyStatModifiers(db); // F-039: find/double stored Memory(RAM) modifier (env-gated)
         log_line("[apply-trigger] after IdentifyStatModifiers");
+        red4ext_mac::TestCreateFlat(db); // de-risk CreateRecord: new-flat +0x40 insert, verify via game GetFlat (env-gated)
+        log_line("[apply-trigger] after TestCreateFlat");
+        red4ext_mac::TestRecordInfo(db); // discover DynArray layout + ConstantStatModifier baseHash + typed-flat vtables (env-gated)
+        log_line("[apply-trigger] after TestRecordInfo");
+        red4ext_mac::TestCreateRecordAppend(db); // DECISIVE: replicate DoubleRam.yaml create+append (env-gated)
+        log_line("[apply-trigger] after TestCreateRecordAppend");
+        red4ext_mac::MultiplyPrices(db); // visible-win demo: x10 all Price.* records (env-gated)
+        log_line("[apply-trigger] after MultiplyPrices");
+        red4ext_mac::BoostStatFlats(db); // in-place x N curated HP/RAM stat flats (env-gated)
+        log_line("[apply-trigger] after BoostStatFlats");
         red4ext_mac::StatOracle(db); // F-037: self-verifying runtime stat oracle (env-gated, poll thread)
         log_line("[apply-trigger] after StatOracle");
         red4ext_mac::TestFlatWritePath(db);   // F-031 — named-flat resolve + scalar edit round-trip (no save)

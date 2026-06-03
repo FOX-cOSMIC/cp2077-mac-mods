@@ -288,6 +288,11 @@ void VerifyGameSeesEdit(TweakDB* db);  // ground-truth: does the GAME's GetFlat 
 void FindStatFlatByValue(TweakDB* db);  // identify HP/RAM flats by live value via game GetFlat
 void DumpStatModifiers(TweakDB* db);    // walk Health/Memory modifier graph; optional 2x (F-030 seeder)
 void IdentifyStatModifiers(TweakDB* db);// find stored Memory(RAM) ConstantStatModifier.value by name; optional 2x (F-039)
+void TestCreateFlat(TweakDB* db);       // de-risk: create a NEW flat (+0x40 insert), verify via game GetFlat (F-041)
+void TestRecordInfo(TweakDB* db);       // discover: DynArray layout + ConstantStatModifier baseHash + CName/TweakDBID vtables
+void TestCreateRecordAppend(TweakDB* db);// DECISIVE de-risk: replicate DoubleRam.yaml create+append, verify via GetRecord (F-042)
+void MultiplyPrices(TweakDB* db);       // visible-win demo: x10 all Price.* records' .value (vendor-visible)
+void BoostStatFlats(TweakDB* db);       // in-place x N curated HP/RAM stat flats (TWEAKXL_BOOST_STATS)
 void StatOracle(TweakDB* db);  // F-037: read player's live RAM via the game (poll thread)
 void VerifyFlatArrayAccess(const TweakDB* db);
 

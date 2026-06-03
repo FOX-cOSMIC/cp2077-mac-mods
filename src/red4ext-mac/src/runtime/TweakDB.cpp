@@ -23,6 +23,7 @@
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <unordered_map>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -2872,6 +2873,80 @@ void TestCreateRecordAppend(TweakDB* db) {
                  ? "CREATE+APPEND=OK" : "(last != our record)");
 }
 
+// Reusable: create a ConstantStatModifier {statType, modifierType, value} and
+// !append-once it onto Character.Player_Stat_Pools_Modifier.statModifiers
+// (F-041/F-042 primitives). statTypeId = 8-byte TweakDBID of the target stat;
+// modCName = FNV1a64 of the modifierType (Additive=0x58d6c09943420c05,
+// AdditiveMultiplier=0x425a5b5b0d67f8c6). Returns true on create+append.
+static bool CreateAndAppendModifier(TweakDB* db, const std::string& recName,
+                                    uint64_t statTypeId, uint64_t modCName, float value) {
+    const uintptr_t buf = reinterpret_cast<uintptr_t>(db->flatDataBuffer);
+    const TweakDBID recId = MakeCompactId(recName);
+    uint64_t recRaw = 0; std::memcpy(&recRaw, &recId, 8);
+    EnsureRuntimeAccess(db);
+
+    uint8_t vb[4]; std::memcpy(vb, &value, 4);
+    const int64_t o1 = CreateFlat(db, MakeCompactId(recName + ".statType"),
+                                  StaticToRuntime(0x106e9b448), reinterpret_cast<uint8_t*>(&statTypeId), 8);
+    const int64_t o2 = CreateFlat(db, MakeCompactId(recName + ".modifierType"),
+                                  StaticToRuntime(0x106e93198), reinterpret_cast<uint8_t*>(&modCName), 8);
+    const int64_t o3 = CreateFlat(db, MakeCompactId(recName + ".value"),
+                                  StaticToRuntime(0x106e925f0), vb, 4);
+    if (o1 < 0 || o2 < 0 || o3 < 0) { log_line("[boost-mod] %s: flat create failed", recName.c_str()); return false; }
+
+    reinterpret_cast<void (*)(void*, uint32_t, uint64_t)>(StaticToRuntime(0x1026b8db8))(db, 0xe22dd781u, recRaw);
+    if (!LookupRecordInstance(db, recId)) { log_line("[boost-mod] %s: CreateTDBRecord did not insert", recName.c_str()); return false; }
+
+    const int64_t smOff = ResolveFlatOffset(db, MakeCompactId("Character.Player_Stat_Pools_Modifier.statModifiers"));
+    if (smOff < 0) { log_line("[boost-mod] statModifiers absent"); return false; }
+    const uintptr_t arr = buf + smOff;
+    uintptr_t data = 0; uint32_t size = 0;
+    SafeReadPtr(arr + 0x08, &data); SafeReadU32(arr + 0x10, &size);
+    bool present = false;
+    for (uint32_t i = 0; i < size && data; ++i) {
+        uint64_t e = 0; SafeReadU64(data + (uint64_t)i * 8, &e);
+        TweakDBID t; std::memcpy(&t, &e, 8);
+        if (t.nameHash == recId.nameHash && t.nameLength == recId.nameLength) { present = true; break; }
+    }
+    if (!present && data) {
+        const uint32_t newSize = size + 1, newCap = size + 8;
+        void* nb = nullptr;
+        if (posix_memalign(&nb, 16, (size_t)newCap * 8) != 0 || !nb) return false;
+        std::memcpy(nb, reinterpret_cast<void*>(data), (size_t)size * 8);
+        std::memcpy(reinterpret_cast<uint8_t*>(nb) + (size_t)size * 8, &recRaw, 8);
+        const uintptr_t nd = reinterpret_cast<uintptr_t>(nb);
+        SafeWrite(arr + 0x08, &nd, 8); SafeWrite(arr + 0x10, &newSize, 4); SafeWrite(arr + 0x14, &newCap, 4);
+    }
+    UpdateRecord(db, MakeCompactId("Character.Player_Stat_Pools_Modifier"));
+    log_line("[boost-mod] %s statType=0x%llx modType=0x%llx value=%g -> created+appended (size now %u)",
+             recName.c_str(), (unsigned long long)statTypeId, (unsigned long long)modCName, value, size + (present ? 0u : 1u));
+    return true;
+}
+
+// Apply stat boosts via create+append (no in-place, no interning collateral).
+// RAM REGEN is recomputed LIVE -> observable on an EXISTING save (drain RAM, watch
+// it refill fast). RAM/HP CAP need a NEW game (pools baked at character-setup, F-038).
+// Env TWEAKXL_STAT_BOOSTS=1. TWEAKXL_RAM_REGEN (default 25), TWEAKXL_CAP_MULT (0.5).
+void ApplyLiveStatBoosts(TweakDB* db) {
+    if (!db || !std::getenv("TWEAKXL_STAT_BOOSTS")) {
+        if (db) log_line("[boost-mod] skipped (set TWEAKXL_STAT_BOOSTS=1)");
+        return;
+    }
+    if (!db->flatDataBuffer) { log_line("[boost-mod] no flat buffer"); return; }
+    auto idRaw = [](TweakDBID id){ uint64_t r = 0; std::memcpy(&r, &id, 8); return r; };
+    float ramRegen = 25.0f; if (const char* e = std::getenv("TWEAKXL_RAM_REGEN"); e && *e) ramRegen = (float)atof(e);
+    float capMult = 0.5f;   if (const char* e = std::getenv("TWEAKXL_CAP_MULT"); e && *e) capMult = (float)atof(e);
+    const uint64_t ADD = 0x58d6c09943420c05ull, ADDMULT = 0x425a5b5b0d67f8c6ull;
+    log_line("[boost-mod] applying: RAM-regen +%g (live), RAM-cap +%g%%, HP-cap +%g%% (caps need new game)",
+             ramRegen, capMult * 100, capMult * 100);
+    // LIVE-observable on existing save: big additive to RAM regen rate.
+    CreateAndAppendModifier(db, "TweakXLMac.RamRegenBoost_inline0", idRaw(MakeCompactId("BaseStats.MemoryRegenRate")), ADD, ramRegen);
+    // New-game caps:
+    CreateAndAppendModifier(db, "TweakXLMac.RamCapBoost_inline0", idRaw(MakeCompactId("BaseStats.Memory")), ADDMULT, capMult);
+    CreateAndAppendModifier(db, "TweakXLMac.HpCapBoost_inline0", idRaw(MakeCompactId("BaseStats.Health")), ADDMULT, capMult);
+    log_line("[boost-mod] done");
+}
+
 // ── Visible-win demo: multiply all Price.* records' .value (point-of-use) ────
 // Item buy/sell prices are ForeignKey arrays → price ConstantStatModifier records
 // (ExtraFlats: price = TweakDBID→ConstantStatModifier). Vendors compute prices
@@ -2940,6 +3015,75 @@ void MultiplyPrices(TweakDB* db) {
                      rec.c_str(), val, nv, gv, gv == nv ? "OK" : "MISMATCH");
     }
     log_line("[price] done scanned=%d edited=%d verified=%d factor=%g", scanned, edited, verified, factor);
+}
+
+// ── SURGICAL price x N: in-place edit ONLY price flats with a UNIQUE FlatValue ─
+// Both prior in-place crashes were interning collateral: x10-ing a pooled
+// FlatValue shared by many flats corrupts the others (one shared with a
+// pointer/count -> wild access / OOM). Fix: build a tdbOffset->count map over the
+// whole +0x40 array; edit a Price.*.value IN-PLACE only if its FlatValue is
+// UNIQUE (count==1) -> zero collateral -> safe AND gameplay-visible. Shared ones
+// are skipped (logged). Env TWEAKXL_PRICE_SAFE_INPLACE=1, TWEAKXL_PRICE_FACTOR.
+void MultiplyPricesUnique(TweakDB* db) {
+    if (!db || !std::getenv("TWEAKXL_PRICE_SAFE_INPLACE")) {
+        if (db) log_line("[price-uniq] skipped (set TWEAKXL_PRICE_SAFE_INPLACE=1)");
+        return;
+    }
+    const uintptr_t buf = reinterpret_cast<uintptr_t>(db->flatDataBuffer);
+    if (!buf) { log_line("[price-uniq] no flat buffer"); return; }
+    float factor = 10.0f;
+    if (const char* f = std::getenv("TWEAKXL_PRICE_FACTOR"); f && *f) { float v = (float)atof(f); if (v > 0) factor = v; }
+
+    // Build tdbOffset -> share-count over the entire +0x40 SortedUniqueArray.
+    const FlatsArrayView fa = ReadFlatsArrayHeader(db);
+    if (!fa.ok || !fa.entries || !fa.size) { log_line("[price-uniq] flats array unreadable"); return; }
+    std::unordered_map<uint32_t, uint32_t> shareCount;
+    shareCount.reserve(fa.size);
+    const TweakDBID* E = reinterpret_cast<const TweakDBID*>(fa.entries);  // entries are mapped, direct-read
+    for (uint32_t i = 0; i < fa.size; ++i) shareCount[TdbOffsetOf(E[i])]++;
+    log_line("[price-uniq] indexed %u flats -> %zu distinct FlatValue offsets", fa.size, shareCount.size());
+
+    std::string path;
+    if (const char* env = std::getenv("TWEAKXL_PRICE_FILE"); env && *env) path = env;
+    else { bool fe = false; std::string base = ResolveCandidatesPath(&fe); const auto s = base.find_last_of('/');
+           path = (s == std::string::npos ? std::string("tools/probes") : base.substr(0, s)) + "/price_records.txt"; }
+    std::ifstream in(path);
+    if (!in) { log_line("[price-uniq] cannot open %s", path.c_str()); return; }
+
+    using GetFlatFn = void* (*)(void*, uint64_t);
+    GetFlatFn gGetFlat = reinterpret_cast<GetFlatFn>(StaticToRuntime(0x102b76708));
+    const uintptr_t floatVft = StaticToRuntime(0x106e925f0);
+    auto idRaw = [](TweakDBID id){ uint64_t r = 0; std::memcpy(&r, &id, 8); return r; };
+
+    int scanned = 0, uniqueFloat = 0, shared = 0, edited = 0, verified = 0; std::string line;
+    while (std::getline(in, line)) {
+        const std::string rec = StripLine(line);
+        if (rec.empty()) continue;
+        ++scanned;
+        TweakDBID vId = MakeCompactId(rec + ".value");
+        const int64_t off = ResolveFlatOffset(db, vId);
+        if (off < 0) continue;
+        void* fv = gGetFlat(db, idRaw(vId));
+        if (!fv) continue;
+        uint64_t vt = 0; uint32_t raw = 0;
+        SafeReadU64(reinterpret_cast<uintptr_t>(fv), &vt);
+        SafeReadU32(reinterpret_cast<uintptr_t>(fv) + 0x08, &raw);
+        if (vt != floatVft) continue;
+        float val; std::memcpy(&val, &raw, 4);
+        if (!(val > 0.0f && std::isfinite(val))) continue;
+        const uint32_t shareN = shareCount[(uint32_t)off];
+        if (shareN != 1) { ++shared; if (shared <= 8) log_line("[price-uniq] SKIP %s (FlatValue shared by %u flats)", rec.c_str(), shareN); continue; }
+        ++uniqueFloat;
+        const float nv = val * factor;
+        FlatValue f; f.type = FlatType::Float; f.value = nv;
+        if (!EditScalarFlatInPlace(db, vId, f)) continue;
+        ++edited;
+        void* fv2 = gGetFlat(db, idRaw(vId)); uint32_t r2 = 0; if (fv2) SafeReadU32(reinterpret_cast<uintptr_t>(fv2) + 0x08, &r2);
+        float gv; std::memcpy(&gv, &r2, 4); if (gv == nv) ++verified;
+        if (edited <= 16) log_line("[price-uniq] EDIT %s %g -> %g (game reads %g) UNIQUE", rec.c_str(), val, nv, gv);
+    }
+    log_line("[price-uniq] done scanned=%d uniqueFloat=%d shared(skipped)=%d edited=%d verified=%d factor=%g",
+             scanned, uniqueFloat, shared, edited, verified, factor);
 }
 
 // ── In-place boost of curated HP/RAM stat flats (full flat names) ────────────

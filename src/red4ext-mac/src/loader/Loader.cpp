@@ -115,8 +115,12 @@ static void red4ext_mac_loader_init() {
         log_line("[apply-trigger] after TestRecordInfo");
         red4ext_mac::TestCreateRecordAppend(db); // DECISIVE: replicate DoubleRam.yaml create+append (env-gated)
         log_line("[apply-trigger] after TestCreateRecordAppend");
+        red4ext_mac::ApplyLiveStatBoosts(db); // create+append RAM-regen(live)+RAM/HP-cap(new-game) (env-gated)
+        log_line("[apply-trigger] after ApplyLiveStatBoosts");
         red4ext_mac::MultiplyPrices(db); // visible-win demo: x10 all Price.* records (env-gated)
         log_line("[apply-trigger] after MultiplyPrices");
+        red4ext_mac::MultiplyPricesUnique(db); // SAFE in-place: only unique-FlatValue prices (env-gated)
+        log_line("[apply-trigger] after MultiplyPricesUnique");
         red4ext_mac::BoostStatFlats(db); // in-place x N curated HP/RAM stat flats (env-gated)
         log_line("[apply-trigger] after BoostStatFlats");
         red4ext_mac::StatOracle(db); // F-037: self-verifying runtime stat oracle (env-gated, poll thread)

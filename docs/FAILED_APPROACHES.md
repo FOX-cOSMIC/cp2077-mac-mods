@@ -156,3 +156,49 @@ The following entries carry forward hard-won lessons from ~17 prior Claude sessi
 - **Tried (2026-05-31):** replicate `CGameEngine::Get() → +0x308 framework → +0x10 gameInstance → GetSystem(PlayerSystem)` to reach the player's StatsContainer for the self-verifying stat oracle.
 - **Why it failed:** on macOS the engine/gameInstance is NOT stored in any flat global (exhaustive Ghidra scan of all 345,127 functions → 0 hits). The compiler carries gameInstance only in context fields. So there is no flat-global root to start the chain from pure memory reads. (F-038.)
 - **What to do instead:** to bootstrap gameInstance you need ONE game-system/object instance pointer from a flat global (e.g. pin a system-instance global, or navigate a system pool to its instance) then `system->vtable[+0x80]()`=GetGameInstance and `gameInstance->vtable[+0x10]`=GetSystem (F-038). OR a heuristic heap scan for the StatsContainer signature. `__TEXT` code hooking to capture gameInstance is blocked (FA-001). The GetSystem mechanics + PlayerSystem type (F-038) are correct; only the ROOT is missing.
+
+---
+
+### FA-013: Interning-safe flat edit (`EditScalarFlatSafe`) to produce a VISIBLE gameplay change
+
+- **Date:** 2026-05-31 … 2026-06-03
+- **Tried by:** this session (HP/RAM, then prices)
+- **Source:** F-036, F-043; session-log 2026-06-03.
+- **Approach:** the interning-safe writer allocates a NEW FlatValue in the +0x148 buffer and repoints ONLY the target flat's +0x40 entry `tdbOffset` to it (so no other flat is corrupted), then `UpdateRecord`. Used to set BaseStats values, then `Price.*.value`, expecting the change to appear in-game.
+- **Why it failed:** the repoint is **GetFlat-visible but gameplay-INVISIBLE**. The game's own `GetFlat` (`FUN_102b76708`) re-walks the +0x40 array and returns the new value (so every "safe" edit verified correctly) — but the gameplay/record consumers hold a **pointer to the FlatValue at its ORIGINAL buffer location**, captured when records were materialized at TweakDB-load. Moving the value to a new location and repointing the lookup table does not change what those captured pointers read. Net: ground-truth `GetFlat` says the edit landed, yet HP/RAM/prices never moved. (F-043.)
+- **What to do instead:** to reach the captured consumers you must write **in place** at the original FlatValue location (`flatDataBuffer + tdbOffset + 0x08`), NOT repoint — BUT only on a flat whose FlatValue is **unique** (FA-014). The interning-safe path is correct only as a *targeting check* (does the right flat resolve?), never as a way to manifest a visible effect. Better still, write the structure gameplay actually reads (materialized record / live entity), not the flat.
+
+---
+
+### FA-014: Blanket in-place scalar edits across many flats (price ×10, HP/RAM ×N "shotgun")
+
+- **Date:** 2026-06-03
+- **Tried by:** this session (`MultiplyPrices`, `BoostStatFlats` in-place)
+- **Source:** F-043; crash reports `Cyberpunk2077-2026-06-03-144927.ips` (OOM) and `…-151514.ips` (bad-access).
+- **Approach:** `EditScalarFlatInPlace` (overwrite bytes at the original FlatValue location — the path that DOES reach gameplay) applied in bulk: ×10 all 232 `Price.*.value`, and ×10 a set of HP/RAM stat flats.
+- **Why it failed:** **value interning is heavy — 3,306,462 flats collapse onto only 195,614 distinct FlatValues (~17:1)** (measured live). One in-place write therefore mutates EVERY flat that pooled that value. Editing shared values corrupts unrelated flats; when a corrupted value is consumed as an allocation size/count or a pointer/index, the game traps:
+  - boost run → `EXC_BREAKPOINT` / `BRK #1` = the engine's **allocator OOM/pool-exhaustion** handler (`FUN_100024298`), triggered by ×10-ing `BaseStatPools.*.initialValue` (a percentage the engine consumes → absurd derived size).
+  - price run → `EXC_BAD_ACCESS` / `KERN_PROTECTION_FAILURE` at a wild pointer = a ×10'd shared price magnitude that some flat used as a pointer/offset.
+- **What to do instead:** never blanket-edit in place. Edit a **single** flat whose FlatValue is **unique** (build a `tdbOffset → share-count` map over the +0x40 array, require count==1) — zero collateral, no crash (`MultiplyPricesUnique` did this for 7 unique-valued prices without crashing). Use sane multipliers, small batches, and NEVER touch sentinels/percentages (FA-015).
+
+---
+
+### FA-015: Editing `BaseStats.*.max` / `BaseStatPools.*.initialValue` to change max HP/RAM
+
+- **Date:** 2026-05-31 … 2026-06-03
+- **Tried by:** this session
+- **Source:** F-036, F-039, F-043.
+- **Approach:** treat `BaseStats.Health.max` / `BaseStats.Memory.max` and `BaseStatPools.Player_{Health,Memory}_Base.initialValue` as the player's max-HP / max-RAM magnitude and edit them.
+- **Why it failed:** those are the WRONG fields. `BaseStats.*.max` reads **`-1e7` (an internal range sentinel, not the player's max)** — editing it is inert (F-036). `BaseStatPools.*.initialValue` is a **starting PERCENTAGE (base 100)**, not a magnitude — and ×10-ing it fed an absurd value into the stat-pool init computation and **crashed the allocator** (FA-014 / F-043). The player's max HP/RAM are **computed per-entity** by the seeder `FUN_103a99a60` folding a modifier list (base + additives × multipliers), so there is NO single stored max-HP/RAM Float to overwrite. (F-039.)
+- **What to do instead:** do not edit max-stat sentinels or pool percentages. The only TweakDB lever for max HP/RAM is to add a `ConstantStatModifier` (statType=Health/Memory) to the player's stat-modifier group — but see FA-016 for why even that did not manifest.
+
+---
+
+### FA-016: Create+append a `ConstantStatModifier` to change the live player's HP/RAM (the DoubleRam.yaml recipe)
+
+- **Date:** 2026-06-03 … 2026-06-04
+- **Tried by:** this session (`TestCreateRecordAppend`, `ApplyLiveStatBoosts`)
+- **Source:** F-041, F-042, F-043; session-log 2026-06-03/06-04. Recipe = the official Nexus mods DoubleRam.yaml / DoubleRamRegen.yaml.
+- **Approach:** replicate the real Windows mod exactly — CREATE a new `ConstantStatModifier` (statType=BaseStats.Memory/Health, modifierType=AdditiveMultiplier, value) via the game's own `CreateTDBRecord`, then `!append-once` its id onto `Character.Player_Stat_Pools_Modifier.statModifiers`, then `UpdateRecord`. Tried RAM cap +50/100%, HP cap +50/100%, and RAM regen +25.
+- **Why it failed:** **no visible effect — on an existing save OR a brand-new game.** The CREATE+APPEND itself is correct and verified (`GetRecord` resolves the new record; the array grows 121→124 — F-041/F-042), but the player's stat computation never reflects it. Root (best current understanding, F-043): entity stat-init / the seeder reads **materialized record instances and/or DynArray `data` pointers snapshotted at TweakDB-load, BEFORE our apply-trigger runs** — and our flat-level append + `UpdateRecord` do not propagate into those captured structures (same captured-pointer mechanism as FA-013). On an existing save the player's pools are additionally baked at character-setup and cached in the live StatsContainer (F-030/F-038). The new-game test was expected to re-seed fresh and DID NOT change HP/RAM either — so either `UpdateRecord` fails to refresh the materialized `statModifiers` the seeder reads, or `Character.Player_Stat_Pools_Modifier` is not the group macOS player stat-init actually consumes.
+- **What to do instead:** stop trying to reach computed player stats through the flat/record layer. Two unblocked-but-hard routes: (A) write the **live `StatsContainer`** directly (the structure gameplay reads) — requires solving the F-038/FA-012 gameInstance-root problem to reach the player entity; (B) RE the seeder `FUN_103a99a60` to determine exactly which materialized structure it reads for the player's modifier list and whether `UpdateRecord` must also rewrite the materialized record's `statModifiers` DynArray in place. Until one is solved, TweakDB edits are verified at the engine's accessor level but do NOT manifest as visible player-stat changes on macOS.

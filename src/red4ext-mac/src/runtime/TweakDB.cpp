@@ -13,6 +13,7 @@
 
 #include "TweakDB.hpp"
 #include "Symbols.hpp"          // StaticToRuntime — F-031 per-type FlatValue vtables
+#include "LiveEditParse.hpp"    // P2.5/P2.6 pure parse helpers (unit-tested separately)
 
 #include <algorithm>
 #include <chrono>
@@ -2876,21 +2877,8 @@ constexpr uint8_t kExpectedGameUUID[16] = {
     0xA6,0x65,0x6A,0xDC, 0xFB,0xE2, 0x36,0xA4, 0x9B,0x9D, 0xB4,0xA9,0xDE,0x64,0x50,0x89
 };
 
-void FormatUUID(const uint8_t u[16], char* s /*>=40*/) {
-    std::snprintf(s, 40, "%02X%02X%02X%02X-%02X%02X-%02X%02X-%02X%02X-%02X%02X%02X%02X%02X%02X",
-                  u[0],u[1],u[2],u[3], u[4],u[5], u[6],u[7], u[8],u[9], u[10],u[11],u[12],u[13],u[14],u[15]);
-}
-
-// Parse 16 bytes from a hex string (dashes/separators ignored). Returns true on 16 bytes.
-bool ParseHexUUID(const char* s, uint8_t out[16]) {
-    int got = 0; int hi = -1;
-    for (const char* p = s; *p && got < 16; ++p) {
-        if (!std::isxdigit((unsigned char)*p)) continue;
-        const int v = (*p <= '9') ? (*p - '0') : (std::tolower(*p) - 'a' + 10);
-        if (hi < 0) hi = v; else { out[got++] = (uint8_t)((hi << 4) | v); hi = -1; }
-    }
-    return got == 16;
-}
+// FormatUUID / ParseHexUUID / ParseValueToken now live in LiveEditParse.hpp
+// (red4ext_mac::liveedit) so they can be unit-tested standalone (liveedit_parse_test).
 
 // Read the main game executable's LC_UUID (walk the loaded image's load commands).
 bool ReadGameImageUUID(uint8_t out[16]) {
@@ -2923,7 +2911,7 @@ bool LiveWriteBuildOk() {
         if (std::getenv("TWEAKXL_SKIP_VERSION_GATE")) { ok = true; log_line("[live-edit] version gate BYPASSED (TWEAKXL_SKIP_VERSION_GATE)."); return; }
         uint8_t expected[16]; std::memcpy(expected, kExpectedGameUUID, 16);
         if (const char* e = std::getenv("TWEAKXL_EXPECTED_UUID"); e && *e) {
-            uint8_t tmp[16]; if (ParseHexUUID(e, tmp)) std::memcpy(expected, tmp, 16);
+            uint8_t tmp[16]; if (liveedit::ParseHexUUID(e, tmp)) std::memcpy(expected, tmp, 16);
             else log_line("[live-edit] TWEAKXL_EXPECTED_UUID is not 16 hex bytes — using the built-in expected UUID.");
         }
         uint8_t cur[16];
@@ -2933,7 +2921,7 @@ bool LiveWriteBuildOk() {
             return;
         }
         ok = (std::memcmp(cur, expected, 16) == 0);
-        char cs[40], es[40]; FormatUUID(cur, cs); FormatUUID(expected, es);
+        char cs[40], es[40]; liveedit::FormatUUID(cur, cs); liveedit::FormatUUID(expected, es);
         if (ok) log_line("[live-edit] version gate OK — game build UUID %s matches.", cs);
         else log_line("[live-edit] version gate MISMATCH — running %s != expected %s. Live writes DISABLED (stale offsets unsafe). After re-validating, set TWEAKXL_EXPECTED_UUID=%s (or TWEAKXL_SKIP_VERSION_GATE=1).", cs, es, cs);
     });
@@ -3115,13 +3103,6 @@ void DoStatProbeCells() {
              "'set i<old> <new>' = set a stored counter (e.g. money);  'i<val>' or '<float>' = identify (mark) a value;  "
              "'revert' (or '0') = restore originals + idle.",
              (double)base, (double)defTol, gf);
-    // parse a value token "[i|f]<number>" → (value, intRaw); default container/float.
-    auto parseVal = [](const char* tok, bool& intRaw) -> double {
-        const char* p = tok; intRaw = false;
-        if (*p == 'i' || *p == 'I') { intRaw = true; ++p; }
-        else if (*p == 'f' || *p == 'F') { intRaw = false; ++p; }
-        return std::strtod(p, nullptr);
-    };
     for (;;) {
         char cmd[64] = {0}, a1[64] = {0}, a2[64] = {0};
         int nTok = 0;
@@ -3145,8 +3126,8 @@ void DoStatProbeCells() {
         if (std::strcmp(cmd, "set") == 0 && nTok >= 3) {
             RevertMarkers();                   // clear any prior round first
             bool ir1 = false, ir2 = false;
-            double ov = parseVal(a1, ir1);
-            double nv = parseVal(a2, ir2); (void)ir2;
+            double ov = liveedit::ParseValueToken(a1, ir1);
+            double nv = liveedit::ParseValueToken(a2, ir2); (void)ir2;
             log_line("[live-edit] GO set: %g -> %g (%s).", ov, nv, ir1 ? "raw-int" : "container/float");
             ProbeScanAndSet(ov, nv, ir1, defTol, maxCells);
             continue;
@@ -3154,7 +3135,7 @@ void DoStatProbeCells() {
 
         // otherwise: identify/scan the value in <cmd> (write distinct markers)
         RevertMarkers();                       // clear previous round first
-        bool intRaw = false; double A = parseVal(cmd, intRaw);
+        bool intRaw = false; double A = liveedit::ParseValueToken(cmd, intRaw);
         if (!(A > 0.0)) { log_line("[live-edit] idle — signal a value, 'set <old> <new>', or 'revert'."); continue; }
         log_line("[probe-cells] GO — %s scan for value=%g%s.", intRaw ? "RAW-INT" : "CONTAINER", A, intRaw ? "" : (defTol > 0 ? " (±tol)" : ""));
         size_t wrote = 0;

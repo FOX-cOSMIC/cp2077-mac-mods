@@ -92,5 +92,17 @@ set_target_properties(apply_trigger_test PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src/red4ext-mac"
 )
 
+# ── liveedit_parse_test — P2.6 live-edit parse-helper unit test ──────────────
+# Pure header-only tests for LiveEditParse.hpp (ParseHexUUID / FormatUUID /
+# ParseValueToken). No dylib link, no game/mach deps. Registered with ctest.
+add_executable(liveedit_parse_test src/runtime/liveedit_parse_test.cpp)
+target_compile_features(liveedit_parse_test PRIVATE cxx_std_17)
+target_compile_options(liveedit_parse_test PRIVATE -Wall -Wextra)
+target_include_directories(liveedit_parse_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime)
+set_target_properties(liveedit_parse_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src/red4ext-mac"
+)
+add_test(NAME liveedit_parse_test COMMAND liveedit_parse_test)
+
 # Diagnostic probes — built independently of the main framework.
 add_subdirectory(probes)

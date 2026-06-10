@@ -25,9 +25,12 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0" CACHE STRING "macOS deployment target")
 # Position-independent code required for dylibs.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# enable_testing() MUST precede add_subdirectory() so subdirectory add_test() calls
+# register with ctest (otherwise CTestTestfile.cmake is never generated for them).
+enable_testing()
+
 # Phase 0: source trees are skeletons. They register their targets when ready.
 add_subdirectory(src/red4ext-mac)
 add_subdirectory(src/tweakxl-mac)
 
-enable_testing()
 # add_subdirectory(tests)   # uncomment once tests/ has CMakeLists.txt

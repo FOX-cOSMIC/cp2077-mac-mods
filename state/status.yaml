@@ -1,26 +1,22 @@
 ---
 project: cp2077-mac-mods
 version: 0.1.0
-last_updated: 2026-06-02
+last_updated: 2026-06-10
 current_phase:
   id: 1
   name: foundation-engineering
-  progress_pct: 75
-  description: 'Phase 1 framework PROVEN end-to-end. Inject -> slide -> singleton ->
-    apply-trigger poll -> flat resolve(+0x40) -> interning-safe edit(+0x148 buffer) ->
-    UpdateRecord(factory+Assign) all work in-vivo, and the edit is GROUND-TRUTH verified
-    via the game''s own GetFlat (F-036). Two dylibs build clean. Current focus: produce
-    a VISIBLE, verified in-game change. Key finding F-039: player base HP/RAM are NOT
-    stored flats -- they are COMPUTED per-entity at stat-init from attributes/level
-    curves (live state, behind the F-038 no-gameInstance wall), so they cannot be
-    doubled by a scalar-flat edit. Pivot: target a STORED, editable, on-screen
-    Memory(RAM) ConstantStatModifier.value on a RAM-granting cyberware
-    (Items.*MemoryBoost*_inlineN, nameable + CRC-verified). Built IdentifyStatModifiers
-    (env TWEAKXL_ID_MEM_MODS=1) to find which carry statType=Memory. Gibbed TweakDB
-    schema cloned to reference/gibbed-schema/ (gitignored). Honest status: flat writes
-    apply + verify at the flat level; a VISIBLE gameplay effect is not yet demonstrated.
-
-'
+  progress_pct: 85
+  description: 'MILESTONE (F-044): first VISIBLE, VERIFIED, native-macOS in-game change
+    achieved — a direct live-memory write changed the player''s on-screen eddies
+    310,915 -> 400 on an existing save, no reload, no crash. Mechanism is the
+    LIVE-WRITE path (mach_vm_read_overwrite/mach_vm_write + structural/value scans via
+    DoStatProbeCells, TWEAKXL_POKE_PROBE_CELLS=1), NOT the TweakDB-flat path (which
+    remains walled per F-043/FA-016). Key model finding: derived/displayed stats
+    (RAM cap 32, max HP 322) are computed from base+modifiers and NEVER materialized as
+    their displayed value, so they are unreachable by value-scan (FA-017/18/19); STORED
+    counters (money/components/XP) exist verbatim in memory and ARE writable+visible.
+    The full TweakDB WRITE/CREATE/APPEND stack stays proven+verified at the engine''s
+    own accessors (F-036/F-041/F-042) but does not propagate to gameplay on macOS.'
 phase_0_summary:
   closed_at: 2026-05-29
   duration_days: 1
@@ -37,47 +33,45 @@ phase_0_summary:
   - Re-signing NOT required for v1.0 (stock 2.3.1 has needed entitlements)
   - psiberx .tweak parser reusable via TWEAKXL_MAC_OFFLINE flag
 blockers:
-- 'F-038/FA-012: no flat gameInstance root on macOS -> live per-entity stat read-back
-  (oracle) is blocked. Does NOT block the mod EFFECT (apply at TweakDB-init seeds the
-  StatsContainer), only automated on-screen verification.'
-- 'F-039: player base HP/RAM are computed, not stored -> cannot be doubled via a scalar
-  flat. Pivot to a stored Memory(RAM) ConstantStatModifier (in progress).'
-pending_decisions: []
+- 'F-038/FA-012: no flat gameInstance root on macOS -> the TweakDB-driven live stat
+  oracle / propagation path stays blocked. Does NOT block visible change: F-044 reached
+  live gameplay state by a structural heap-scan + direct write, no gameInstance needed.'
+- 'TweakDB-flat -> gameplay propagation wall (F-043/FA-013..FA-016): flat/record edits
+  verify at GetFlat/GetRecord but do not manifest in gameplay. Open; visible change was
+  achieved by the independent live-write path instead.'
+pending_decisions:
+- 'Direction after F-044: (a) productionize the live-write path into a usable tool
+  (named targets: money/components/XP; safe revert), and/or (b) resume the TweakDB->gameplay
+  RE (seeder materialized-record refresh, route B of FA-016) for true mod-file parity.'
 next_action:
   agent: lead
-  task_id: RAM-ID
-  description: 'Run the IdentifyStatModifiers probe at the title screen
-    (TWEAKXL_ID_MEM_MODS=1, helper /tmp/run_id_memmods.sh) and grep "[mem-mod] MATCH"
-    in /tmp/red4ext-mac.log to find which Items.*MemoryBoost*_inlineN records carry a
-    stored statType=Memory ConstantStatModifier.value. Then re-run with
-    TWEAKXL_DOUBLE_STATS=1 to 2x it, confirm via the game GetFlat, and load a save with
-    that cyberware equipped to see the RAM bar grow. Fallback if no editable Memory
-    value: item price (live-read, on-screen via vendor). Plan:
-    ~/.claude/plans/cached-snuggling-kay.md.
-
-'
+  task_id: F044-LOCKIN
+  description: 'F-044 achieved (money 310,915->400 via live write). Commit + push the
+    probe code (DoStatProbeCells/DoStatPoolMax/DoStatUnequipDelta + helpers in
+    TweakDB.cpp) and the docs (F-044, FA-017/18/19, session-log). Then decide direction
+    with the user: productionize the live-write path (stored-counter targets, named +
+    revertable) as the demonstrable v1.0 win, vs. resume the harder TweakDB->gameplay
+    propagation RE (FA-016 route B) for true .yaml-mod parity. Repro: /tmp/run_probecells.sh,
+    in-world echo i<value> > /tmp/red4ext_go, read marker = base+index, echo 0 to revert.'
 recent_facts_added:
-- F-029
-- F-030
-- F-031
-- F-032
-- F-033
-- F-034
-- F-035
 - F-036
 - F-037
 - F-038
 - F-039
+- F-040
+- F-041
+- F-042
+- F-043
+- F-044
 recent_failed_added:
-- FA-001
-- FA-002
-- FA-003
-- FA-004
-- FA-005
-- FA-006
-- FA-007
-- FA-008
-- FA-009
+- FA-012
+- FA-013
+- FA-014
+- FA-015
+- FA-016
+- FA-017
+- FA-018
+- FA-019
 long_term_vision: 'Every gameplay-changing Windows Cyberpunk 2077 mod works on macOS
   unchanged. Full ecosystem: TweakXL, ArchiveXL, CET, Codeware, redscript.
 
@@ -100,8 +94,10 @@ v1_progress:
   hooks_work: 1            # functional equiv: apply-trigger polling (inline hooks blocked, FA-001)
   tweakxl_plugin_loads: 1
   yaml_mods_parse: 1
-  mods_apply_ingame: 0     # flat write APPLIES + verified via game GetFlat (F-036), but a
-                           # VISIBLE gameplay effect is not yet demonstrated (in progress: RAM)
+  mods_apply_ingame: 0     # TweakDB yaml-mod edits APPLY + verify via game GetFlat (F-036) but
+                           # do NOT visibly propagate to gameplay (F-043/FA-016). NOTE: a VISIBLE
+                           # in-game change WAS achieved via the live-memory-write path (F-044,
+                           # money), a different mechanism than a .yaml TweakDB mod.
   five_nexus_mods_validated: 0
   one_hour_stability: 0
   user_install_guide: 0

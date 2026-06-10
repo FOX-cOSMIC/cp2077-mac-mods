@@ -2563,6 +2563,818 @@ void StatOracle(TweakDB* /*db*/) {
     });
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// Path 1 (F-038 unblock): reach the live player StatsContainer by a HEAP SCAN and
+// WRITE the RAM(Memory) cell the game actually reads — the only route to a visible
+// effect on an existing save (FA-013..FA-016: TweakDB edits don't reach gameplay;
+// the StatsContainer is what gameplay reads, FUN_103a7b8e8 returns entArr[i]+0xc).
+// Signature "d": structural fingerprint (idArr@+0x50 sorted ascending small-int
+// stat ids; count@+0x5c; entArr@+0x60 stride 0x10, value float @+0x0c) anchored by
+// the player's current RAM. No vtable / no gameInstance root needed. Env-gated.
+// ═════════════════════════════════════════════════════════════════════════════
+namespace {
+
+// Relaxed structural check for a StatsContainer-shaped object: count@+0x5c sane;
+// idArr@+0x50 / entArr@+0x60 distinct plausible heap pointers + last entry mapped;
+// the first K entries have small-int ids + finite sane-range floats. Does NOT
+// require sorted ids (idArr is lazily sorted, often unsorted) nor a value anchor —
+// the caller inspects values. Returns idArr/entArr/count.
+bool PokeStructCheck(uintptr_t C, uint32_t* outCount, uintptr_t* outIdArr, uintptr_t* outEntArr) {
+    uint32_t count = 0;
+    if (!SafeReadU32(C + 0x5c, &count) || count < 12 || count > 8192) return false;
+    uintptr_t idArr = 0, entArr = 0;
+    if (!SafeReadPtr(C + 0x50, &idArr) || !SafeReadPtr(C + 0x60, &entArr)) return false;
+    if (!PlausiblePtr(idArr) || !PlausiblePtr(entArr) || idArr == entArr) return false;
+    uint32_t probe = 0;
+    if (!SafeReadU32(idArr + (uint64_t)(count - 1) * 4, &probe)) return false;
+    if (!SafeReadU32(entArr + (uint64_t)(count - 1) * 0x10 + 0x0c, &probe)) return false;
+    const uint32_t K = count < 16 ? count : 16;
+    for (uint32_t i = 0; i < K; ++i) {
+        uint32_t id = 0; if (!SafeReadU32(idArr + (uint64_t)i * 4, &id)) return false;
+        if (id == 0 || id > 0x100000u) return false;
+        uint32_t raw = 0; if (!SafeReadU32(entArr + (uint64_t)i * 0x10 + 0x0c, &raw)) return false;
+        float v; std::memcpy(&v, &raw, 4);
+        if (!std::isfinite(v) || (v != 0.0f && (v < -1.0e6f || v > 1.0e6f))) return false;
+    }
+    *outCount = count; *outIdArr = idArr; *outEntArr = entArr;
+    return true;
+}
+
+// Find the value cell for statId by LINEAR search (idArr may be unsorted). Returns
+// cell addr (entArr+slot*0x10+0xc) or 0; fills *curRaw.
+uintptr_t PokeFindCell(uintptr_t C, uint32_t statId, uint32_t* curRaw) {
+    uint32_t count = 0; uintptr_t idArr = 0, entArr = 0;
+    if (!SafeReadU32(C + 0x5c, &count) || !SafeReadPtr(C + 0x50, &idArr) || !SafeReadPtr(C + 0x60, &entArr) || count > 8192) return 0;
+    for (uint32_t i = 0; i < count; ++i) {
+        uint32_t id = 0; if (!SafeReadU32(idArr + (uint64_t)i * 4, &id)) return 0;
+        if (id == statId) { const uintptr_t cell = entArr + (uint64_t)i * 0x10 + 0x0c; if (curRaw) SafeReadU32(cell, curRaw); return cell; }
+    }
+    return 0;
+}
+
+struct PokeCand { uintptr_t base, idArr, entArr; uint32_t count; int anchorSlot; uint32_t anchorId; float anchorVal; };
+
+// ── F-044: surgical StatPool MAX write — the VERIFIED RAM data model ──────────
+// The watched RAM number is NOT stored anywhere as the int 32 (that store does
+// not exist — which is why every value-scan for 32 + scattershot write failed
+// and crashed). Per the decompile (GetStatPoolValue FUN_103a58d78 @12403850 and
+// the record lookup FUN_103a58b90 @12403749), each live StatPool *record* holds:
+//     record+0x1cf : validity byte (== 0xFF when live)
+//     record+0x1d0 : current value as a PERCENT float, [0,100]
+//     record+0x1d4 : absolute MAX float (RAM == 32.0)
+// and the displayed value = (percent/100) * max  (FUN_103a58d78 line 12403889:
+// fVar4 = local_78*0.01*local_70). The max at +0x1d4 is only re-derived from the
+// Memory stat on a stat-change EVENT (equip/level), NOT per tick, so a single
+// FLOAT write there is durable + visible: the cap reads /NEWMAX and the current
+// scales to percent/100 * NEWMAX. We locate the ONE record purely STRUCTURALLY
+// (validity byte + percent range + max value + a plausible sub-object pointer at
+// record+0x20), so the write lands on a real value field — never on a lock
+// (+0x159) or dirty flag (+0x70) like the int scattershot did. Dry by default;
+// an actual write requires TWEAKXL_POOLMAX_WRITE=1.
+void DoStatPoolMax() {
+    float maxVal = 32.0f;   // current RAM cap to anchor on (the float at record+0x1d4)
+    float newMax = 64.0f;   // value to write into record+0x1d4
+    if (const char* m = std::getenv("TWEAKXL_POOLMAX_MAXVAL"); m && *m) maxVal = (float)std::strtod(m, nullptr);
+    if (const char* n = std::getenv("TWEAKXL_POOLMAX_NEWMAX"); n && *n) newMax = (float)std::strtod(n, nullptr);
+    const bool doWrite = std::getenv("TWEAKXL_POOLMAX_WRITE")    != nullptr;  // default: dry (log candidates only)
+    const bool alsoPct = std::getenv("TWEAKXL_POOLMAX_ALSO_PCT") != nullptr;  // also set current % to 100 (full bar)
+    const bool reapply = std::getenv("TWEAKXL_POOLMAX_REAPPLY")  != nullptr;  // re-write if a stat event reverts it
+    uint32_t delaySec = 40;   if (const char* d = std::getenv("TWEAKXL_POOLMAX_DELAY_SEC"); d && *d)   delaySec   = (uint32_t)std::strtoul(d, nullptr, 10);
+    uint32_t writeLimit = 8;  if (const char* w = std::getenv("TWEAKXL_POOLMAX_WRITE_LIMIT"); w && *w) writeLimit = (uint32_t)std::strtoul(w, nullptr, 10);
+
+    uint32_t maxBits; std::memcpy(&maxBits, &maxVal, 4);
+    log_line("[poolmax] anchor max=%g (bits=0x%08x) -> newMax=%g  write=%s alsoPct=%s — load your save now (%us)...",
+             (double)maxVal, maxBits, (double)newMax, doWrite ? "YES" : "dry", alsoPct ? "yes" : "no", delaySec);
+    std::this_thread::sleep_for(std::chrono::seconds(delaySec));
+
+    constexpr size_t kBuf = 1u << 20;
+    std::vector<uint8_t> buf(kBuf);
+    const task_t task = mach_task_self();
+    const auto regions = CollectScannableRegions();
+    uint64_t totalMB = 0; for (const auto& r : regions) totalMB += r.size; totalMB >>= 20;
+    log_line("[poolmax] scanning %zu writable regions (%llu MB) for StatPool records with max==%g...",
+             regions.size(), (unsigned long long)totalMB, (double)maxVal);
+
+    struct Cand { uintptr_t recordBase, maxAddr, pctAddr, subObj; float pct; };
+    std::vector<Cand> cands;
+    for (const auto& r : regions) {
+        if (cands.size() >= 4096) break;
+        for (mach_vm_size_t off = 0; off < r.size; off += kBuf) {
+            const mach_vm_size_t chunk = std::min<mach_vm_size_t>(kBuf, r.size - off);
+            mach_vm_size_t got = 0;
+            if (mach_vm_read_overwrite(task, r.base + off, chunk, (mach_vm_address_t)buf.data(), &got) != KERN_SUCCESS) continue;
+            for (size_t i = 0; i + 4 <= got; i += 4) {
+                uint32_t v; std::memcpy(&v, buf.data() + i, 4);
+                if (v != maxBits) continue;                       // candidate record+0x1d4 == maxVal
+                const uintptr_t maxAddr = (uintptr_t)(r.base + off + i);
+                // validity byte @ -0x05 and percent @ -0x04: cheap in-buffer reads
+                // when available (i>=5), else a syscall at the rare chunk edge.
+                uint8_t vb; uint32_t pr;
+                if (i >= 5) { vb = buf[i - 5]; std::memcpy(&pr, buf.data() + i - 4, 4); }
+                else { if (!SafeRead(maxAddr - 5, &vb, 1) || !SafeReadU32(maxAddr - 4, &pr)) continue; }
+                if (vb != 0xFF) continue;                          // record+0x1cf validity
+                float pct; std::memcpy(&pct, &pr, 4);
+                if (!std::isfinite(pct) || pct < 0.0f || pct > 100.0f) continue;   // record+0x1d0 percent
+                const uintptr_t recBase = maxAddr - 0x1d4;
+                uintptr_t sub = 0;                                 // record+0x20 sub-object ptr (FUN_103a4e668)
+                if (!SafeReadPtr(recBase + 0x20, &sub) || !PlausiblePtr(sub)) continue;
+                cands.push_back({recBase, maxAddr, maxAddr - 4, sub, pct});
+                if (cands.size() >= 4096) break;
+            }
+            if (cands.size() >= 4096) break;
+        }
+    }
+
+    log_line("[poolmax] %zu candidate StatPool record(s) matched [byte@-0x5==0xFF, pct@-0x4 in 0..100, max==%g, ptr@+0x20 plausible]:",
+             cands.size(), (double)maxVal);
+    for (size_t i = 0; i < cands.size() && i < 64; ++i) {
+        const Cand& c = cands[i];
+        log_line("[poolmax]   #%zu record=0x%llx pct=%.2f max=%g sub=0x%llx", i,
+                 (unsigned long long)c.recordBase, (double)c.pct, (double)maxVal, (unsigned long long)c.subObj);
+    }
+    if (cands.empty()) {
+        log_line("[poolmax] NONE matched — make sure RAM is full and the cap is %g; else set TWEAKXL_POOLMAX_MAXVAL=<your cap>", (double)maxVal);
+        return;
+    }
+    if (!doWrite) {
+        log_line("[poolmax] DRY RUN (no write). If the count is small (~1), re-run with TWEAKXL_POOLMAX_WRITE=1 to set max=%g.", (double)newMax);
+        return;
+    }
+
+    uint32_t nbBits;   std::memcpy(&nbBits, &newMax, 4);
+    uint32_t fullBits; { float f = 100.0f; std::memcpy(&fullBits, &f, 4); }
+    uint32_t wrote = 0;
+    std::vector<uintptr_t> written;
+    for (size_t i = 0; i < cands.size() && wrote < writeLimit; ++i) {
+        const Cand& c = cands[i];
+        if (!SafeWrite(c.maxAddr, &nbBits, 4)) continue;
+        if (alsoPct) SafeWrite(c.pctAddr, &fullBits, 4);
+        uint32_t chk = 0; SafeReadU32(c.maxAddr, &chk);
+        float cf; std::memcpy(&cf, &chk, 4);
+        log_line("[poolmax] WROTE record=0x%llx max %g -> %g (readback=%g)%s",
+                 (unsigned long long)c.recordBase, (double)maxVal, (double)newMax, (double)cf,
+                 alsoPct ? " +pct=100" : "");
+        written.push_back(c.maxAddr);
+        ++wrote;
+    }
+    log_line("[poolmax] wrote newMax to %u record(s) (limit=%u) — CHECK YOUR RAM CAP NOW (should read /%g)",
+             wrote, writeLimit, (double)newMax);
+
+    if (reapply && !written.empty()) {
+        auto* owned = new std::vector<uintptr_t>(written);
+        const uint32_t raw = nbBits;
+        std::thread([owned, raw]() {
+            for (;;) {
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+                for (uintptr_t a : *owned) { uint32_t v = 0; if (SafeReadU32(a, &v) && v != raw) SafeWrite(a, &raw, 4); }
+            }
+        }).detach();
+        log_line("[poolmax] re-apply thread started (1s) — re-writes max if a stat recompute event reverts it");
+    }
+}
+
+// DELTA: snapshot every address holding float A (e.g. 32 = current RAM), wait for
+// the user to change RAM (unequip cyberdeck -> B, e.g. 23), keep only the addresses
+// that flipped A->B. Those track the DISPLAYED RAM regardless of structure. Then
+// (if TARGET set) write TARGET to them + re-apply. Env TWEAKXL_POKE_DELTA=1.
+void DoStatDelta() {
+    const bool intMode = std::getenv("TWEAKXL_POKE_INT") != nullptr;  // RAM stored as int32, not float
+    float A = 32.0f, B = 23.0f;
+    if (const char* a = std::getenv("TWEAKXL_POKE_A"); a && *a) A = (float)std::strtod(a, nullptr);
+    if (const char* b = std::getenv("TWEAKXL_POKE_B"); b && *b) B = (float)std::strtod(b, nullptr);
+    uint32_t aBits, bBits;
+    if (intMode) { aBits = (uint32_t)(int32_t)A; bBits = (uint32_t)(int32_t)B; }
+    else { std::memcpy(&aBits, &A, 4); std::memcpy(&bBits, &B, 4); }
+    // int 32 is common -> only scan heap-sized regions (the stat object is small),
+    // not the giant texture/buffer regions, to keep the snapshot + poll tractable.
+    const mach_vm_size_t maxRegion = intMode ? (64ull << 20) : ~(mach_vm_size_t)0;
+    uint32_t delay1 = 60; if (const char* d = std::getenv("TWEAKXL_POKE_DELAY_SEC"); d && *d) delay1 = (uint32_t)std::strtoul(d, nullptr, 10);
+    uint32_t delay2 = 45; if (const char* d = std::getenv("TWEAKXL_POKE_DELTA_SEC"); d && *d) delay2 = (uint32_t)std::strtoul(d, nullptr, 10);
+    const char* tgt = std::getenv("TWEAKXL_POKE_RAM_TARGET");
+
+    log_line("[poke-delta] A=%g B=%g — load your save now (%us)...", (double)A, (double)B, delay1);
+    std::this_thread::sleep_for(std::chrono::seconds(delay1));
+
+    constexpr size_t kBuf = 1u << 20; std::vector<uint8_t> buf(kBuf); const task_t task = mach_task_self();
+    std::vector<uintptr_t> addrs; addrs.reserve(1u << 20);
+    const auto regions = CollectScannableRegions();
+    bool capped = false;
+    for (const auto& r : regions) {
+        if (capped) break;
+        if (r.size > maxRegion) continue;       // int mode: skip giant buffers
+        for (mach_vm_size_t off = 0; off < r.size; off += kBuf) {
+            const mach_vm_size_t chunk = std::min<mach_vm_size_t>(kBuf, r.size - off); mach_vm_size_t got = 0;
+            if (mach_vm_read_overwrite(task, r.base + off, chunk, (mach_vm_address_t)buf.data(), &got) != KERN_SUCCESS || got != chunk) continue;
+            for (size_t i = 0; i + 4 <= got; i += 4) {
+                uint32_t v; std::memcpy(&v, buf.data() + i, 4);
+                if (v == aBits) { addrs.push_back((uintptr_t)(r.base + off + i)); if (addrs.size() >= (1u << 21)) { capped = true; break; } }
+            }
+            if (capped) break;
+        }
+    }
+    log_line("[poke-delta] snapshot: %zu addresses hold %g.  >>> For the next ~40s: DRAIN your RAM with quickhacks and let it regen back, a few times (cycle 32->low->32). No pausing needed. <<<",
+             addrs.size(), (double)A);
+
+    // Track addresses that CYCLE WITH RAM: drop to a clean integer in [1,31] then
+    // return to exactly 32. Heap churn drops to random garbage and never returns to
+    // 32, so it scores 0. dropCount = #passes seen at a clean RAM-like value.
+    const bool exactB = std::getenv("TWEAKXL_POKE_B") != nullptr;
+    uint32_t passes = 150; if (const char* p = std::getenv("TWEAKXL_POKE_PASSES"); p && *p) passes = (uint32_t)std::strtoul(p, nullptr, 10);
+    std::unordered_map<uintptr_t, int> dropCount;
+    for (uint32_t pass = 0; pass < passes; ++pass) {
+        int nowRamLike = 0, nowAnyDrop = 0;
+        for (uintptr_t a : addrs) {
+            uint32_t v = 0; if (!SafeReadU32(a, &v) || v == aBits) continue;
+            bool ramLike, anyDrop;
+            if (intMode) { ramLike = (v >= 1 && v <= 31); anyDrop = (v <= 31); }
+            else { float fv; std::memcpy(&fv, &v, 4); const float r = std::round(fv);
+                   ramLike = std::isfinite(fv) && fv >= 1.0f && fv <= 31.5f && std::fabs(fv - r) < 0.01f;
+                   anyDrop = std::isfinite(fv) && fv >= 0.0f && fv <= 31.5f; }
+            if (anyDrop) ++nowAnyDrop;
+            if (ramLike) ++nowRamLike;
+            const bool match = exactB ? (v == bBits) : ramLike;
+            if (match) dropCount[a]++;
+        }
+        if (pass % 12 == 0) log_line("[poke-delta] pass %u/%u: now %d addrs at a clean RAM-int, %d at any low float (drain your RAM now!)", pass, passes, nowRamLike, nowAnyDrop);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    // RAM = dropped to a RAM-like value AND currently back at 32 (it cycled).
+    std::vector<std::pair<int, uintptr_t>> ranked;
+    for (const auto& kv : dropCount) { uint32_t v = 0; if (SafeReadU32(kv.first, &v) && v == aBits) ranked.push_back({kv.second, kv.first}); }
+    std::sort(ranked.begin(), ranked.end(), [](auto& a, auto& b){ return a.first > b.first; });
+    std::vector<uintptr_t> changed; for (auto& p : ranked) changed.push_back(p.second);
+    log_line("[poke-delta] %zu address(es) cycled 32->RAM-like->32 (ranked by drop-count; these ARE the RAM store):", changed.size());
+    for (size_t i = 0; i < changed.size() && i < 80; ++i) {
+        char line[160]; size_t ln = 0;
+        for (int k = -2; k <= 4; ++k) { uint32_t w = 0; if (SafeReadU32(changed[i] + (int64_t)k * 4, &w)) { float wf; std::memcpy(&wf, &w, 4); ln += std::snprintf(line + ln, sizeof(line) - ln, " %+d:%.3g", k * 4, (double)wf); } }
+        log_line("[poke-delta]   @0x%llx drops=%d now=32 ctx:%s", (unsigned long long)changed[i], ranked[i].first, line);
+    }
+    if (changed.empty()) { log_line("[poke-delta] NONE cycled — RAM may be an int (try TWEAKXL_POKE_A as int bits) or didn't drop to a clean integer; drain + let regen a few times"); return; }
+
+    if (tgt && *tgt) {
+        uint32_t tb;
+        if (intMode) { tb = (uint32_t)(int32_t)std::strtol(tgt, nullptr, 10); }   // write an INT
+        else { float t = (float)std::strtod(tgt, nullptr); std::memcpy(&tb, &t, 4); }
+        uint32_t topN = 40; if (const char* n = std::getenv("TWEAKXL_POKE_TOPN"); n && *n) topN = (uint32_t)std::strtoul(n, nullptr, 10);
+        if (topN > changed.size()) topN = (uint32_t)changed.size();
+        std::vector<uintptr_t> wr(changed.begin(), changed.begin() + topN);   // only the top-ranked (most RAM-correlated)
+        for (uintptr_t a : wr) SafeWrite(a, &tb, 4);
+        log_line("[poke-delta] WROTE %ld to the top %u cycled addresses — CHECK YOUR RAM BAR NOW", (long)(int32_t)tb, topN);
+        auto* owned = new std::vector<uintptr_t>(wr); const uint32_t raw = tb;
+        std::thread([owned, raw]() { for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(400)); for (uintptr_t a : *owned) { uint32_t v = 0; if (SafeReadU32(a, &v) && v != raw) SafeWrite(a, &raw, 4); } } }).detach();
+    } else {
+        log_line("[poke-delta] re-run with the same flags + TWEAKXL_POKE_RAM_TARGET=99 to write the top candidates and watch RAM");
+    }
+}
+
+// ── F-044: CELL-MARKER PROBE — identify the cap cell with NO gear change ───────
+// The cap (Memory stat) is materialized as a 32.0 float in a player StatsContainer
+// cell, under a HASHED id we can't predict. But it MUST be among the cells holding
+// 32 in a player-scale container. So: write a DISTINCT marker (base+i) to each such
+// cell at once. The number your RAM cap then shows = base + index → names the exact
+// cell and its stable hashed id (for clean future writes), AND is itself the visible
+// change. Markers stay just above 32 to avoid the engine clamping RAM. Gate:
+// TWEAKXL_POKE_PROBE_CELLS=1. (Open the cyberware/cyberdeck screen fresh to refresh
+// the HUD if it caches the cap.)
+// Shared marker state: the loop REVERTS the prior round before each new scan, and
+// one reapply thread holds the current set against recompute/regen.
+struct MarkerRec { uintptr_t addr; uint32_t orig; uint32_t marker; };
+std::mutex g_markerMx;
+std::vector<MarkerRec> g_markers;
+std::once_flag g_markerReapplyOnce;
+
+void StartMarkerReapply() {
+    std::call_once(g_markerReapplyOnce, [] {
+        std::thread([] {
+            for (;;) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(400));
+                std::lock_guard<std::mutex> lk(g_markerMx);
+                for (auto& m : g_markers) { uint32_t v = 0; if (SafeReadU32(m.addr, &v) && v != m.marker) SafeWrite(m.addr, &m.marker, 4); }
+            }
+        }).detach();
+    });
+}
+
+void RevertMarkers() {
+    std::lock_guard<std::mutex> lk(g_markerMx);
+    const size_t n = g_markers.size();
+    for (auto& m : g_markers) SafeWrite(m.addr, &m.orig, 4);
+    g_markers.clear();
+    if (n) log_line("[probe-cells] reverted %zu marker(s) to originals.", n);
+}
+
+// One scan+mark pass. Two modes:
+//  • CONTAINER (intRaw=false): find player-scale StatsContainer cells whose float
+//    value ≈ A within tol (tol=0 → exact). Catches derived stats that display a
+//    rounded integer but store a fractional float.
+//  • RAW-INT (intRaw=true): scan ALL writable memory for the int32 == (int)A — for
+//    stored counters that ARE exact (money/eddies, components, XP), which are not
+//    in StatsContainers and not derived.
+// Writes a DISTINCT marker (base+i) to each hit (recording the original for revert).
+// Returns count written. Takes g_markerMx around the writes.
+size_t ProbeScanAndMark(double A, bool intRaw, float tol, float base, uint32_t maxCells) {
+    constexpr size_t kBuf = 1u << 20;
+    std::vector<uint8_t> buf(kBuf);
+    const task_t task = mach_task_self();
+    struct Hit { uintptr_t addr; uint32_t id; uintptr_t C; uint32_t count; };
+    std::vector<Hit> hits;
+    uint32_t bigCount = 0;
+    const auto regions = CollectScannableRegions();
+
+    if (intRaw) {
+        const int32_t tv = (int32_t)A; uint32_t tBits = (uint32_t)tv;
+        for (const auto& r : regions) {
+            if (hits.size() >= maxCells) break;
+            for (mach_vm_size_t off = 0; off < r.size; off += kBuf) {
+                const mach_vm_size_t chunk = std::min<mach_vm_size_t>(kBuf, r.size - off);
+                mach_vm_size_t got = 0;
+                if (mach_vm_read_overwrite(task, r.base + off, chunk, (mach_vm_address_t)buf.data(), &got) != KERN_SUCCESS || got != chunk) continue;
+                for (size_t i = 0; i + 4 <= got; i += 4) {
+                    uint32_t v; std::memcpy(&v, buf.data() + i, 4);
+                    if (v != tBits) continue;
+                    hits.push_back({ (uintptr_t)(r.base + off + i), 0, 0, 0 });
+                    if (hits.size() >= maxCells) break;
+                }
+                if (hits.size() >= maxCells) break;
+            }
+        }
+        log_line("[probe-cells] RAW-INT found %zu addr(s) holding int %d.", hits.size(), (int)tv);
+    } else {
+        const float Af = (float)A; uint32_t aBits; std::memcpy(&aBits, &Af, 4);
+        for (const auto& r : regions) {
+            if (hits.size() >= maxCells) break;
+            for (mach_vm_size_t off = 0; off < r.size; off += kBuf) {
+                const mach_vm_size_t chunk = std::min<mach_vm_size_t>(kBuf, r.size - off);
+                mach_vm_size_t got = 0;
+                if (mach_vm_read_overwrite(task, r.base + off, chunk, (mach_vm_address_t)buf.data(), &got) != KERN_SUCCESS || got != chunk) continue;
+                for (size_t j = 0; j + 0x68 <= got; j += 8) {
+                    uint32_t count; std::memcpy(&count, buf.data() + j + 0x5c, 4);
+                    if (count < 400 || count > 8192) continue;     // player-scale containers only
+                    uint64_t idArr, entArr;
+                    std::memcpy(&idArr, buf.data() + j + 0x50, 8);
+                    std::memcpy(&entArr, buf.data() + j + 0x60, 8);
+                    if (!PlausiblePtr((uintptr_t)idArr) || !PlausiblePtr((uintptr_t)entArr) || idArr == entArr) continue;
+                    if ((idArr & 7) || (entArr & 7)) continue;       // pointer arrays are 8-byte aligned — kill misaligned false positives
+                    const uintptr_t C = (uintptr_t)(r.base + off + j);
+                    uint32_t cnt = 0; uintptr_t ia = 0, ea = 0;
+                    if (!PokeStructCheck(C, &cnt, &ia, &ea)) continue;
+                    if (cnt > bigCount) bigCount = cnt;
+                    for (uint32_t i = 0; i < cnt; ++i) {
+                        uint32_t raw = 0; if (!SafeReadU32(ea + (uint64_t)i * 0x10 + 0x0c, &raw)) break;
+                        bool hit;
+                        if (tol > 0.0f) { float v; std::memcpy(&v, &raw, 4); hit = std::isfinite(v) && std::fabs(v - Af) <= tol; }
+                        else hit = (raw == aBits);
+                        if (!hit) continue;
+                        uint32_t id = 0; SafeReadU32(ia + (uint64_t)i * 4, &id);
+                        hits.push_back({ ea + (uint64_t)i * 0x10 + 0x0c, id, C, cnt });
+                        if (hits.size() >= maxCells) break;
+                    }
+                    if (hits.size() >= maxCells) break;
+                }
+                if (hits.size() >= maxCells) break;
+            }
+        }
+        log_line("[probe-cells] CONTAINER found %zu cell(s) ~%g (tol=%g, biggest container=%u stats).", hits.size(), A, (double)tol, bigCount);
+    }
+    if (hits.empty()) return 0;
+
+    std::lock_guard<std::mutex> lk(g_markerMx);
+    for (size_t i = 0; i < hits.size(); ++i) {
+        uint32_t orig = 0; if (!SafeReadU32(hits[i].addr, &orig)) continue;
+        uint32_t mb;
+        if (intRaw) { int32_t mi = (int32_t)base + (int32_t)i; mb = (uint32_t)mi; }
+        else { float mf = base + (float)i; std::memcpy(&mb, &mf, 4); }
+        if (!SafeWrite(hits[i].addr, &mb, 4)) { log_line("[probe-cells] idx=%zu WRITE FAILED @0x%llx", i, (unsigned long long)hits[i].addr); continue; }
+        g_markers.push_back({hits[i].addr, orig, mb});
+        if (intRaw)
+            log_line("[probe-cells] idx=%zu marker=%d @0x%llx (raw int)", i, (int)base + (int)i, (unsigned long long)hits[i].addr);
+        else
+            log_line("[probe-cells] idx=%zu marker=%g @0x%llx id=0x%x C=0x%llx (count=%u)",
+                     i, (double)(base + (float)i), (unsigned long long)hits[i].addr, hits[i].id, (unsigned long long)hits[i].C, hits[i].count);
+    }
+    return g_markers.size();
+}
+
+// LOOP mode (TWEAKXL_POKE_GO_FILE set): repeatedly wait for a value written into the
+// go-file, revert the previous round, scan the live player for cells holding that
+// value, and mark them. Write 0 to revert+idle. Lets us try value after value
+// (RAM cap, max health, carry capacity, …) in ONE session — no reload between tries.
+void DoStatProbeCells() {
+    float base = 400.0f; if (const char* b = std::getenv("TWEAKXL_POKE_RAM_TARGET"); b && *b) base = (float)std::strtod(b, nullptr);
+    uint32_t maxCells = 40; if (const char* m = std::getenv("TWEAKXL_POKE_PROBE_MAX"); m && *m) maxCells = (uint32_t)std::strtoul(m, nullptr, 10);
+    uint32_t delaySec = 70; if (const char* d = std::getenv("TWEAKXL_POKE_DELAY_SEC"); d && *d) delaySec = (uint32_t)std::strtoul(d, nullptr, 10);
+    float defTol = 0.0f; if (const char* t = std::getenv("TWEAKXL_POKE_TOL"); t && *t) defTol = (float)std::strtod(t, nullptr);
+    const char* gf = std::getenv("TWEAKXL_POKE_GO_FILE");
+    StartMarkerReapply();
+
+    if (!gf || !*gf) {   // single-shot fallback (fixed delay, value from TWEAKXL_POKE_A)
+        float A = 32.0f; if (const char* a = std::getenv("TWEAKXL_POKE_A"); a && *a) A = (float)std::strtod(a, nullptr);
+        log_line("[probe-cells] single-shot: value=%g base=%g, waiting %us...", (double)A, (double)base, delaySec);
+        std::this_thread::sleep_for(std::chrono::seconds(delaySec));
+        ProbeScanAndMark(A, false, defTol, base, maxCells);
+        return;
+    }
+
+    log_line("[probe-cells] LOOP ready (markers base=%g). Signal a value via %s: plain number = derived-stat scan (StatsContainer floats, tol=%g); prefix 'i' (e.g. i25431) = raw int counter scan (money/components). 0 = revert+idle.",
+             (double)base, gf, (double)defTol);
+    for (;;) {
+        double A = 0.0; bool have = false, intRaw = false; float tol = defTol;
+        for (;;) {
+            if (FILE* f = std::fopen(gf, "r")) {
+                char tok[64] = {0};
+                if (std::fscanf(f, "%63s", tok) == 1) {
+                    have = true; char* p = tok;
+                    if (*p == 'i' || *p == 'I') { intRaw = true; ++p; }
+                    else if (*p == 'f' || *p == 'F') { intRaw = false; ++p; }
+                    A = std::strtod(p, nullptr);
+                }
+                std::fclose(f); std::remove(gf); break;
+            }
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+        }
+        RevertMarkers();                              // clear previous round first
+        if (!have || A <= 0.0) { log_line("[probe-cells] idle — signal a value to scan."); continue; }
+        log_line("[probe-cells] GO — %s scan for value=%g%s.", intRaw ? "RAW-INT" : "CONTAINER", A, intRaw ? "" : (tol > 0 ? " (±tol)" : ""));
+        size_t wrote = 0;
+        for (int attempt = 1; attempt <= 6 && wrote == 0; ++attempt) {
+            wrote = ProbeScanAndMark(A, intRaw, tol, base, maxCells);
+            if (wrote == 0) { log_line("[probe-cells] attempt %d: none held %g, retry 4s...", attempt, A); std::this_thread::sleep_for(std::chrono::seconds(4)); }
+        }
+        if (wrote)
+            log_line("[probe-cells] wrote %zu markers (%d..%d) for value=%g — READ THE STAT; shown number = base+index. New value to retry, 0 to revert.",
+                     wrote, (int)base, (int)base + (int)(wrote - 1), A);
+        else
+            log_line("[probe-cells] no hit for %g.", A);
+    }
+}
+
+// ── F-044: UNEQUIP-DELTA — isolate the RAM CAP cell without knowing its id ─────
+// The cap (Memory stat) lives in the player StatsContainer at entArr+slot*0x10+0xc,
+// but the container keys entries by HASHED runtime ids (e.g. 0x3700, 0xdf527d52),
+// NOT the raw enum 0x1bc, so we cannot look it up by id. Instead: snapshot every
+// CONTAINER CELL holding the cap value A (32 = 23 base + 9 cyberdeck), have the
+// user UNEQUIP the cyberdeck (cap 32->23), and keep only the cells that became
+// exactly B (23). That delta (Δ=cyberdeck bonus) uniquely isolates the cap cell(s)
+// with no id guessing. Because we only ever record/write validated StatsContainer
+// cells (PokeStructCheck), this stays crash-safe (unlike the all-memory scattershot
+// that crashed before). Then re-equip (cell back to 32) and write the new cap.
+// Gate: TWEAKXL_POKE_UNEQUIP=1.
+void DoStatUnequipDelta() {
+    float A = 32.0f, B = 23.0f;
+    if (const char* a = std::getenv("TWEAKXL_POKE_A"); a && *a) A = (float)std::strtod(a, nullptr);
+    if (const char* b = std::getenv("TWEAKXL_POKE_B"); b && *b) B = (float)std::strtod(b, nullptr);
+    uint32_t aBits, bBits; std::memcpy(&aBits, &A, 4); std::memcpy(&bBits, &B, 4);
+    const char* tgtEnv = std::getenv("TWEAKXL_POKE_RAM_TARGET");
+    const bool doWrite = tgtEnv && *tgtEnv;
+    const float target = doWrite ? (float)std::strtod(tgtEnv, nullptr) : 0.0f;
+    uint32_t targetBits; std::memcpy(&targetBits, &target, 4);
+    const bool doReapply = std::getenv("TWEAKXL_POKE_REAPPLY") != nullptr;
+    uint32_t delaySec   = 70; if (const char* d = std::getenv("TWEAKXL_POKE_DELAY_SEC");   d && *d) delaySec   = (uint32_t)std::strtoul(d, nullptr, 10);
+    uint32_t unequipSec = 30; if (const char* u = std::getenv("TWEAKXL_POKE_UNEQUIP_SEC"); u && *u) unequipSec = (uint32_t)std::strtoul(u, nullptr, 10);
+    uint32_t reequipSec = 25; if (const char* r = std::getenv("TWEAKXL_POKE_REEQUIP_SEC"); r && *r) reequipSec = (uint32_t)std::strtoul(r, nullptr, 10);
+
+    log_line("[unequip] cap A=%g -> B=%g  write=%s target=%g — load your save, RAM cap FULL (=%g), stay quiet (%us)...",
+             (double)A, (double)B, doWrite ? "YES" : "dry", (double)target, (double)A, delaySec);
+    std::this_thread::sleep_for(std::chrono::seconds(delaySec));
+
+    // Phase 1: snapshot every validated-container cell holding A (32).
+    struct CapCell { uintptr_t cell; uint32_t id; uintptr_t C; };
+    std::vector<CapCell> snap; snap.reserve(1u << 18);
+    constexpr size_t kBuf = 1u << 20;
+    std::vector<uint8_t> buf(kBuf);
+    const task_t task = mach_task_self();
+    const auto regions = CollectScannableRegions();
+    uint32_t containers = 0;
+    bool capped = false;
+    for (const auto& r : regions) {
+        if (capped) break;
+        for (mach_vm_size_t off = 0; off < r.size && !capped; off += kBuf) {
+            const mach_vm_size_t chunk = std::min<mach_vm_size_t>(kBuf, r.size - off);
+            mach_vm_size_t got = 0;
+            if (mach_vm_read_overwrite(task, r.base + off, chunk, (mach_vm_address_t)buf.data(), &got) != KERN_SUCCESS || got != chunk) continue;
+            for (size_t j = 0; j + 0x68 <= got; j += 8) {
+                uint32_t count; std::memcpy(&count, buf.data() + j + 0x5c, 4);
+                if (count < 12 || count > 8192) continue;
+                uint64_t idArr, entArr;
+                std::memcpy(&idArr, buf.data() + j + 0x50, 8);
+                std::memcpy(&entArr, buf.data() + j + 0x60, 8);
+                if (!PlausiblePtr((uintptr_t)idArr) || !PlausiblePtr((uintptr_t)entArr) || idArr == entArr) continue;
+                const uintptr_t C = (uintptr_t)(r.base + off + j);
+                uint32_t cnt = 0; uintptr_t ia = 0, ea = 0;
+                if (!PokeStructCheck(C, &cnt, &ia, &ea)) continue;
+                ++containers;
+                for (uint32_t i = 0; i < cnt; ++i) {
+                    uint32_t raw = 0; if (!SafeReadU32(ea + (uint64_t)i * 0x10 + 0x0c, &raw)) break;
+                    if (raw != aBits) continue;
+                    uint32_t id = 0; SafeReadU32(ia + (uint64_t)i * 4, &id);
+                    snap.push_back({ ea + (uint64_t)i * 0x10 + 0x0c, id, C });
+                    if (snap.size() >= (1u << 19)) { capped = true; break; }
+                }
+                if (capped) break;
+            }
+        }
+    }
+    log_line("[unequip] snapshot: %zu container cell(s) hold %g across %u containers.%s",
+             snap.size(), (double)A, containers, capped ? " (capped)" : "");
+    log_line("[unequip]  >>> NOW UNEQUIP YOUR CYBERDECK — your RAM cap should drop %g -> %g. <<<", (double)A, (double)B);
+    if (snap.empty()) { log_line("[unequip] no container cell held %g — is RAM cap %g? set TWEAKXL_POKE_A=<cap>", (double)A, (double)A); return; }
+
+    // Phase 2: poll; keep cells that became exactly B (23) after the unequip.
+    std::vector<char> hitB(snap.size(), 0);
+    for (uint32_t pass = 0; pass < unequipSec; ++pass) {
+        uint32_t nowB = 0, surv = 0;
+        for (size_t k = 0; k < snap.size(); ++k) {
+            uint32_t v = 0; if (!SafeReadU32(snap[k].cell, &v)) continue;
+            if (v == bBits) { hitB[k] = 1; ++nowB; }
+            if (hitB[k]) ++surv;
+        }
+        if (pass % 5 == 0) log_line("[unequip] pass %u/%u: %u cell(s) now at %g, %u survivor(s) so far (unequip the cyberdeck!)",
+                                    pass, unequipSec, nowB, (double)B, surv);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    std::vector<CapCell> survivors;
+    for (size_t k = 0; k < snap.size(); ++k) if (hitB[k]) survivors.push_back(snap[k]);
+    log_line("[unequip] %zu cell(s) went %g -> %g (these ARE the cap / cyberdeck-derived stats):", survivors.size(), (double)A, (double)B);
+    for (size_t k = 0; k < survivors.size() && k < 40; ++k) {
+        uint32_t v = 0; SafeReadU32(survivors[k].cell, &v); float vf; std::memcpy(&vf, &v, 4);
+        log_line("[unequip]   @0x%llx id=0x%x C=0x%llx now=%g", (unsigned long long)survivors[k].cell, survivors[k].id, (unsigned long long)survivors[k].C, (double)vf);
+    }
+    if (survivors.empty()) { log_line("[unequip] NONE went %g->%g — did you unequip in time? re-run and unequip during the window", (double)A, (double)B); return; }
+
+    if (!doWrite) { log_line("[unequip] DRY (no write). Re-run with TWEAKXL_POKE_RAM_TARGET=64 to set the cap."); return; }
+
+    // Phase 3: re-equip (cap back to 32), then write the new cap to the isolated cells.
+    log_line("[unequip]  >>> RE-EQUIP YOUR CYBERDECK NOW (cap back to %g), waiting %us... <<<", (double)A, reequipSec);
+    std::this_thread::sleep_for(std::chrono::seconds(reequipSec));
+    uint32_t wrote = 0;
+    auto* owned = new std::vector<uintptr_t>();
+    for (const auto& s : survivors) {
+        if (!SafeWrite(s.cell, &targetBits, 4)) continue;
+        uint32_t back = 0; SafeReadU32(s.cell, &back); float bf; std::memcpy(&bf, &back, 4);
+        log_line("[unequip] WROTE @0x%llx id=0x%x -> %g (readback=%g)", (unsigned long long)s.cell, s.id, (double)target, (double)bf);
+        owned->push_back(s.cell); ++wrote;
+    }
+    log_line("[unequip] wrote cap=%g to %u cell(s) — CHECK YOUR RAM CAP NOW (should read %g)", (double)target, wrote, (double)target);
+    if (doReapply && !owned->empty()) {
+        const uint32_t raw = targetBits;
+        std::thread([owned, raw]() { for (;;) { std::this_thread::sleep_for(std::chrono::milliseconds(500)); for (uintptr_t a : *owned) { uint32_t v = 0; if (SafeReadU32(a, &v) && v != raw) SafeWrite(a, &raw, 4); } } }).detach();
+        log_line("[unequip] re-apply thread started (500ms)");
+    } else { delete owned; }
+}
+
+void DoStatPoke() {
+    // anchors: comma-separated values to look for (e.g. "32,23,9"); optional.
+    std::vector<float> anchors;
+    if (const char* a = std::getenv("TWEAKXL_POKE_RAM_NOW"); a && *a) {
+        const char* p = a;
+        while (*p) { char* e = nullptr; float v = (float)std::strtod(p, &e); if (e == p) break; anchors.push_back(v); p = e; while (*p == ',' || *p == ' ') ++p; }
+    }
+    const char* tgtEnv = std::getenv("TWEAKXL_POKE_RAM_TARGET");
+    const bool doWrite = tgtEnv && *tgtEnv;
+    const float target = doWrite ? (float)std::strtod(tgtEnv, nullptr) : 0.0f;
+    uint32_t targetBits; std::memcpy(&targetBits, &target, 4);
+    uint32_t statIdTarget = 0;
+    if (const char* s = std::getenv("TWEAKXL_POKE_STATID"); s && *s) statIdTarget = (uint32_t)std::strtoul(s, nullptr, 0);
+    const bool doReapply = std::getenv("TWEAKXL_POKE_REAPPLY") != nullptr;
+    uint32_t delaySec = 30;
+    if (const char* d = std::getenv("TWEAKXL_POKE_DELAY_SEC"); d && *d) delaySec = (uint32_t)std::strtoul(d, nullptr, 10);
+    uint32_t maxCand = 256;
+    if (const char* m = std::getenv("TWEAKXL_POKE_MAX_CAND"); m && *m) maxCand = (uint32_t)std::strtoul(m, nullptr, 10);
+
+    { std::string as; for (float v : anchors) { as += std::to_string((double)v); as += ' '; }
+      log_line("[poke] anchors=[%s] write=%s target=%g statId=0x%x delay=%us",
+               as.c_str(), doWrite ? "YES" : "no", (double)target, statIdTarget, delaySec); }
+    if (delaySec) { log_line("[poke] sleeping %us — load your save now, somewhere quiet", delaySec); std::this_thread::sleep_for(std::chrono::seconds(delaySec)); }
+
+    constexpr size_t kBuf = 1u << 20;
+    std::vector<uint8_t> buf(kBuf);
+    const task_t task = mach_task_self();
+    std::vector<PokeCand> cands;
+
+    for (int attempt = 1; attempt <= 12; ++attempt) {
+        cands.clear();
+        const auto regions = CollectScannableRegions();
+        uint64_t totalMB = 0; for (const auto& r : regions) totalMB += r.size; totalMB >>= 20;
+        log_line("[poke] scan attempt %d: %zu regions (%llu MB) for StatsContainer-shaped objects...",
+                 attempt, regions.size(), (unsigned long long)totalMB);
+        bool full = false;
+        for (const auto& r : regions) {
+            if (full) break;
+            for (mach_vm_size_t off = 0; off < r.size && !full; off += kBuf) {
+                const mach_vm_size_t chunk = std::min<mach_vm_size_t>(kBuf, r.size - off);
+                mach_vm_size_t got = 0;
+                if (mach_vm_read_overwrite(task, r.base + off, chunk, (mach_vm_address_t)buf.data(), &got) != KERN_SUCCESS || got != chunk) continue;
+                for (size_t j = 0; j + 0x68 <= got; j += 8) {
+                    uint32_t count; std::memcpy(&count, buf.data() + j + 0x5c, 4);
+                    if (count < 12 || count > 8192) continue;
+                    uint64_t idArr, entArr;
+                    std::memcpy(&idArr, buf.data() + j + 0x50, 8);
+                    std::memcpy(&entArr, buf.data() + j + 0x60, 8);
+                    if (!PlausiblePtr((uintptr_t)idArr) || !PlausiblePtr((uintptr_t)entArr) || idArr == entArr) continue;
+                    const uintptr_t C = (uintptr_t)(r.base + off + j);
+                    uint32_t cnt = 0; uintptr_t ia = 0, ea = 0;
+                    if (!PokeStructCheck(C, &cnt, &ia, &ea)) continue;
+                    int aSlot = -1; uint32_t aId = 0; float aVal = 0;     // any anchor value present?
+                    for (uint32_t i = 0; i < cnt && !anchors.empty(); ++i) {
+                        uint32_t raw = 0; if (!SafeReadU32(ea + (uint64_t)i * 0x10 + 0x0c, &raw)) break;
+                        float v; std::memcpy(&v, &raw, 4);
+                        bool hit = false; for (float an : anchors) { uint32_t ab; std::memcpy(&ab, &an, 4); if (raw == ab) { hit = true; break; } }
+                        if (hit) { aSlot = (int)i; SafeReadU32(ia + (uint64_t)i * 4, &aId); aVal = v; break; }
+                    }
+                    if (aSlot < 0) continue;   // only KEEP containers holding an anchor — garbage shapes mustn't fill the cap / stop the scan
+                    cands.push_back({C, ia, ea, cnt, aSlot, aId, aVal});
+                    log_line("[poke] HIT C=0x%llx count=%u anchor=%g @slot=%d statId=0x%x",
+                             (unsigned long long)C, cnt, (double)aVal, aSlot, aId);
+                    if (cands.size() >= maxCand) { full = true; break; }
+                }
+            }
+        }
+        // Quality gate: a player-scale container = high unique-id ratio + large count.
+        // Don't stop on early-init garbage (count~112, few unique ids).
+        bool havePlayer = false;
+        for (const auto& c : cands) {
+            if (c.count < 400) continue;
+            const uint32_t lim = c.count < 2048 ? c.count : 2048;
+            std::vector<uint32_t> ids; ids.reserve(lim);
+            for (uint32_t i = 0; i < lim; ++i) { uint32_t id = 0; SafeReadU32(c.idArr + (uint64_t)i * 4, &id); ids.push_back(id); }
+            std::vector<uint32_t> su = ids; std::sort(su.begin(), su.end());
+            const double uniq = (double)(std::unique(su.begin(), su.end()) - su.begin()) / (lim ? lim : 1);
+            if (uniq > 0.8) { havePlayer = true; break; }
+        }
+        if (havePlayer) { log_line("[poke] player-quality container present (attempt %d)", attempt); break; }
+        log_line("[poke] attempt %d: %zu candidate(s), none player-quality (high-unique + count>400) — retry 15s (still loading?)", attempt, cands.size());
+        std::this_thread::sleep_for(std::chrono::seconds(15));
+    }
+
+    if (cands.empty()) {
+        log_line("[poke] no container held anchors %s — FALLBACK: raw-scanning for those floats + context",
+                 anchors.empty() ? "(none)" : "");
+        // Where do the anchor floats live at all? Dump 64B context around the first hits.
+        uint32_t shown = 0;
+        const auto regions = CollectScannableRegions();
+        for (const auto& r : regions) {
+            if (shown >= 30) break;
+            for (mach_vm_size_t off = 0; off < r.size && shown < 30; off += kBuf) {
+                const mach_vm_size_t chunk = std::min<mach_vm_size_t>(kBuf, r.size - off);
+                mach_vm_size_t got = 0;
+                if (mach_vm_read_overwrite(task, r.base + off, chunk, (mach_vm_address_t)buf.data(), &got) != KERN_SUCCESS || got != chunk) continue;
+                for (size_t i = 0; i + 4 <= got && shown < 30; i += 4) {
+                    uint32_t v; std::memcpy(&v, buf.data() + i, 4);
+                    bool hit = false; float fv = 0;
+                    for (float an : anchors) { uint32_t ab; std::memcpy(&ab, &an, 4); if (v == ab) { hit = true; fv = an; break; } }
+                    if (!hit) continue;
+                    const uintptr_t a = (uintptr_t)(r.base + off + i);
+                    char line[160]; size_t ln = 0;
+                    for (int k = -4; k <= 8; ++k) {   // surrounding 4-byte words as float + int
+                        const size_t pos = i + (size_t)(k * 4);
+                        if ((int64_t)pos < 0 || pos + 4 > got) continue;
+                        uint32_t w; std::memcpy(&w, buf.data() + pos, 4); float wf; std::memcpy(&wf, &w, 4);
+                        ln += std::snprintf(line + ln, sizeof(line) - ln, " %+d:%.3g/0x%x", k * 4, (double)wf, w);
+                    }
+                    log_line("[poke] float %g @0x%llx ctx:%s", (double)fv, (unsigned long long)a, line);
+                    ++shown;
+                }
+            }
+        }
+        log_line("[poke] fallback done (%u contexts). If 32/23/9 never appears as a float, RAM is stored as int or scaled.", shown);
+        return;
+    }
+
+    std::sort(cands.begin(), cands.end(), [](const PokeCand& a, const PokeCand& b){
+        if ((a.anchorSlot >= 0) != (b.anchorSlot >= 0)) return a.anchorSlot >= 0;   // anchor-containing first
+        return a.count > b.count;                                                    // then most stats (player)
+    });
+    int withAnchor = 0; for (const auto& c : cands) if (c.anchorSlot >= 0) ++withAnchor;
+    log_line("[poke] %zu container(s) found; %d contain an anchor value. Top:", cands.size(), withAnchor);
+    for (size_t i = 0; i < cands.size() && i < 12; ++i) {
+        const auto& c = cands[i];
+        if (c.anchorSlot >= 0)
+            log_line("[poke]   #%zu C=0x%llx count=%u  ANCHOR %g @slot=%d statId=0x%x",
+                     i, (unsigned long long)c.base, c.count, (double)c.anchorVal, c.anchorSlot, c.anchorId);
+        else
+            log_line("[poke]   #%zu C=0x%llx count=%u  (no anchor)", i, (unsigned long long)c.base, c.count);
+    }
+    // Characterize EACH candidate so the real player container is identifiable:
+    // count of UNIQUE ids (garbage has repeats), which of 32/23/9 it holds + their
+    // ids, and a few notable values. The player = clean unique ids + holds 32 (and
+    // ideally 23 base / 9 cyberdeck) with a sensible Memory stat id.
+    for (size_t ci = 0; ci < cands.size() && ci < 8; ++ci) {
+        const auto& c = cands[ci];
+        const uint32_t lim = c.count < 4096 ? c.count : 4096;
+        // unique-id ratio over a sample (sorted-copy then count distinct) — cheap proxy.
+        std::vector<uint32_t> ids; ids.reserve(lim);
+        for (uint32_t i = 0; i < lim; ++i) { uint32_t id = 0; SafeReadU32(c.idArr + (uint64_t)i * 4, &id); ids.push_back(id); }
+        std::vector<uint32_t> su = ids; std::sort(su.begin(), su.end()); const size_t uniq = std::unique(su.begin(), su.end()) - su.begin();
+        // which of 32/23/9 are present + their ids
+        char have[96]; size_t hl = 0;
+        for (float an : {32.0f, 23.0f, 9.0f}) {
+            for (uint32_t i = 0; i < lim; ++i) {
+                uint32_t raw = 0; SafeReadU32(c.entArr + (uint64_t)i * 0x10 + 0x0c, &raw);
+                float v; std::memcpy(&v, &raw, 4);
+                if (v == an) { uint32_t id = 0; SafeReadU32(c.idArr + (uint64_t)i * 4, &id); hl += std::snprintf(have + hl, sizeof(have) - hl, " %g@id=0x%x", (double)an, id); break; }
+            }
+        }
+        log_line("[poke] CAND#%zu C=0x%llx count=%u uniqIds=%zu/%u holds:%s",
+                 ci, (unsigned long long)c.base, c.count, uniq, lim, hl ? have : " (none?)");
+    }
+    // Dump notable stats of the candidate with the BEST unique-id ratio that holds 32
+    // (the real player), preferring clean ids over raw count.
+    size_t bestIdx = 0; double bestScore = -1;
+    for (size_t ci = 0; ci < cands.size(); ++ci) {
+        const auto& c = cands[ci]; const uint32_t lim = c.count < 4096 ? c.count : 4096;
+        std::vector<uint32_t> ids; for (uint32_t i = 0; i < lim; ++i) { uint32_t id = 0; SafeReadU32(c.idArr + (uint64_t)i * 4, &id); ids.push_back(id); }
+        std::vector<uint32_t> su = ids; std::sort(su.begin(), su.end()); const double uniq = (double)(std::unique(su.begin(), su.end()) - su.begin());
+        const double score = uniq / (lim ? lim : 1) * 1000.0 + (double)c.count * 0.001;  // uniqueness dominates
+        if (score > bestScore) { bestScore = score; bestIdx = ci; }
+    }
+    const auto& best = cands[bestIdx];
+    log_line("[poke] === likely PLAYER = CAND#%zu C=0x%llx count=%u — notable stats ===", bestIdx, (unsigned long long)best.base, best.count);
+    for (uint32_t i = 0; i < best.count && i < 800; ++i) {
+        uint32_t id = 0, raw = 0;
+        SafeReadU32(best.idArr + (uint64_t)i * 4, &id);
+        SafeReadU32(best.entArr + (uint64_t)i * 0x10 + 0x0c, &raw);
+        float v; std::memcpy(&v, &raw, 4);
+        bool tag = (v == 32.0f || v == 23.0f || v == 9.0f);
+        if (tag || (std::isfinite(v) && v >= 5.0f && v < 1000.0f))
+            log_line("[poke]   stat id=0x%05x value=%g%s", id, (double)v, tag ? "  <== RAM?" : "");
+    }
+
+    if (!doWrite) { log_line("[poke] DUMP-ONLY. Pick the player container + your RAM stat id above, then re-run with TWEAKXL_POKE_STATID=<id> TWEAKXL_POKE_RAM_TARGET=<v> (and TWEAKXL_POKE_BASE=0x<C> to force that container)"); return; }
+
+    // PROBE-ALL: write a DISTINCT marker (target + ci) to each candidate's anchor
+    // stat, re-applying all. The value your RAM bar shows = target + (player's index)
+    // → identifies the exact container + confirms its anchor stat is RAM. One shot.
+    if (std::getenv("TWEAKXL_POKE_PROBE_ALL")) {
+        struct W { uintptr_t base; uint32_t statId, bits; };
+        auto* writes = new std::vector<W>();
+        for (size_t ci = 0; ci < cands.size() && ci < 24; ++ci) {
+            const float val = target + (float)ci;
+            uint32_t vb; std::memcpy(&vb, &val, 4);
+            uint32_t cur = 0; const uintptr_t cell = PokeFindCell(cands[ci].base, cands[ci].anchorId, &cur);
+            if (!cell) continue;
+            SafeWrite(cell, &vb, 4);
+            writes->push_back({cands[ci].base, cands[ci].anchorId, vb});
+            log_line("[poke] PROBE ci=%zu -> RAM=%g  (C=0x%llx statId=0x%x)", ci, (double)val, (unsigned long long)cands[ci].base, cands[ci].anchorId);
+        }
+        log_line("[poke] PROBE-ALL: %zu markers written. Tell me which number your RAM bar shows.", writes->size());
+        std::thread([writes]() {                          // re-apply (game recomputes each tick)
+            for (;;) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(400));
+                for (const auto& w : *writes) { uint32_t cur = 0; const uintptr_t cell = PokeFindCell(w.base, w.statId, &cur); if (cell && cur != w.bits) SafeWrite(cell, &w.bits, 4); }
+            }
+        }).detach();
+        return;
+    }
+
+    // WRITE: pick container (TWEAKXL_POKE_BASE override, else best) + stat id.
+    uintptr_t writeBase = best.base;
+    if (const char* cb = std::getenv("TWEAKXL_POKE_BASE"); cb && *cb) writeBase = (uintptr_t)std::strtoull(cb, nullptr, 0);
+    const uint32_t wId = statIdTarget ? statIdTarget : best.anchorId;
+    if (!wId) { log_line("[poke] write requested but no statId (set TWEAKXL_POKE_STATID=<id from dump>)"); return; }
+    uint32_t curRaw = 0;
+    const uintptr_t cell = PokeFindCell(writeBase, wId, &curRaw);
+    if (!cell) { log_line("[poke] statId 0x%x not in container 0x%llx — abort", wId, (unsigned long long)writeBase); return; }
+    float cur; std::memcpy(&cur, &curRaw, 4);
+    SafeWrite(cell, &targetBits, 4);
+    uint32_t back = 0; SafeReadU32(cell, &back); float bf; std::memcpy(&bf, &back, 4);
+    log_line("[poke] WROTE C=0x%llx statId=0x%x cell=0x%llx: %g -> %g (readback=%g) — watch your bar",
+             (unsigned long long)writeBase, wId, (unsigned long long)cell, (double)cur, (double)target, (double)bf);
+
+    if (!doReapply) { log_line("[poke] single write (set TWEAKXL_POKE_REAPPLY=1 if it reverts)"); return; }
+    const uintptr_t C = writeBase; const uint32_t statId = wId, tb = targetBits;
+    std::thread([C, statId, tb]() {
+        uint64_t pass = 0;
+        for (;;) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(500)); ++pass;
+            uint32_t cur = 0; const uintptr_t cell = PokeFindCell(C, statId, &cur);
+            if (cell && cur != tb) SafeWrite(cell, &tb, 4);
+            if ((pass % 40) == 0) log_line("[poke] reapply#%llu cell=0x%llx", (unsigned long long)pass, (unsigned long long)cell);
+        }
+    }).detach();
+    log_line("[poke] re-apply thread started (500ms)");
+}
+
+std::once_flag g_poke_once;
+
+} // namespace
+
+void StatPoke(TweakDB* /*db*/) {
+    if (!std::getenv("TWEAKXL_STAT_POKE")) { log_line("[poke] skipped (set TWEAKXL_STAT_POKE=1)"); return; }
+    const bool probeCells = std::getenv("TWEAKXL_POKE_PROBE_CELLS") != nullptr;  // F-044: cell-marker cap ID
+    const bool unequip    = std::getenv("TWEAKXL_POKE_UNEQUIP") != nullptr;  // F-044: unequip-delta cap isolation
+    const bool poolmax    = std::getenv("TWEAKXL_POKE_POOLMAX") != nullptr;  // F-044: surgical StatPool max write
+    const bool delta      = std::getenv("TWEAKXL_POKE_DELTA")   != nullptr;
+    std::call_once(g_poke_once, [probeCells, unequip, poolmax, delta] {
+        std::thread([probeCells, unequip, poolmax, delta] {
+            if (probeCells) DoStatProbeCells();
+            else if (unequip) DoStatUnequipDelta();
+            else if (poolmax) DoStatPoolMax();
+            else if (delta) DoStatDelta();
+            else DoStatPoke();
+        }).detach();
+    });
+}
+
 void VerifyFlatArrayAccess(const TweakDB* db) {
     const FlatsArrayView fa = ReadFlatsArrayHeader(db);
     if (!fa.ok) { log_line("[flat-array] header read FAILED"); return; }

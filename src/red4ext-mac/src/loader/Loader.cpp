@@ -125,6 +125,8 @@ static void red4ext_mac_loader_init() {
         log_line("[apply-trigger] after BoostStatFlats");
         red4ext_mac::StatOracle(db); // F-037: self-verifying runtime stat oracle (env-gated, poll thread)
         log_line("[apply-trigger] after StatOracle");
+        red4ext_mac::StatPoke(db); // Path 1: heap-scan player StatsContainer + WRITE RAM cell (env-gated, poll thread)
+        log_line("[apply-trigger] after StatPoke");
         red4ext_mac::TestFlatWritePath(db);   // F-031 — named-flat resolve + scalar edit round-trip (no save)
         log_line("[apply-trigger] after TestFlatWritePath");
         red4ext_mac::TestUpdateRecordBuild(db); // H-011 — factory build-from-edited-flats validation (env-gated)

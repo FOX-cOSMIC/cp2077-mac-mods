@@ -296,6 +296,7 @@ void MultiplyPrices(TweakDB* db);       // visible-win demo: x10 all Price.* rec
 void MultiplyPricesUnique(TweakDB* db); // SAFE in-place: x N only price flats with a UNIQUE FlatValue (no interning collateral)
 void BoostStatFlats(TweakDB* db);       // in-place x N curated HP/RAM stat flats (TWEAKXL_BOOST_STATS)
 void StatOracle(TweakDB* db);  // F-037: read player's live RAM via the game (poll thread)
+void StatPoke(TweakDB* db);    // Path 1: heap-scan the player StatsContainer + WRITE RAM cell (TWEAKXL_STAT_POKE)
 void VerifyFlatArrayAccess(const TweakDB* db);
 
 // Title-screen (no-save) proof of the correct flat path: resolve real NAMED

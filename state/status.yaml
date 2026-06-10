@@ -42,15 +42,15 @@ blockers:
 pending_decisions: []   # direction RESOLVED by D-007 (2026-06-10): sequence in docs/ROADMAP.md
 next_action:
   agent: lead
-  task_id: PHASE2-LIVE-EDIT
-  description: 'Direction set by D-007 / docs/ROADMAP.md: Phase 2 = productize the live-edit
-    tool (the F-044 capability). Execute docs/PHASE_2_PLAN.md: add a set-to-value mode beside
-    the marker mode, a named stored-counter target registry (money proven; add components /
-    attribute-perk points / XP, each validated in-game), safety + version/offset gate, tests,
-    and a user guide. Targets are STORED COUNTERS only (derived stats are not materialized,
-    FA-017/18/19). Reuse DoStatProbeCells/ProbeScanAndMark/RevertMarkers/StartMarkerReapply in
-    src/red4ext-mac/src/runtime/TweakDB.cpp. Repro F-044: /tmp/run_probecells.sh, in-world
-    echo i<value> > /tmp/red4ext_go, read marker = base+index, echo 0 to revert.'
+  task_id: PHASE2-CONTINUE
+  description: 'Phase 2 (docs/PHASE_2_PLAN.md) in progress. DONE: P2.1 set-to-value (commit
+    2171625) — go-file grammar "set <old> <new>" | "i<val>"/"<float>" identify | "revert"/"0";
+    ProbeScan() shared by identify+set; saturation guard refuses too-common/oldVal<=0 (FA-014);
+    validated in-game (eddies 310,915->1,000,000->revert, no crash). NEXT: P2.5 version/offset
+    gate (fail-safe on unrecognised build), P2.2 named stored-counter targets (components /
+    attribute-perk points / XP, each validated in-game), P2.3 safety hardening, P2.6 unit tests
+    + docs/guides/live-edit.md. Launcher /tmp/run_liveedit.sh. Targets = STORED COUNTERS only
+    (derived stats not materialized, FA-017/18/19).'
 recent_facts_added:
 - F-036
 - F-037

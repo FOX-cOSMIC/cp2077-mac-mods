@@ -74,16 +74,17 @@ counters** (eddies, crafting components, attribute/perk points, Street Cred / XP
   It's a real, demonstrable deliverable and the empirical foundation for Phase 4's materialized-structure
   writes. Detail: `PHASE_2_PLAN.md`.
 
-### Phase 3 — Textures / Assets (native `.archive` replacement mods)
-The macOS install already has `archive/Mac/content/*.archive` (loaded natively) **and**
-`archive/pc/mod/bike_fix_nca.archive` present — i.e. the standard mod path exists. So *replacement* mods
-(texture/mesh/sound) may load with **zero new code**.
-- **Step 1 (validation experiment, not yet run):** drop a known replacement `.archive` into
-  `archive/pc/mod/` and confirm it shows in-game.
-- **If it loads:** a huge Windows-mod category works essentially unchanged → write the install guide;
-  package it. ArchiveXL *extensions* (variants/appearances, dynamic resource paths) need Phase 5.
-- **Done looks like:** a known replacement archive visibly changes the game; install steps documented.
-- *Highest payoff/effort on the board; deferred behind Phase 2 by the sequencing choice.*
+### Phase 3 — Textures / Assets (`.archive` mods) — ⚠ NOT a free win (F-045)
+**Tested 2026-06-10 — native drop-in archive loading is NOT wired on macOS (F-045).** The game eagerly
+mmaps its *entire* base archive set from `archive/Mac/` at startup but **never scans any mod folder**
+(`archive/pc/mod`, `archive/Mac/mod`, `/mods/`) — confirmed by both `lsof` and `fs_usage`. The pre-installed
+`archive/pc/mod/bike_fix_nca.archive` is a no-op Windows-path leftover.
+- **What it now needs:** a **loader/hook that registers a mod archive group** with the game's resource
+  depot — i.e. this depends on **Phase 5 (hooking)**. Pure replacement archives are *not* free here.
+- **Sequencing:** Phase 3 therefore moves **behind Phase 5**, or merges into it (hook the archive-group
+  init / resource-depot scan to add a mod path).
+- **Done looks like:** a hook registers a mod `.archive`; a known replacement visibly changes the game;
+  install steps documented.
 
 ### Phase 4 — TweakDB → gameplay parity (the hard RE)
 Make `.yaml` gameplay mods actually take effect: refresh the **materialized StatsContainer / record
@@ -114,12 +115,23 @@ which the codesigning reference already documents):
   ArchiveXL-extensions, redscript, Codeware.
 - **Source:** Apple Hardened Runtime (https://developer.apple.com/documentation/security/hardened-runtime).
 
-### Phase 6 — Scripting (redscript → CET) — v2.0
-- **redscript:** hook the script loader (needs Phase 5), compile `.reds` from `r6/scripts/` into the
-  game's bytecode at load.
+### Phase 6 — Scripting (redscript → CET) — and redscript is ALREADY mostly present (F-046)
+- **redscript — likely already working on macOS (F-046).** The install ships a **native `scc` compiler**
+  (`engine/tools/scc` + `libscc_lib.dylib`) and `launch_modded.sh` runs `scc -compile r6/scripts` before
+  launch (`r6/logs/redscript_*.log` confirm). So `.reds` mods very probably take effect today via the
+  community pipeline — **no Phase-5 hook needed** for redscript (the compiler merges into the script blob
+  at build, not via a runtime hook). **Near-term, low-cost to verify** (drop a trivial `.reds`, run the
+  modded launcher, confirm the effect) — arguably the next cheap win instead of textures.
 - **CET:** Lua VM (portable) + **ImGui-on-Metal overlay + Metal render/input hooks** — the single largest
-  piece.
-- **Done looks like:** a redscript mod runs; (stretch) a CET overlay renders.
+  piece; still needs Phase 5.
+- **Input mods** also work today (InputLoader, F-046).
+- **Done looks like:** a redscript mod runs (verify the existing pipeline); (stretch) a CET overlay renders.
+
+> **Re-sequencing note (2026-06-10, F-045/F-046):** the discovered difficulty ordering is closer to the
+> *inverse* of the original guess. Textures/assets (Phase 3) need a hook → they move **behind Phase 5**.
+> redscript (Phase 6) is largely on disk → it's the **cheapest unverified win** and could come next. The
+> live-edit tool (Phase 2, done), redscript (verify), and the TweakDB→gameplay RE (Phase 4) are all
+> reachable **without** the hooking primitive; ArchiveXL/CET/Codeware are what truly gate on Phase 5.
 
 ---
 

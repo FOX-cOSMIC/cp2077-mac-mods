@@ -36,6 +36,27 @@ The `doc-keeper` may mark an entry invalid by appending:
 
 ## Entries
 
+### F-046 — The macOS install ships a NATIVE redscript toolchain + community mod-launch pipeline (scripts/input already moddable) (2026-06-10)
+
+- **Discovery (filesystem forensics of the live install):** the macOS Cyberpunk 2077 install contains a working community modding pipeline beyond our TweakXL work:
+  - **`engine/tools/scc` (605 KB arm64 Mach-O) + `engine/tools/libscc_lib.dylib` (2 MB)** = the **redscript compiler, native on Apple Silicon**. `launch_modded.sh` (game root) runs `engine/tools/scc -compile r6/scripts` before launching the game. `r6/logs/redscript_r*.log` confirm compiles have run.
+  - **InputLoader** (`engine/tools/inputloader.pl`, `inputloader.log` v1.1) merges input-binding mod XMLs from `r6/input/` into `r6/cache/inputContexts.xml` at launch (note: "dynamically added paths … unsupported on macOS at this time").
+  - **`red4ext/plugins/`** convention exists (currently holds our `libtweakxl-mac.dylib`).
+- **Implication:** **redscript (`.reds`) mods very likely already work on macOS** via `scc` + the modded launcher — Phase 6 (scripting) is far more advanced on disk than the roadmap assumed. Input mods also work. This is community tooling (not our code); CDPR shipped a straight port and the community wired scripts/input.
+- **NOT yet verified:** that a `.reds` edit actually takes *gameplay* effect (only that the compiler runs). Next experiment: drop a trivial `.reds` into `r6/scripts/`, run `launch_modded.sh`, confirm `scc` compiles it + the change shows.
+- **How to re-verify:** `ls engine/tools/`; `cat launch_modded.sh`; `ls r6/logs/`.
+- **Invalidates:** the roadmap's difficulty ordering assumption that scripting (Phase 6) is the hardest/last — the redscript half is largely present. (See ROADMAP re-sequencing note.)
+
+### F-045 — Native `.archive` mod loading is NOT wired on the macOS build (textures/meshes/sounds need a loader/hook) (2026-06-10)
+
+- **DEFINITIVE (two independent methods agree):**
+  1. **`lsof`** on the running game at the main menu: it **eagerly mmaps all 57 base archives** from `archive/Mac/content/` + `archive/Mac/ep1/` (including ones not needed at the menu — `nightcity_terrain`, `animation`, …), proving CP2077 maps its *entire registered archive set* at startup. A `.archive` placed in `archive/pc/mod/` (the Windows mod path) **and** in `archive/Mac/mod/` (the platform-parallel path) was **NOT** among them.
+  2. **`fs_usage`** trace over the whole startup→main-menu window: the game **never `open()`s any mod-archive path** (`archive/pc/mod`, `archive/Mac/mod`, `/mods/`).
+- **Conclusion:** the macOS port loads base content from `archive/Mac/` but **does not scan any mod-archive folder** — legacy drop-in `.archive` mods (texture/mesh/sound replacements) **do not load natively**. The pre-installed `archive/pc/mod/bike_fix_nca.archive` (valid `RDAR` archive) is a **no-op Windows-path leftover**.
+- **Implication:** Phase 3's "textures are a cheap free win" hypothesis is **false**. Asset mods need a **loader/hook that registers a mod archive group** with the resource depot — a **Phase 5 (hooking) dependency**, exactly the "ArchiveXL extensions need hooking" case. Pure replacement archives are *not* free on macOS.
+- **How to re-verify:** `lsof -p <gamepid> | grep -ic '\.archive'` (expect ~57, none under `/mod/`); `sudo bash /tmp/phase3_trace.sh` (fs_usage; expect "never opened any mod-archive path").
+- **Invalidates:** the ROADMAP Phase 3 / ARCHITECTURE v1.x note that native `archive/pc/mod/` loading "may already work — no new code" (it does not).
+
 ### F-044 — ✅ FIRST VISIBLE, VERIFIED, NATIVE-macOS IN-GAME CHANGE: live-memory write of the player's eddies (310,915 → 400) on an existing save (2026-06-10)
 
 - **THE MILESTONE:** the project's core goal — produce a *visible, verified* in-game change on native macOS Apple-Silicon — is **achieved.** Writing the live player-money counter in the running game's heap with `mach_vm_write` changed the on-screen eddies from **310,915 → 400**, observed by the user in the inventory UI, no reload. This is the first time any edit this project made manifested visibly in gameplay (every TweakDB-flat path before it verified at the engine's own accessors yet stayed invisible — see FA-013…FA-019).

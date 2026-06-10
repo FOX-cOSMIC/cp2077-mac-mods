@@ -52,9 +52,14 @@ next_action:
     common/small-valued counters; validated in-game money 310915->narrow->1,000,000->revert;
     adversarial review caught+fixed 1 critical revert bug). Phase 2 CORE COMPLETE: live-edit
     tool is usable (set + delta-narrow + revert), safe (guards/caps/version-gate/dedup),
-    documented (docs/guides/live-edit.md), tested (ctest). OPTIONAL remaining: P2.3 further
-    safety hardening; named-target registry sugar. Then resume ROADMAP Phase 3 (native-archive
-    textures) per D-007. Launcher /tmp/run_liveedit.sh. STORED COUNTERS only (FA-017/18/19).'
+    documented (docs/guides/live-edit.md), tested (ctest). Launcher /tmp/run_liveedit.sh.
+    PHASE 3 TESTED (F-045): native .archive mod loading is NOT wired on macOS (lsof + fs_usage
+    both confirm no mod folder scanned) -> textures/assets now depend on Phase 5 hooking; Phase 3
+    moves behind Phase 5. DISCOVERY (F-046): the install ships a NATIVE redscript compiler
+    (engine/tools/scc + launch_modded.sh) + InputLoader -> redscript/.reds mods likely already
+    work; it is the cheapest UNVERIFIED win. NEXT (decision pending with user): verify the
+    redscript pipeline (drop a trivial .reds, run launch_modded.sh, confirm effect) vs Phase 4
+    TweakDB->gameplay RE vs start Phase 5 hooking. See ROADMAP re-sequencing note.'
 recent_facts_added:
 - F-036
 - F-037

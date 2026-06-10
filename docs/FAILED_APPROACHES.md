@@ -35,6 +35,7 @@ The following entries carry forward hard-won lessons from ~17 prior Claude sessi
 - **Approach:** Patch game code in-place by changing page protection of `__TEXT` pages from R-X to RWX, write hook instructions, change back.
 - **Why it failed:** macOS code signing enforces `__TEXT` immutability. `mprotect()` returned errno 13 (EPERM). `vm_protect()` returned KERN_PROTECTION_FAILURE (kr 2). Hardened Runtime + page protection cannot be bypassed in this way.
 - **What to do instead:** Use `__DATA`-only hook strategies — GOT entries, VTable slots, function-pointer tables. All of these are writable.
+- **SCOPE (2026-06-10):** this immutability holds **only for the stock, non-re-signed binary** under Hardened Runtime's executable-page protection. It is *not* an absolute macOS limit: re-signing the game ad-hoc with the Hardened Runtime entitlement **`com.apple.security.cs.disable-executable-page-protection`** lifts it and makes inline `__TEXT` patching viable. That entitlement is the most security-reducing one Apple ships (discouraged) and breaks the original signature, so the `__DATA`/GOT/`MAP_JIT` routes remain preferred; inline `__TEXT` patching is a re-sign-gated **Phase 5 fallback** (see `docs/ROADMAP.md` Phase 5 + `docs/reference/macos-codesigning.md`). Does not change v1.0–v1.x, which never patch `__TEXT`.
 
 ---
 

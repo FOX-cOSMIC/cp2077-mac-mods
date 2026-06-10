@@ -94,10 +94,25 @@ non-scalar/array ops) so the parser→applicator is full-featured wherever it *d
 - *Hard and RE-heavy; this is the original v1.0 promise's last mile.*
 
 ### Phase 5 — Hooking foundation (Apple Silicon) — the central unlock
-Build the `__DATA` GOT / vtable / fn-ptr interception primitive (D-002). Trampolines / `MAP_JIT` gated on
-re-signing for `allow-jit`.
+Build the `__DATA` GOT / vtable / fn-ptr interception primitive (D-002) — these target writable data, so
+they need **no re-sign** (the stock binary's entitlements suffice). For anything requiring executable
+memory, the lever is a **re-sign with Hardened Runtime entitlements** (the game must be re-signed ad-hoc,
+which the codesigning reference already documents):
+- **`allow-jit` + `allow-unsigned-executable-memory`** → `MAP_JIT` trampoline pages, for original-call
+  preservation / new code stubs (the GOT+trampoline route).
+- **`com.apple.security.cs.disable-executable-page-protection`** → lifts the `__TEXT`-immutability wall and
+  enables **true inline hooking** (patching existing instructions in place). This is the entitlement that
+  scopes **FA-001**: FA-001's "`__TEXT` is immutable, inline hooking fails" holds *only for the stock,
+  non-re-signed binary*; a re-sign carrying this entitlement makes inline patching viable. It is the most
+  security-reducing entitlement Apple ships (explicitly discouraged) and breaks the original signature, so
+  prefer the GOT/`MAP_JIT` route first and treat inline-`__TEXT` patching as the fallback when a direct
+  call can't be intercepted indirectly.
+- **Tradeoff / cost:** re-signing adds user friction we currently avoid (Phases 2–4 need no re-sign), and is
+  build-specific — a game patch can strip entitlements (the P2.5 version gate + codesigning stale-signature
+  check catch this). See `docs/reference/macos-codesigning.md` and D-002.
 - **Done looks like:** a reusable hook intercepts a chosen game call (e.g. a resource lookup); unblocks
   ArchiveXL-extensions, redscript, Codeware.
+- **Source:** Apple Hardened Runtime (https://developer.apple.com/documentation/security/hardened-runtime).
 
 ### Phase 6 — Scripting (redscript → CET) — v2.0
 - **redscript:** hook the script loader (needs Phase 5), compile `.reds` from `r6/scripts/` into the

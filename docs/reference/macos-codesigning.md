@@ -47,7 +47,13 @@ All four must be present. Missing any one will cause injection to fail or the ga
 | `com.apple.security.cs.allow-unsigned-executable-memory` | Permits our trampoline pages (and any heap-allocated code stubs) to be marked executable via `mmap(MAP_ANON)`; required for ARM64 hook trampolines. |
 | `com.apple.security.cs.allow-jit` | Enables `MAP_JIT` on `mmap` calls, which provides a writable-then-executable region for JIT-compiled or self-patching code; needed for any `rwx` trampoline approach. |
 
-Entitlement plist fragment for reference:
+### Optional fifth — for inline `__TEXT` patching (Phase 5 fallback)
+
+| Entitlement key | Rationale |
+|---|---|
+| `com.apple.security.cs.disable-executable-page-protection` | Disables Hardened Runtime's protection on **existing** executable pages, allowing in-place modification of the game's `__TEXT` (true inline hooking). This is what scopes **FA-001**: the stock binary's `__TEXT` is immutable, but a re-sign carrying this entitlement lifts that. It is the **most security-reducing** entitlement Apple ships (explicitly discouraged) and is **not** in the four above — add it only if the GOT/VTable/`MAP_JIT`-trampoline routes can't intercept a needed direct call. See `docs/ROADMAP.md` Phase 5. |
+
+Entitlement plist fragment for reference (the four required; add the fifth only for inline `__TEXT` hooking):
 
 ```xml
 <key>com.apple.security.cs.disable-library-validation</key>

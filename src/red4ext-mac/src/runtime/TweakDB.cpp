@@ -2863,21 +2863,22 @@ void RevertMarkers() {
     if (n) log_line("[probe-cells] reverted %zu marker(s) to originals.", n);
 }
 
-// One scan+mark pass. Two modes:
-//  • CONTAINER (intRaw=false): find player-scale StatsContainer cells whose float
-//    value ≈ A within tol (tol=0 → exact). Catches derived stats that display a
-//    rounded integer but store a fractional float.
-//  • RAW-INT (intRaw=true): scan ALL writable memory for the int32 == (int)A — for
-//    stored counters that ARE exact (money/eddies, components, XP), which are not
-//    in StatsContainers and not derived.
-// Writes a DISTINCT marker (base+i) to each hit (recording the original for revert).
-// Returns count written. Takes g_markerMx around the writes.
-size_t ProbeScanAndMark(double A, bool intRaw, float tol, float base, uint32_t maxCells) {
+// A scan hit: an address holding the searched value (+ container context in
+// CONTAINER mode). Shared by the identify (marker) and set-to-value paths.
+struct ProbeHit { uintptr_t addr; uint32_t id; uintptr_t C; uint32_t count; };
+
+// One scan pass over live memory for a value. Two modes:
+//  • CONTAINER (intRaw=false): player-scale StatsContainer cells whose float value
+//    ≈ A within tol (tol=0 → exact). Catches derived stats stored as a fractional
+//    float that displays a rounded integer.
+//  • RAW-INT (intRaw=true): ALL writable memory for the int32 == (int)A — for stored
+//    counters that ARE exact (money/eddies, components, XP), not in StatsContainers.
+// Returns the hit addresses (capped at maxCells). Writes nothing.
+std::vector<ProbeHit> ProbeScan(double A, bool intRaw, float tol, uint32_t maxCells) {
     constexpr size_t kBuf = 1u << 20;
     std::vector<uint8_t> buf(kBuf);
     const task_t task = mach_task_self();
-    struct Hit { uintptr_t addr; uint32_t id; uintptr_t C; uint32_t count; };
-    std::vector<Hit> hits;
+    std::vector<ProbeHit> hits;
     uint32_t bigCount = 0;
     const auto regions = CollectScannableRegions();
 
@@ -2936,8 +2937,23 @@ size_t ProbeScanAndMark(double A, bool intRaw, float tol, float base, uint32_t m
         }
         log_line("[probe-cells] CONTAINER found %zu cell(s) ~%g (tol=%g, biggest container=%u stats).", hits.size(), A, (double)tol, bigCount);
     }
-    if (hits.empty()) return 0;
+    return hits;
+}
 
+// IDENTIFY: scan for A, write a DISTINCT marker (base+i) to each hit (recording the
+// original for revert) so the user reads the on-screen number to find the real cell.
+// Returns count written. Takes g_markerMx around the writes.
+size_t ProbeScanAndMark(double A, bool intRaw, float tol, float base, uint32_t maxCells) {
+    std::vector<ProbeHit> hits = ProbeScan(A, intRaw, tol, maxCells);
+    if (hits.empty()) return 0;
+    // RAW-INT saturation guard: a unique-enough counter matches a handful of cells.
+    // Hitting the cap means the value is ubiquitous (0/1/common) and marking 40 arbitrary
+    // cells across unrelated memory risks the FA-014 crash class. CONTAINER cells are
+    // structurally validated, so the cap is fine there.
+    if (intRaw && hits.size() >= maxCells) {
+        log_line("[live-edit] refused: value %g matched the %u-cell cap (too common to mark safely) — use a value unique to the stat.", A, maxCells);
+        return 0;
+    }
     std::lock_guard<std::mutex> lk(g_markerMx);
     for (size_t i = 0; i < hits.size(); ++i) {
         uint32_t orig = 0; if (!SafeReadU32(hits[i].addr, &orig)) continue;
@@ -2953,6 +2969,47 @@ size_t ProbeScanAndMark(double A, bool intRaw, float tol, float base, uint32_t m
                      i, (double)(base + (float)i), (unsigned long long)hits[i].addr, hits[i].id, (unsigned long long)hits[i].C, hits[i].count);
     }
     return g_markers.size();
+}
+
+// SET-TO-VALUE: scan for oldVal and write newVal to every hit (recording originals
+// for revert), held by the re-apply thread. This is the usable edit once a counter is
+// known by its value (e.g. money). Refuses a non-finite / out-of-range newVal so a
+// wild value never feeds game state as a size/index (FA-014 lesson). Returns count
+// written. Targets stored counters only — not derived stats (FA-017/18/19).
+size_t ProbeScanAndSet(double oldVal, double newVal, bool intRaw, float tol, uint32_t maxCells) {
+    if (!std::isfinite(newVal) || newVal < 0.0) {
+        log_line("[live-edit] refused: newVal=%g is not a sane non-negative value.", newVal);
+        return 0;
+    }
+    if (intRaw) { if (newVal > 2.0e9) { log_line("[live-edit] refused: int newVal=%g exceeds the safe cap (2e9).", newVal); return 0; } }
+    else        { if (newVal > 1.0e7) { log_line("[live-edit] refused: float newVal=%g exceeds the safe cap (1e7).", newVal); return 0; } }
+    // A counter you want to change is a specific positive value; int32-zero/negative is
+    // never a uniquely-identifying counter (and scanning for it would match everywhere).
+    if (intRaw && oldVal <= 0.0) { log_line("[live-edit] refused: oldVal=%g — give the stat's exact current value (e.g. your eddie count).", oldVal); return 0; }
+
+    std::vector<ProbeHit> hits = ProbeScan(oldVal, intRaw, tol, maxCells);
+    if (hits.empty()) { log_line("[live-edit] set: no address holds %g — nothing written.", oldVal); return 0; }
+    // RAW-INT saturation guard (FA-014): hitting the cell cap means oldVal is too common;
+    // writing newVal to 40 arbitrary unrelated cells would corrupt/crash. Refuse.
+    if (intRaw && hits.size() >= maxCells) {
+        log_line("[live-edit] refused: oldVal=%g matched the %u-cell cap (too common) — use the stat's exact current value (e.g. your eddie count).", oldVal, maxCells);
+        return 0;
+    }
+
+    uint32_t nb;
+    if (intRaw) { int32_t ni = (int32_t)newVal; nb = (uint32_t)ni; }
+    else        { float nf = (float)newVal; std::memcpy(&nb, &nf, 4); }
+
+    std::lock_guard<std::mutex> lk(g_markerMx);
+    size_t wrote = 0;
+    for (size_t i = 0; i < hits.size(); ++i) {
+        uint32_t orig = 0; if (!SafeReadU32(hits[i].addr, &orig)) continue;
+        if (!SafeWrite(hits[i].addr, &nb, 4)) { log_line("[live-edit] set: WRITE FAILED @0x%llx", (unsigned long long)hits[i].addr); continue; }
+        g_markers.push_back({hits[i].addr, orig, nb});
+        ++wrote;
+    }
+    log_line("[live-edit] set %g -> %g on %zu address(es) (held; signal 'revert' or 0 to restore).", oldVal, newVal, wrote);
+    return wrote;
 }
 
 // LOOP mode (TWEAKXL_POKE_GO_FILE set): repeatedly wait for a value written into the
@@ -2975,33 +3032,59 @@ void DoStatProbeCells() {
         return;
     }
 
-    log_line("[probe-cells] LOOP ready (markers base=%g). Signal a value via %s: plain number = derived-stat scan (StatsContainer floats, tol=%g); prefix 'i' (e.g. i25431) = raw int counter scan (money/components). 0 = revert+idle.",
-             (double)base, gf, (double)defTol);
+    log_line("[live-edit] LOOP ready (markers base=%g, tol=%g). Commands via %s:  "
+             "'set i<old> <new>' = set a stored counter (e.g. money);  'i<val>' or '<float>' = identify (mark) a value;  "
+             "'revert' (or '0') = restore originals + idle.",
+             (double)base, (double)defTol, gf);
+    // parse a value token "[i|f]<number>" → (value, intRaw); default container/float.
+    auto parseVal = [](const char* tok, bool& intRaw) -> double {
+        const char* p = tok; intRaw = false;
+        if (*p == 'i' || *p == 'I') { intRaw = true; ++p; }
+        else if (*p == 'f' || *p == 'F') { intRaw = false; ++p; }
+        return std::strtod(p, nullptr);
+    };
     for (;;) {
-        double A = 0.0; bool have = false, intRaw = false; float tol = defTol;
+        char cmd[64] = {0}, a1[64] = {0}, a2[64] = {0};
+        int nTok = 0;
         for (;;) {
             if (FILE* f = std::fopen(gf, "r")) {
-                char tok[64] = {0};
-                if (std::fscanf(f, "%63s", tok) == 1) {
-                    have = true; char* p = tok;
-                    if (*p == 'i' || *p == 'I') { intRaw = true; ++p; }
-                    else if (*p == 'f' || *p == 'F') { intRaw = false; ++p; }
-                    A = std::strtod(p, nullptr);
-                }
-                std::fclose(f); std::remove(gf); break;
+                nTok = std::fscanf(f, "%63s %63s %63s", cmd, a1, a2);
+                std::fclose(f); std::remove(gf);
+                if (nTok >= 1) break;          // got a command; empty file → keep waiting
             }
             std::this_thread::sleep_for(std::chrono::seconds(2));
         }
-        RevertMarkers();                              // clear previous round first
-        if (!have || A <= 0.0) { log_line("[probe-cells] idle — signal a value to scan."); continue; }
-        log_line("[probe-cells] GO — %s scan for value=%g%s.", intRaw ? "RAW-INT" : "CONTAINER", A, intRaw ? "" : (tol > 0 ? " (±tol)" : ""));
+
+        // 'revert' / '0' → restore originals + idle
+        if (std::strcmp(cmd, "revert") == 0 || std::strcmp(cmd, "0") == 0) {
+            RevertMarkers();
+            log_line("[live-edit] reverted + idle. Signal a value, 'set <old> <new>', or 'revert'.");
+            continue;
+        }
+
+        // 'set <old> <new>' → scan for <old>, write <new> (newVal uses <old>'s type)
+        if (std::strcmp(cmd, "set") == 0 && nTok >= 3) {
+            RevertMarkers();                   // clear any prior round first
+            bool ir1 = false, ir2 = false;
+            double ov = parseVal(a1, ir1);
+            double nv = parseVal(a2, ir2); (void)ir2;
+            log_line("[live-edit] GO set: %g -> %g (%s).", ov, nv, ir1 ? "raw-int" : "container/float");
+            ProbeScanAndSet(ov, nv, ir1, defTol, maxCells);
+            continue;
+        }
+
+        // otherwise: identify/scan the value in <cmd> (write distinct markers)
+        RevertMarkers();                       // clear previous round first
+        bool intRaw = false; double A = parseVal(cmd, intRaw);
+        if (!(A > 0.0)) { log_line("[live-edit] idle — signal a value, 'set <old> <new>', or 'revert'."); continue; }
+        log_line("[probe-cells] GO — %s scan for value=%g%s.", intRaw ? "RAW-INT" : "CONTAINER", A, intRaw ? "" : (defTol > 0 ? " (±tol)" : ""));
         size_t wrote = 0;
         for (int attempt = 1; attempt <= 6 && wrote == 0; ++attempt) {
-            wrote = ProbeScanAndMark(A, intRaw, tol, base, maxCells);
+            wrote = ProbeScanAndMark(A, intRaw, defTol, base, maxCells);
             if (wrote == 0) { log_line("[probe-cells] attempt %d: none held %g, retry 4s...", attempt, A); std::this_thread::sleep_for(std::chrono::seconds(4)); }
         }
         if (wrote)
-            log_line("[probe-cells] wrote %zu markers (%d..%d) for value=%g — READ THE STAT; shown number = base+index. New value to retry, 0 to revert.",
+            log_line("[probe-cells] wrote %zu markers (%d..%d) for value=%g — READ THE STAT; shown number = base+index. Then 'set i<this> <new>', or 'revert'.",
                      wrote, (int)base, (int)base + (int)(wrote - 1), A);
         else
             log_line("[probe-cells] no hit for %g.", A);

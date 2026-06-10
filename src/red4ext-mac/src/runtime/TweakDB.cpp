@@ -30,9 +30,12 @@
 #include <utility>
 #include <vector>
 
+#include <cctype>
 #include <dlfcn.h>
 #include <mach/mach.h>
 #include <mach/mach_vm.h>
+#include <mach-o/dyld.h>     // P2.5 version gate: _dyld_* image walk for LC_UUID
+#include <mach-o/loader.h>   // mach_header_64 / load_command / uuid_command / LC_UUID
 
 namespace red4ext_mac {
 namespace {
@@ -2863,6 +2866,80 @@ void RevertMarkers() {
     if (n) log_line("[probe-cells] reverted %zu marker(s) to originals.", n);
 }
 
+// ── P2.5: version/offset gate ─────────────────────────────────────────────────
+// Every static offset (singleton @0x1080c92d0, function addresses, struct layouts)
+// is validated against ONE game build. A patch moves them, so writing with stale
+// offsets could corrupt an unrecognised build. We fingerprint the running game by
+// its Mach-O LC_UUID and DISABLE live-memory writes on a mismatch (fail-safe). The
+// expected UUID is macOS Cyberpunk 2077 v2.3.1 arm64 (the validated build).
+constexpr uint8_t kExpectedGameUUID[16] = {
+    0xA6,0x65,0x6A,0xDC, 0xFB,0xE2, 0x36,0xA4, 0x9B,0x9D, 0xB4,0xA9,0xDE,0x64,0x50,0x89
+};
+
+void FormatUUID(const uint8_t u[16], char* s /*>=40*/) {
+    std::snprintf(s, 40, "%02X%02X%02X%02X-%02X%02X-%02X%02X-%02X%02X-%02X%02X%02X%02X%02X%02X",
+                  u[0],u[1],u[2],u[3], u[4],u[5], u[6],u[7], u[8],u[9], u[10],u[11],u[12],u[13],u[14],u[15]);
+}
+
+// Parse 16 bytes from a hex string (dashes/separators ignored). Returns true on 16 bytes.
+bool ParseHexUUID(const char* s, uint8_t out[16]) {
+    int got = 0; int hi = -1;
+    for (const char* p = s; *p && got < 16; ++p) {
+        if (!std::isxdigit((unsigned char)*p)) continue;
+        const int v = (*p <= '9') ? (*p - '0') : (std::tolower(*p) - 'a' + 10);
+        if (hi < 0) hi = v; else { out[got++] = (uint8_t)((hi << 4) | v); hi = -1; }
+    }
+    return got == 16;
+}
+
+// Read the main game executable's LC_UUID (walk the loaded image's load commands).
+bool ReadGameImageUUID(uint8_t out[16]) {
+    const uint32_t n = _dyld_image_count();
+    for (uint32_t i = 0; i < n; ++i) {
+        const char* name = _dyld_get_image_name(i);
+        if (!name) continue;
+        const char* b = std::strrchr(name, '/');
+        if (!b || std::strcmp(b, "/Cyberpunk2077") != 0) continue;   // main exe, no extension
+        const struct mach_header* h = _dyld_get_image_header(i);
+        if (!h || h->magic != MH_MAGIC_64) continue;
+        const uint8_t* p = (const uint8_t*)h + sizeof(struct mach_header_64);
+        for (uint32_t c = 0; c < h->ncmds; ++c) {
+            const struct load_command* lc = (const struct load_command*)p;
+            if (lc->cmd == LC_UUID) { std::memcpy(out, ((const struct uuid_command*)lc)->uuid, 16); return true; }
+            p += lc->cmdsize;
+        }
+    }
+    return false;
+}
+
+// Does the running binary match the build our offsets were validated against?
+// Cached + logged once. TWEAKXL_SKIP_VERSION_GATE=1 bypasses (dev); TWEAKXL_EXPECTED_UUID
+// (32 hex) blesses a new build after re-validation without a rebuild. Live writes
+// (identify/set) are gated on this; revert is always allowed (it only restores).
+bool LiveWriteBuildOk() {
+    static std::once_flag once;
+    static bool ok = false;
+    std::call_once(once, [] {
+        if (std::getenv("TWEAKXL_SKIP_VERSION_GATE")) { ok = true; log_line("[live-edit] version gate BYPASSED (TWEAKXL_SKIP_VERSION_GATE)."); return; }
+        uint8_t expected[16]; std::memcpy(expected, kExpectedGameUUID, 16);
+        if (const char* e = std::getenv("TWEAKXL_EXPECTED_UUID"); e && *e) {
+            uint8_t tmp[16]; if (ParseHexUUID(e, tmp)) std::memcpy(expected, tmp, 16);
+            else log_line("[live-edit] TWEAKXL_EXPECTED_UUID is not 16 hex bytes — using the built-in expected UUID.");
+        }
+        uint8_t cur[16];
+        if (!ReadGameImageUUID(cur)) {
+            ok = false;
+            log_line("[live-edit] version gate: could NOT read the game UUID — writes DISABLED (set TWEAKXL_SKIP_VERSION_GATE=1 to override).");
+            return;
+        }
+        ok = (std::memcmp(cur, expected, 16) == 0);
+        char cs[40], es[40]; FormatUUID(cur, cs); FormatUUID(expected, es);
+        if (ok) log_line("[live-edit] version gate OK — game build UUID %s matches.", cs);
+        else log_line("[live-edit] version gate MISMATCH — running %s != expected %s. Live writes DISABLED (stale offsets unsafe). After re-validating, set TWEAKXL_EXPECTED_UUID=%s (or TWEAKXL_SKIP_VERSION_GATE=1).", cs, es, cs);
+    });
+    return ok;
+}
+
 // A scan hit: an address holding the searched value (+ container context in
 // CONTAINER mode). Shared by the identify (marker) and set-to-value paths.
 struct ProbeHit { uintptr_t addr; uint32_t id; uintptr_t C; uint32_t count; };
@@ -2944,6 +3021,7 @@ std::vector<ProbeHit> ProbeScan(double A, bool intRaw, float tol, uint32_t maxCe
 // original for revert) so the user reads the on-screen number to find the real cell.
 // Returns count written. Takes g_markerMx around the writes.
 size_t ProbeScanAndMark(double A, bool intRaw, float tol, float base, uint32_t maxCells) {
+    if (!LiveWriteBuildOk()) { log_line("[live-edit] identify refused: game build not verified (version gate)."); return 0; }
     std::vector<ProbeHit> hits = ProbeScan(A, intRaw, tol, maxCells);
     if (hits.empty()) return 0;
     // RAW-INT saturation guard: a unique-enough counter matches a handful of cells.
@@ -2977,6 +3055,7 @@ size_t ProbeScanAndMark(double A, bool intRaw, float tol, float base, uint32_t m
 // wild value never feeds game state as a size/index (FA-014 lesson). Returns count
 // written. Targets stored counters only — not derived stats (FA-017/18/19).
 size_t ProbeScanAndSet(double oldVal, double newVal, bool intRaw, float tol, uint32_t maxCells) {
+    if (!LiveWriteBuildOk()) { log_line("[live-edit] set refused: game build not verified (version gate)."); return 0; }
     if (!std::isfinite(newVal) || newVal < 0.0) {
         log_line("[live-edit] refused: newVal=%g is not a sane non-negative value.", newVal);
         return 0;

@@ -48,10 +48,13 @@ next_action:
     validated 2.3.1 build A6656ADC-...-645089; mismatch disables writes; verified in-game OK);
     P2.6 user guide docs/guides/live-edit.md + unit tests (LiveEditParse.hpp helpers extracted;
     liveedit_parse_test; fixed root enable_testing() ordering so ctest registers subdir tests —
-    3 tests, 100% pass). NEXT: P2.2 named stored-counter targets (components / attribute-perk
-    points / XP, each validated in-game), P2.3 further safety hardening. Launcher
-    /tmp/run_liveedit.sh. Targets = STORED COUNTERS only (derived stats not materialized,
-    FA-017/18/19).'
+    3 tests, 100% pass); P2.2 delta-narrow targeting (commit 3e59527 — find/narrow/setcand for
+    common/small-valued counters; validated in-game money 310915->narrow->1,000,000->revert;
+    adversarial review caught+fixed 1 critical revert bug). Phase 2 CORE COMPLETE: live-edit
+    tool is usable (set + delta-narrow + revert), safe (guards/caps/version-gate/dedup),
+    documented (docs/guides/live-edit.md), tested (ctest). OPTIONAL remaining: P2.3 further
+    safety hardening; named-target registry sugar. Then resume ROADMAP Phase 3 (native-archive
+    textures) per D-007. Launcher /tmp/run_liveedit.sh. STORED COUNTERS only (FA-017/18/19).'
 recent_facts_added:
 - F-036
 - F-037

@@ -40,19 +40,31 @@ Then **load your save and get in-world.** The tool waits for commands via the **
 
 | Command | Effect |
 |---|---|
-| `echo "set i<old> <new>" > /tmp/red4ext_go` | Find every address holding int `<old>`, write `<new>`, and hold it. **Use the stat's exact current value** as `<old>`. |
-| `echo "i<val>" > /tmp/red4ext_go` | **Identify**: mark each address holding `<val>` with a distinct number `400, 401, …` so you can read the on-screen value to learn which cell is which (then `set` it). |
+| `echo "set i<old> <new>" > /tmp/red4ext_go` | Find every address holding int `<old>`, write `<new>`, and hold it. **Use the stat's exact current value** as `<old>`. Best when the value is **unique** (e.g. money). |
+| `echo "find i<cur>" > /tmp/red4ext_go` | **Delta-narrow start** — snapshot every address holding `<cur>` (no write). Use when the value is **common/small** and `set` refuses it. |
+| `echo "narrow <new>" > /tmp/red4ext_go` | After you **change** the stat in-game, keep only the candidates that now hold `<new>`. Repeat find-change-narrow until "few left". |
+| `echo "setcand <value>" > /tmp/red4ext_go` | Write `<value>` to the narrowed survivors (revertable, held). Refused while too many candidates remain — narrow more. |
+| `echo "i<val>" > /tmp/red4ext_go` | **Identify**: mark each address holding `<val>` with a distinct number `400, 401, …` so you can read the on-screen value to learn which cell is which. |
 | `echo "revert" > /tmp/red4ext_go` | Restore all originals and idle. (`echo 0` does the same.) |
 
 `i` = raw integer counter (money/components/XP). A bare number (no `i`) scans player StatsContainer
 floats — for derived stats, which generally can't be set (see above).
 
-### Example — set money
+### Example A — set money directly (unique value)
 
 1. Open your inventory, read your exact eddies (e.g. `310915`).
 2. `echo "set i310915 1000000" > /tmp/red4ext_go`
 3. Check your eddies — now `1,000,000`.
 4. `echo "revert" > /tmp/red4ext_go` — back to `310,915`.
+
+### Example B — delta-narrow (common/small value, or to be precise)
+
+1. `echo "find i310915" > /tmp/red4ext_go` → e.g. `12 candidates`.
+2. **Change it in-game** — buy/sell something so it reads, say, `310910`.
+3. `echo "narrow 310910" > /tmp/red4ext_go` → e.g. `12 -> 1 candidate`.
+4. (Repeat 2–3 if more than a few remain.)
+5. `echo "setcand 1000000" > /tmp/red4ext_go` → now `1,000,000`.
+6. `echo "revert" > /tmp/red4ext_go` — restore.
 
 ---
 

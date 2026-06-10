@@ -10,6 +10,8 @@ Cyberpunk 2077 shipped a native Apple Silicon build in 2025. It runs great — b
 
 > ⚠️ **Experimental research project.** This is reverse-engineering / interoperability work, not a finished, installable mod loader. Expect rough edges. See **Status** below for exactly what works today.
 
+> 🤖 **Built with AI.** This port has been developed almost entirely with [Claude Code](https://claude.com/claude-code) — roughly **$600** in credits used to date.
+
 ## Status
 
 **Phase 1 (Foundation) — framework proven end-to-end, ~75%.** The full pipeline works in-game and is verified against the game's own code:

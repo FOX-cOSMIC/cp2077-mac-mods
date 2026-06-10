@@ -14,20 +14,31 @@ Cyberpunk 2077 shipped a native Apple Silicon build in 2025. It runs great — b
 
 ## Status
 
-**Phase 1 (Foundation) — framework proven end-to-end, ~75%.** The full pipeline works in-game and is verified against the game's own code:
+**First visible, verified, native-macOS in-game change achieved** ✅ — a direct live-memory write changed the player's eddies **310,915 → 1,000,000** on a live save, no reload, no crash, cleanly reverted (fact **F-044**).
 
-`DYLD` injection → image-slide capture → TweakDB singleton → apply-trigger (polling) → flat lookup → **interning-safe flat write** → record re-materialization (`UpdateRecord`).
+**Phase 1 (TweakXL foundation) — proven end-to-end.** The data pipeline works in-game and is verified against the game's own code:
 
-A flat edit is confirmed by calling the game's *own* `GetFlat` accessor and observing the new value (not just our own write-back). YAML/`.tweak` parsing and the applicator run end-to-end.
+`DYLD` injection → image-slide capture → TweakDB singleton → apply-trigger (polling) → flat lookup → flat **write / create + array-append** → record re-materialization (`UpdateRecord`) — each confirmed by the game's *own* `GetFlat`/`GetRecord` accessors (not just our write-back). YAML/`.tweak` parsing and the applicator run end-to-end.
 
-**What's not done yet:** a *visibly* gameplay-changing demo end-to-end, broad mod compatibility, stability hardening, and a user install guide. Notably, some player stats (e.g. base HP / cyberdeck RAM) are *computed per-entity at runtime* rather than stored as editable values, so not every "edit a number" mod maps to a simple flat write. Current state, blockers, and the next action live in [`state/status.yaml`](state/status.yaml); the detailed engineering record is in [`docs/FACTS.md`](docs/FACTS.md) and [`state/session-log.md`](state/session-log.md).
+**The wall.** TweakDB-flat edits verify at the engine's accessors but do **not** propagate to live gameplay on macOS: the game reads per-entity *materialized* structures (StatsContainers, record instances) snapshotted before our edits run, so a flat change doesn't show. Reaching those is the hard, open problem ([`docs/FAILED_APPROACHES.md`](docs/FAILED_APPROACHES.md)). The first visible change therefore came from a *different* mechanism — writing the live process memory directly.
+
+**Phase 2 — Live-Edit Tool (productized from that breakthrough).** A small, safe, native-macOS tool that locates and edits **stored counters** (money, crafting components, XP, …) in the running game:
+- `set <current> <new>` for a unique value, or `find → narrow → setcand` (a two-snapshot delta) for common/small values;
+- one-command **`revert`** — and every write is RAM-only, so a reload also restores;
+- guarded against crashes (saturation guard, value caps) and against game patches (a Mach-O **version gate** disables writes on an unrecognised build);
+- adversarially reviewed, unit-tested (`ctest`), documented in [`docs/guides/live-edit.md`](docs/guides/live-edit.md).
+
+> **Derived stats are different:** displayed numbers like cyberdeck RAM or max HP are *computed* from base + modifiers at read time — never stored as the value you see — so they aren't reachable by a value-scan. Stored counters (money/components/XP) are. (See `FA-017`…`FA-019`.)
+
+**What's not done yet:** general Windows-mod-file (`.yaml`) changes taking visible effect (the wall above), asset/texture mods, scripting, stability hardening, and a packaged installer. The full plan is in [`docs/ROADMAP.md`](docs/ROADMAP.md); current state, blockers, and next action in [`state/status.yaml`](state/status.yaml); the engineering record in [`docs/FACTS.md`](docs/FACTS.md) and [`state/session-log.md`](state/session-log.md).
 
 ## How it differs from Windows RED4ext/TweakXL
 
 The Windows stack relies on DLL injection + **inline hooking**. On macOS that doesn't translate directly:
 
-- **Inline hooking is blocked** — the `__TEXT` segment is read-only under macOS code signing. We use data-side techniques (GOT/vtable/function-pointer tables) and a polling apply-trigger instead.
+- **Inline hooking is blocked** — the `__TEXT` segment is read-only under macOS Hardened Runtime / code signing (on the stock binary). We use data-side techniques (GOT/vtable/function-pointer tables) and a polling apply-trigger instead. (A re-sign with the right entitlement could lift this for inline hooking later — see [`docs/ROADMAP.md`](docs/ROADMAP.md) Phase 5.)
 - **The in-memory TweakDB layout differs** from Windows — the struct offsets, flat-value representation, and accessors were re-derived for the macOS build.
+- **Visible changes go through live memory, not TweakDB** — because flat edits don't reach the game's materialized runtime structures, the live-edit tool writes the running process memory directly (`mach_vm_write`) and holds/reverts the result.
 - **Injection** uses `DYLD_INSERT_LIBRARIES`; the shipped build already carries the entitlements that make it work.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full picture.
@@ -37,7 +48,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full picture.
 | Path | What |
 |------|------|
 | `src/` | C++ sources — `red4ext-mac/` (loader + TweakDB runtime), `tweakxl-mac/` (parser + applicator) |
-| `docs/` | Engineering record — `FACTS.md`, `FAILED_APPROACHES.md`, `ARCHITECTURE.md`, references |
+| `docs/` | Engineering record — `ROADMAP.md`, `PHASE_*_PLAN.md`, `FACTS.md`, `FAILED_APPROACHES.md`, `ARCHITECTURE.md`, `guides/`, references |
 | `state/` | Machine-readable project state — `status.yaml`, `session-log.md` |
 | `tools/` | Helper scripts (Ghidra analysis, probes, build/run helpers) |
 | `reference/` | Pointers to external reference material (see note below) |

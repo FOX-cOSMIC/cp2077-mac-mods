@@ -3079,6 +3079,93 @@ size_t ProbeScanAndSet(double oldVal, double newVal, bool intRaw, float tol, uin
     return wrote;
 }
 
+// ── P2.2: delta-narrow targeting ──────────────────────────────────────────────
+// For a counter whose current value is common/small (perk points, etc.), a single
+// scan saturates the safety cap and `set` refuses (correctly). The safe way to
+// isolate it is the classic two-snapshot delta: FIND every address holding the
+// current value (no write), change it in-game, NARROW to the addresses that now hold
+// the new value, repeat until a handful remain, then SETCAND writes them (revertable).
+// Only SETCAND writes, and only on a small narrowed set.
+std::vector<uintptr_t> g_candidates;   // guarded by g_markerMx
+bool  g_candIntRaw = false;
+float g_candTol    = 0.0f;
+
+bool CellMatchesValue(uintptr_t addr, double v, bool intRaw, float tol) {
+    uint32_t raw = 0; if (!SafeReadU32(addr, &raw)) return false;
+    if (intRaw) return raw == (uint32_t)(int32_t)v;
+    float f; std::memcpy(&f, &raw, 4); const float vf = (float)v;
+    if (tol > 0.0f) return std::isfinite(f) && std::fabs(f - vf) <= tol;
+    uint32_t vb; std::memcpy(&vb, &vf, 4); return raw == vb;
+}
+
+// FIND: snapshot every address holding `v` as the candidate set (no writes — so a
+// common value is safe here; the danger is only in WRITING, which setcand gates).
+void DoFind(double v, bool intRaw, float tol, uint32_t cap) {
+    std::vector<ProbeHit> hits = ProbeScan(v, intRaw, tol, cap);
+    std::lock_guard<std::mutex> lk(g_markerMx);
+    g_candidates.clear();
+    g_candidates.reserve(hits.size());
+    for (const auto& h : hits) g_candidates.push_back(h.addr);
+    g_candIntRaw = intRaw; g_candTol = tol;
+    log_line("[live-edit] find %g -> %zu candidate(s)%s. Change the stat in-game, then 'narrow <newValue>'.",
+             v, g_candidates.size(),
+             g_candidates.size() >= cap ? " (hit the find cap — very common value; narrowing still works, but a more distinctive value finds it faster)" : "");
+}
+
+// NARROW: keep only candidates that now hold `v` (after the user changed the stat).
+void DoNarrow(double v) {
+    std::lock_guard<std::mutex> lk(g_markerMx);
+    if (g_candidates.empty()) { log_line("[live-edit] narrow: no candidates — run 'find <currentValue>' first."); return; }
+    const size_t before = g_candidates.size();
+    std::vector<uintptr_t> kept;
+    for (uintptr_t a : g_candidates) if (CellMatchesValue(a, v, g_candIntRaw, g_candTol)) kept.push_back(a);
+    g_candidates.swap(kept);
+    const char* hint = g_candidates.empty() ? "none left (wrong value, or it moved — re-run 'find')."
+                     : (g_candidates.size() <= 8 ? "few left — 'setcand <newValue>' to write, or narrow once more to be sure."
+                                                 : "still many — change the stat again and 'narrow <value>'.");
+    log_line("[live-edit] narrow %g: %zu -> %zu candidate(s). %s", v, before, g_candidates.size(), hint);
+}
+
+// SETCAND: write `newVal` to the narrowed candidate set (revertable, held). Gated on
+// build + value caps, and refuses while the set is still too large (narrow more first).
+size_t DoSetCand(double newVal, uint32_t writeCap) {
+    if (!LiveWriteBuildOk()) { log_line("[live-edit] setcand refused: game build not verified (version gate)."); return 0; }
+    if (!std::isfinite(newVal) || newVal < 0.0) { log_line("[live-edit] setcand refused: newVal=%g not a sane non-negative value.", newVal); return 0; }
+    std::lock_guard<std::mutex> lk(g_markerMx);
+    if (g_candIntRaw) { if (newVal > 2.0e9) { log_line("[live-edit] setcand refused: int newVal=%g exceeds cap (2e9).", newVal); return 0; } }
+    else              { if (newVal > 1.0e7) { log_line("[live-edit] setcand refused: float newVal=%g exceeds cap (1e7).", newVal); return 0; } }
+    if (g_candidates.empty()) { log_line("[live-edit] setcand: no candidates — 'find' then 'narrow' first."); return 0; }
+    if (g_candidates.size() > writeCap) {
+        log_line("[live-edit] setcand refused: %zu candidates > cap %u — narrow further (change the stat, then 'narrow <value>') before writing.", g_candidates.size(), writeCap);
+        return 0;
+    }
+    uint32_t nb;
+    if (g_candIntRaw) { int32_t ni = (int32_t)newVal; nb = (uint32_t)ni; }
+    else              { float nf = (float)newVal; std::memcpy(&nb, &nf, 4); }
+    size_t wrote = 0;
+    for (uintptr_t a : g_candidates) {
+        // If this address already has a marker (from a prior set/setcand without an
+        // intervening revert), UPDATE its target but KEEP the first-recorded original —
+        // re-reading orig here would capture the previous marker value, and revert would
+        // then restore that instead of the true original. (candidate/marker sets are
+        // small — setcand refuses above writeCap — so the linear scan is cheap.)
+        MarkerRec* existing = nullptr;
+        for (auto& m : g_markers) if (m.addr == a) { existing = &m; break; }
+        if (existing) {
+            if (!SafeWrite(a, &nb, 4)) { log_line("[live-edit] setcand: WRITE FAILED @0x%llx", (unsigned long long)a); continue; }
+            existing->marker = nb;   // original preserved from the first write
+            ++wrote;
+            continue;
+        }
+        uint32_t orig = 0; if (!SafeReadU32(a, &orig)) continue;
+        if (!SafeWrite(a, &nb, 4)) { log_line("[live-edit] setcand: WRITE FAILED @0x%llx", (unsigned long long)a); continue; }
+        g_markers.push_back({a, orig, nb});
+        ++wrote;
+    }
+    log_line("[live-edit] setcand -> %g on %zu candidate(s) (held; 'revert' or 0 to restore).", newVal, wrote);
+    return wrote;
+}
+
 // LOOP mode (TWEAKXL_POKE_GO_FILE set): repeatedly wait for a value written into the
 // go-file, revert the previous round, scan the live player for cells holding that
 // value, and mark them. Write 0 to revert+idle. Lets us try value after value
@@ -3088,6 +3175,8 @@ void DoStatProbeCells() {
     uint32_t maxCells = 40; if (const char* m = std::getenv("TWEAKXL_POKE_PROBE_MAX"); m && *m) maxCells = (uint32_t)std::strtoul(m, nullptr, 10);
     uint32_t delaySec = 70; if (const char* d = std::getenv("TWEAKXL_POKE_DELAY_SEC"); d && *d) delaySec = (uint32_t)std::strtoul(d, nullptr, 10);
     float defTol = 0.0f; if (const char* t = std::getenv("TWEAKXL_POKE_TOL"); t && *t) defTol = (float)std::strtod(t, nullptr);
+    uint32_t findCap = 4096;  if (const char* c = std::getenv("TWEAKXL_POKE_FIND_CAP");  c && *c) findCap  = (uint32_t)std::strtoul(c, nullptr, 10);  // delta-narrow snapshot cap
+    uint32_t writeCap = 16;   if (const char* c = std::getenv("TWEAKXL_POKE_WRITE_CAP"); c && *c) writeCap = (uint32_t)std::strtoul(c, nullptr, 10);  // setcand refuses above this
     const char* gf = std::getenv("TWEAKXL_POKE_GO_FILE");
     StartMarkerReapply();
 
@@ -3099,10 +3188,11 @@ void DoStatProbeCells() {
         return;
     }
 
-    log_line("[live-edit] LOOP ready (markers base=%g, tol=%g). Commands via %s:  "
-             "'set i<old> <new>' = set a stored counter (e.g. money);  'i<val>' or '<float>' = identify (mark) a value;  "
-             "'revert' (or '0') = restore originals + idle.",
-             (double)base, (double)defTol, gf);
+    log_line("[live-edit] LOOP ready (base=%g tol=%g findCap=%u writeCap=%u). Commands via %s:  "
+             "'set i<old> <new>' = set a stored counter directly;  "
+             "delta-narrow (for common/small values): 'find i<cur>' -> change it in-game -> 'narrow <new>' (repeat) -> 'setcand <value>';  "
+             "'i<val>'/'<float>' = identify (mark);  'revert'/'0' = restore + idle.",
+             (double)base, (double)defTol, findCap, writeCap, gf);
     for (;;) {
         char cmd[64] = {0}, a1[64] = {0}, a2[64] = {0};
         int nTok = 0;
@@ -3130,6 +3220,26 @@ void DoStatProbeCells() {
             double nv = liveedit::ParseValueToken(a2, ir2); (void)ir2;
             log_line("[live-edit] GO set: %g -> %g (%s).", ov, nv, ir1 ? "raw-int" : "container/float");
             ProbeScanAndSet(ov, nv, ir1, defTol, maxCells);
+            continue;
+        }
+
+        // 'find <cur>' → snapshot candidates holding <cur> (delta-narrow start; no write)
+        if (std::strcmp(cmd, "find") == 0 && nTok >= 2) {
+            bool ir = false; double v = liveedit::ParseValueToken(a1, ir);
+            log_line("[live-edit] GO find: %g (%s).", v, ir ? "raw-int" : "container/float");
+            DoFind(v, ir, defTol, findCap);
+            continue;
+        }
+        // 'narrow <new>' → keep candidates that now hold <new> (after you changed the stat)
+        if (std::strcmp(cmd, "narrow") == 0 && nTok >= 2) {
+            bool ir = false; double v = liveedit::ParseValueToken(a1, ir);
+            DoNarrow(v);
+            continue;
+        }
+        // 'setcand <value>' → write <value> to the narrowed candidate set (revertable)
+        if (std::strcmp(cmd, "setcand") == 0 && nTok >= 2) {
+            bool ir = false; double v = liveedit::ParseValueToken(a1, ir);
+            DoSetCand(v, writeCap);
             continue;
         }
 

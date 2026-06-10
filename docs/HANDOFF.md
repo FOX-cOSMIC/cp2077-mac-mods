@@ -4,12 +4,12 @@ You have just been spawned into this project. You probably have no memory of pri
 
 ---
 
-## ⮕ Latest state (2026-06-02) — read this first
+## ⮕ Latest state (2026-06-10) — read this first
 
-- **Framework is proven end-to-end.** inject → slide → singleton → apply-trigger poll → flat resolve (`+0x40`) → interning-safe edit (`+0x148` buffer) → `UpdateRecord` (factory+Assign). The edit is **ground-truth verified via the game's own `GetFlat`** (F-036).
-- **Goal in flight:** produce a *visible, verified* in-game change. **F-039:** player base HP/RAM are **computed per-entity** (attributes/level curves at stat-init), **not stored flats** → can't be doubled by a scalar edit, and live read-back is behind the F-038 no-`gameInstance` wall.
-- **Current approach:** edit a **stored** Memory(RAM) `ConstantStatModifier.value` on a RAM-granting cyberware (`Items.*MemoryBoost*_inlineN`, nameable, CRC-verified). Probe `IdentifyStatModifiers` (env `TWEAKXL_ID_MEM_MODS=1`, helper `/tmp/run_id_memmods.sh`) finds which carry `statType=Memory`; then re-run with `TWEAKXL_DOUBLE_STATS=1` to 2× + verify via game `GetFlat`; user loads a save to see the RAM bar. **Next action is in `state/status.yaml`.**
-- **Reference:** gibbed TweakDB schema at `reference/gibbed-schema/` (gitignored — `git clone https://github.com/gibbed/Cyberpunk-TweakDB-Schema.git reference/gibbed-schema`). Active plan: `~/.claude/plans/cached-snuggling-kay.md`. Probes are env-gated in `src/red4ext-mac/src/runtime/TweakDB.cpp`, wired in `Loader.cpp`.
+- **✅ MILESTONE (F-044): first visible, verified, native-macOS in-game change.** A direct live-memory write (`mach_vm_write`) changed the player's eddies **310,915 → 400** on an existing save — no reload, no crash, cleanly reverted. The **live-write path reaches gameplay**, where every TweakDB-flat edit before it verified at the game's `GetFlat` yet stayed invisible (the F-043/FA-016 wall).
+- **Why money and not RAM/HP:** displayed/derived stats (RAM cap 32, max HP 322) are computed from base+modifiers and **never materialized** as their displayed value → unreachable by value-scan (FA-017/18/19). **Stored counters** (money, components, XP) exist verbatim in memory → writable. The pool-max (`+0x1d4`) and the `0x1bc` stat-id routes are dead ends (FA-017/FA-018).
+- **Direction (D-007):** see `docs/ROADMAP.md`. **Phase 2 (next): productize the live-edit tool** — stored-counter targets (money/components/points/XP), set-value + revert, no-crash validated writes — detail in `docs/PHASE_2_PLAN.md`. Then Phase 3 native-archive textures, Phase 4 TweakDB→gameplay parity, Phase 5 hooking, Phase 6 scripting.
+- **Repro F-044:** `/tmp/run_probecells.sh` (`TWEAKXL_POKE_PROBE_CELLS=1 TWEAKXL_POKE_GO_FILE=/tmp/red4ext_go`); in-world `echo i<value> > /tmp/red4ext_go`; read marker `= base+index`; `echo 0` to revert. Live-write code is in `src/red4ext-mac/src/runtime/TweakDB.cpp` (`DoStatProbeCells`/`ProbeScanAndMark`/`RevertMarkers`), env-gated, wired in `Loader.cpp`. **Next action is in `state/status.yaml`.**
 
 ---
 
@@ -18,9 +18,10 @@ You have just been spawned into this project. You probably have no memory of pri
 1. `AGENTS.md` (repo root) — universal entry, conventions, constraints
 2. This file (you are here)
 3. `state/status.yaml` — current phase, blockers, next action
-4. `docs/FACTS.md` — what is currently true
-5. `docs/FAILED_APPROACHES.md` — what NOT to do
-6. `state/tasks.yaml` — open tasks; find one assigned to your role or unassigned
+4. `docs/ROADMAP.md` — the phased plan + where we are (then `docs/PHASE_2_PLAN.md` for the active phase)
+5. `docs/FACTS.md` — what is currently true
+6. `docs/FAILED_APPROACHES.md` — what NOT to do
+7. `state/tasks.yaml` — open tasks; find one assigned to your role or unassigned
 
 If your assigned task references specific files, read those next.
 

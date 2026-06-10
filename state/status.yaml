@@ -39,20 +39,18 @@ blockers:
 - 'TweakDB-flat -> gameplay propagation wall (F-043/FA-013..FA-016): flat/record edits
   verify at GetFlat/GetRecord but do not manifest in gameplay. Open; visible change was
   achieved by the independent live-write path instead.'
-pending_decisions:
-- 'Direction after F-044: (a) productionize the live-write path into a usable tool
-  (named targets: money/components/XP; safe revert), and/or (b) resume the TweakDB->gameplay
-  RE (seeder materialized-record refresh, route B of FA-016) for true mod-file parity.'
+pending_decisions: []   # direction RESOLVED by D-007 (2026-06-10): sequence in docs/ROADMAP.md
 next_action:
   agent: lead
-  task_id: F044-LOCKIN
-  description: 'F-044 achieved (money 310,915->400 via live write). Commit + push the
-    probe code (DoStatProbeCells/DoStatPoolMax/DoStatUnequipDelta + helpers in
-    TweakDB.cpp) and the docs (F-044, FA-017/18/19, session-log). Then decide direction
-    with the user: productionize the live-write path (stored-counter targets, named +
-    revertable) as the demonstrable v1.0 win, vs. resume the harder TweakDB->gameplay
-    propagation RE (FA-016 route B) for true .yaml-mod parity. Repro: /tmp/run_probecells.sh,
-    in-world echo i<value> > /tmp/red4ext_go, read marker = base+index, echo 0 to revert.'
+  task_id: PHASE2-LIVE-EDIT
+  description: 'Direction set by D-007 / docs/ROADMAP.md: Phase 2 = productize the live-edit
+    tool (the F-044 capability). Execute docs/PHASE_2_PLAN.md: add a set-to-value mode beside
+    the marker mode, a named stored-counter target registry (money proven; add components /
+    attribute-perk points / XP, each validated in-game), safety + version/offset gate, tests,
+    and a user guide. Targets are STORED COUNTERS only (derived stats are not materialized,
+    FA-017/18/19). Reuse DoStatProbeCells/ProbeScanAndMark/RevertMarkers/StartMarkerReapply in
+    src/red4ext-mac/src/runtime/TweakDB.cpp. Repro F-044: /tmp/run_probecells.sh, in-world
+    echo i<value> > /tmp/red4ext_go, read marker = base+index, echo 0 to revert.'
 recent_facts_added:
 - F-036
 - F-037

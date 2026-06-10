@@ -123,3 +123,21 @@ ADRs are dated, immutable. Don't edit a decision — supersede it with a new ent
   - `ARCHITECTURE.md` gets a "Long-Term Roadmap" section.
   - `AGENTS.md` mission statement makes the full-ecosystem goal explicit while keeping v1.0 as the immediate target.
   - Researcher prioritization continues to favor TweakXL-blocking unknowns (H-001..H-004) over CET / ArchiveXL preparation work.
+
+---
+
+### D-007: Sequence after F-044 — live-edit tool first, then native textures, then TweakDB parity, then hooking, then scripting
+
+- **Date:** 2026-06-10
+- **Status:** accepted (chosen by Lucas 2026-06-10)
+- **Context:** F-044 produced the first visible, verified macOS in-game change via a **direct live-memory write** (money 310,915→400), while the TweakDB-flat path stayed walled (F-043/FA-016) and derived stats proved unreachable by value-scan (FA-017/18/19). Exploration also found the native archive mod path (`archive/pc/mod/`) already present on the macOS install. With several viable tracks open (live-write tool, native-archive textures, TweakDB→gameplay parity, the `__DATA` hooking primitive, scripting), we needed an explicit order.
+- **Decision:** Sequence the work as recorded in `docs/ROADMAP.md`: **Phase 2 — productize the live-edit tool** (stored counters: money/components/points/XP; set-value + revert; no-crash validated writes) **first**, then Phase 3 native-archive textures, then Phase 4 TweakDB→gameplay parity, then Phase 5 the `__DATA` hooking foundation, then Phase 6 scripting (redscript, CET).
+- **Alternatives considered:**
+  - **Textures/assets first** — likely the highest payoff/effort (native path appears pre-wired), but unvalidated; deferred to Phase 3 so we ship the *proven* capability first.
+  - **TweakDB gameplay parity first** — the original v1.0 promise, but the hardest (materialized-structure RE, FA-016) with uncertain payoff; deferred to Phase 4.
+  - **Hooking foundation first** — the central long-term unlock, but most infrastructure for the slowest near-term payoff; deferred to Phase 5.
+- **Consequences:**
+  - New `docs/ROADMAP.md` (strategic narrative) + `docs/PHASE_2_PLAN.md` (task-level) are the source of truth for sequencing; `ARCHITECTURE.md` and `status.yaml` point to them.
+  - `status.yaml:next_action` becomes Phase 2 (live-edit tool); the RAM-ID line is retired (superseded by FA-017/18/19 + F-044).
+  - The live-edit tool is positioned honestly as a *native trainer-class capability + Phase-4 stepping stone*, not Windows-mod-file parity.
+- **References:** F-044, FA-016/17/18/19, D-006.

@@ -134,6 +134,8 @@ For a mod to "work unchanged on macOS," these must be true:
 
 **The full ambition:** every gameplay-changing mod that works on Windows works on macOS, unchanged. This is a multi-version effort. v1.0 is the first deliverable, not the destination. See D-006 for the slicing rationale.
 
+> **The phased execution plan and current sequencing live in `docs/ROADMAP.md`** (strategic narrative) and `docs/PHASE_2_PLAN.md` (the immediate phase), with the ordering rationale in **D-007**. Two findings since this matrix was drawn: (1) the **direct live-memory-write path reaches gameplay** (F-044 — first visible macOS change, money), independent of the TweakDB-flat wall (F-043/FA-016); (2) the native archive mod path **`archive/pc/mod/` already exists on the macOS install** (a mod archive ships pre-installed), so plain texture/mesh/sound *replacement* may load with no new code (v1.x — to be validated in ROADMAP Phase 3).
+
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │ FULL ECOSYSTEM (long-term goal)                                │
@@ -180,8 +182,9 @@ For a mod to "work unchanged on macOS," these must be true:
 
 ### v1.x — Custom Assets (ArchiveXL parity)
 
-- File-format work: `.archive` reading/writing
-- Resource-loader hooks: intercept the game's asset lookup to inject custom meshes / textures / sounds
+- **Native replacement archives may already work:** the macOS install loads `archive/Mac/content/*.archive` natively and ships `archive/pc/mod/bike_fix_nca.archive` — i.e. the standard mod path is present. Plain texture/mesh/sound *replacement* mods may need **no new code** (ROADMAP Phase 3 validates this first).
+- File-format work: `.archive` reading/writing (for tooling/extensions)
+- Resource-loader hooks: intercept the game's asset lookup to inject custom meshes / textures / sounds (ArchiveXL *extensions* — needs the Phase 5 `__DATA` hook primitive)
 - Plugin authors recompile their ArchiveXL-style plugins for macOS — source compatibility preserved
 - Mostly additive — does not break v1.0 mods
 

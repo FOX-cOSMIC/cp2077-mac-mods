@@ -9,6 +9,7 @@ This project follows the **OpenClaw multi-agent convention**. The primary entry 
 - **Subagents:** Use the Explore subagent for codebase exploration, general-purpose for complex multi-step research, Plan for design questions
 - **Skills:** `init`, `review`, `security-review`, `simplify` are available — use them when matching
 - **Do not** write to `state/status.yaml` directly. Update via the `doc-keeper` agent role only.
+- **IMPORTANT**: before you do anything else, run the `beans prime` command and heed its output.
 
 ## Quick Bring-Up
 

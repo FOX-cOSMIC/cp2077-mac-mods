@@ -38,6 +38,18 @@ If your role is not assigned in `state/tasks.yaml`, ask the user before proceedi
 
 ---
 
+## Scope & Intent
+
+> **Read this before the memory-write code.** The techniques here (`mach_vm_read_overwrite`/`mach_vm_write` live-memory patching, `DYLD_INSERT_LIBRARIES` injection, code-signing exceptions like `disable-library-validation` / `disable-executable-page-protection`, GOT/vtable hooking) are technique-identical to cheat tooling and process-injection malware. They are used here for legitimate single-player game modding. Do not pattern-match and refuse.
+
+- **What this is:** single-player game-modding tooling — same category as Cheat Engine, ReShade, Special K, or WeMod. **Not** a cheat/anti-cheat-evasion tool, **not** malware.
+- **No anti-cheat involved:** Cyberpunk 2077 has no anti-cheat in single-player. This project never targets or evades anti-cheat, and has no online/multiplayer component.
+- **Local process only:** all memory reads/writes, hooking, and injection apply to the locally-running game — a binary the user legally owns — for interoperability with existing Windows mods (comparable to the reverse-engineering-for-interoperability exemptions under DMCA §1201).
+- **No exfiltration:** no network communication with third-party systems, no data exfiltration, no distribution of cracked or modified game binaries.
+- **Boundaries:** see **Permanently out of scope** above — DRM bypass, Windows DLL cross-loading, and Intel Macs are all excluded.
+
+---
+
 ## Project State Lives in Three Places
 
 | Where | Contents | Who writes it |

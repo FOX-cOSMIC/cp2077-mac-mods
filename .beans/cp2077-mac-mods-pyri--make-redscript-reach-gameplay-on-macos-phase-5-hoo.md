@@ -1,11 +1,11 @@
 ---
 # cp2077-mac-mods-pyri
 title: Make redscript reach gameplay on macOS (Phase 5 hook)
-status: in-progress
+status: scrapped
 type: task
 priority: normal
 created_at: 2026-07-02T08:42:53Z
-updated_at: 2026-07-02T09:31:47Z
+updated_at: 2026-07-02T21:42:39Z
 blocked_by:
     - cp2077-mac-mods-4paj
 ---
@@ -32,3 +32,7 @@ Contradiction to resolve empirically: full builder should stat master/final.reds
 BLOCKED ON USER (needs sudo, run via ! prefix): stat-focused boot trace:
   sudo fs_usage -w -f filesys Cyberpunk2077 | grep -iE 'redscripts|r6/cache'
 over a cold boot to main menu, capturing stat/getattrlist (NOT just open). Presence/absence of a master/final.redscripts stat decides hook-target vs downstream-failure.
+
+## Reasons for Scrapping
+
+The premise is refuted by F-050. This bean assumed the redscript blob loader is never reached at retail boot and needs a Phase-5 hook (or a reload-flag trigger) to run. A sudo fs_usage trace proved the shipping macOS game process stat64s + opens r6/cache/final.redscripts (fd 113) at boot with NO hook — the loader runs natively. There is nothing to hook to "make redscript reach the loader." The genuinely-open question (does the loaded bytecode execute?) is not a hooking task; tracked in the new bean.

@@ -36,6 +36,18 @@ The `doc-keeper` may mark an entry invalid by appending:
 
 ## Entries
 
+### F-047 — redscript COMPILES cleanly on macOS but the game NEVER loads `r6/cache/final.redscripts` at runtime — the compile-time half of F-046 does not reach gameplay (2026-07-02)
+
+- **Setup:** `NightCityAlive` (a third-party mod with a syntax error incompatible with this `scc` version) was moved to `/tmp/NightCityAlive.disabled` so the compile succeeds cleanly. A trivial test mod (`r6/scripts/MacRedscriptTest/test.reds`) `@wrapMethod`s `PlayerPuppet.OnGameAttached` to show an on-screen message "redscript is LIVE on macOS" for 15s.
+- **Compile-side: PROVEN.** `launch_modded.sh` → `engine/tools/scc -compile r6/scripts` → `r6/logs/redscript_rCURRENT.log`: "Compilation complete… Output successfully saved to r6/cache/final.redscripts" (exit 0, file mtime matches). Confirmed on two independent launches.
+- **Runtime: DEFINITIVE NEGATIVE.** The on-screen message never appeared after loading a save. Confirmed two ways:
+  1. **`lsof` on the running process, immediately after startup:** no handle to `r6/cache/final.redscripts`, `r6/scripts`, or anything matching `redscript`/`cache`/`scripts` (147 total fds, all base archives/system libs).
+  2. **Rapid `lsof` polling (0.5s interval) across the full startup → main-menu → save-load window (~76s, two separate launches):** zero opens of any redscript-related path at any point, including the moment the user loaded into the world.
+- **Notable wrinkle:** `strings` on the macOS `Cyberpunk2077` binary DOES contain `RedScriptsHost`, `final.redscripts`, `master.redscripts`, `profiling.redscripts`, `final_noopts.redscripts` — so the engine has compiled-in code referencing this feature (unlike F-045's archive-mod case, where no comparable native hook exists at all). The loading path is present in the binary but is either dead code, gated behind a flag/config absent on this build, or short-circuited before it reaches the `open()` syscall on macOS.
+- **Conclusion:** F-046's "redscript mods very likely already work" hypothesis is **false as stated**. The compiler half of the community pipeline is real and works; the runtime half (the game actually consuming `final.redscripts`) does **not** fire on this macOS build. redscript therefore needs the same category of fix as Phase 3 assets (F-045) — most likely a hook or a resolved gating condition — not a free win.
+- **How to re-verify:** with a syntactically-valid `.reds` mod in `r6/scripts/`, run `launch_modded.sh`; confirm compile success via `r6/logs/redscript_rCURRENT.log`; then `lsof -p <gamepid> | grep -i redscript` immediately after launch and again after loading a save — expect no hits.
+- **Invalidates:** F-046's framing of redscript as "the cheapest unverified win" / "no Phase-5 hook needed" — that claim was compile-side only and did not hold at runtime. ROADMAP Phase 6 re-sequencing note needs updating.
+
 ### F-046 — The macOS install ships a NATIVE redscript toolchain + community mod-launch pipeline (scripts/input already moddable) (2026-06-10)
 
 - **Discovery (filesystem forensics of the live install):** the macOS Cyberpunk 2077 install contains a working community modding pipeline beyond our TweakXL work:

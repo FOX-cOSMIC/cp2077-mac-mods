@@ -1,7 +1,7 @@
 ---
 project: cp2077-mac-mods
 version: 0.1.0
-last_updated: 2026-06-10
+last_updated: 2026-07-02
 current_phase:
   id: 1
   name: foundation-engineering
@@ -57,9 +57,19 @@ next_action:
     both confirm no mod folder scanned) -> textures/assets now depend on Phase 5 hooking; Phase 3
     moves behind Phase 5. DISCOVERY (F-046): the install ships a NATIVE redscript compiler
     (engine/tools/scc + launch_modded.sh) + InputLoader -> redscript/.reds mods likely already
-    work; it is the cheapest UNVERIFIED win. NEXT (decision pending with user): verify the
-    redscript pipeline (drop a trivial .reds, run launch_modded.sh, confirm effect) vs Phase 4
-    TweakDB->gameplay RE vs start Phase 5 hooking. See ROADMAP re-sequencing note.'
+    work; it is the cheapest UNVERIFIED win. REDSCRIPT VERIFIED, NEGATIVE (F-047, 2026-07-02):
+    redscript compiles cleanly on macOS (confirms F-046''s compile half; scc -> final.redscripts,
+    exit 0, two independent launches) but the game NEVER loads r6/cache/final.redscripts at
+    runtime — confirmed via lsof (single-shot + rapid polling across two full
+    startup->menu->save-load windows), zero opens of any redscript-related path. Binary strings
+    show RedScriptsHost/final.redscripts exist in compiled code but the load path is not reached
+    on macOS. This invalidates F-046''s "redscript is the cheapest unverified win / no Phase-5
+    hook needed" framing: redscript now needs the same category of fix as Phase 3 (F-045) and
+    moves alongside it in the roadmap, likely clustering around Phase 5 hooking work (see ROADMAP
+    Phase 6 re-sequencing note, 2026-07-02). OPEN (decision pending with user): (a) RE work to
+    find why RedScriptsHost''s native load path isn''t reached on macOS (could be a cheaper
+    unlock than full Phase 5 hooking) vs (b) proceed to Phase 4 TweakDB->gameplay parity RE vs
+    (c) start Phase 5 hooking foundation directly.'
 recent_facts_added:
 - F-036
 - F-037
@@ -70,6 +80,8 @@ recent_facts_added:
 - F-042
 - F-043
 - F-044
+- F-046
+- F-047
 recent_failed_added:
 - FA-012
 - FA-013
@@ -79,6 +91,7 @@ recent_failed_added:
 - FA-017
 - FA-018
 - FA-019
+- FA-020
 long_term_vision: 'Every gameplay-changing Windows Cyberpunk 2077 mod works on macOS
   unchanged. Full ecosystem: TweakXL, ArchiveXL, CET, Codeware, redscript.
 

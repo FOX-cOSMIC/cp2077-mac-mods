@@ -115,23 +115,33 @@ which the codesigning reference already documents):
   ArchiveXL-extensions, redscript, Codeware.
 - **Source:** Apple Hardened Runtime (https://developer.apple.com/documentation/security/hardened-runtime).
 
-### Phase 6 — Scripting (redscript → CET) — and redscript is ALREADY mostly present (F-046)
-- **redscript — likely already working on macOS (F-046).** The install ships a **native `scc` compiler**
-  (`engine/tools/scc` + `libscc_lib.dylib`) and `launch_modded.sh` runs `scc -compile r6/scripts` before
-  launch (`r6/logs/redscript_*.log` confirm). So `.reds` mods very probably take effect today via the
-  community pipeline — **no Phase-5 hook needed** for redscript (the compiler merges into the script blob
-  at build, not via a runtime hook). **Near-term, low-cost to verify** (drop a trivial `.reds`, run the
-  modded launcher, confirm the effect) — arguably the next cheap win instead of textures.
+### Phase 6 — Scripting (redscript → CET) — compile-side present, runtime NOT wired (F-046/F-047)
+- **redscript compiles cleanly on macOS (F-046)** — `engine/tools/scc` + `libscc_lib.dylib` is a native
+  Apple Silicon build; `launch_modded.sh` runs `scc -compile r6/scripts` before launch and produces
+  `r6/cache/final.redscripts` (confirmed by `r6/logs/redscript_*.log` and matching file mtimes).
+- **⚠ Runtime does NOT load it (F-047, tested 2026-07-02).** With a clean compile confirmed, `lsof`
+  (both single-shot and rapid-polled across the full startup → main-menu → save-load window, two separate
+  launches) shows the game **never opens** `r6/cache/final.redscripts`, `r6/scripts`, or anything
+  redscript-related. The on-screen message from a trivial `@wrapMethod` test mod never appeared in-game.
+  Notably `strings` on the binary *does* contain `RedScriptsHost`/`final.redscripts`/etc. — the feature
+  exists in compiled code but is dead, gated, or short-circuited before reaching `open()` on this build.
+- **Revised implication:** redscript is **not** a free/cheap win — it needs the same category of fix as
+  Phase 3 (F-045): either a hook that drives the existing `RedScriptsHost` code path, or RE to find/lift
+  whatever gates it on macOS. It moves alongside Phase 3, likely **behind or bundled with Phase 5**.
 - **CET:** Lua VM (portable) + **ImGui-on-Metal overlay + Metal render/input hooks** — the single largest
   piece; still needs Phase 5.
-- **Input mods** also work today (InputLoader, F-046).
-- **Done looks like:** a redscript mod runs (verify the existing pipeline); (stretch) a CET overlay renders.
+- **Input mods** also work today (InputLoader, F-046) — untouched by this finding.
+- **Done looks like:** find/trigger the `RedScriptsHost` load path (RE or hook) so a redscript mod's effect
+  is observable in-game; (stretch) a CET overlay renders.
 
-> **Re-sequencing note (2026-06-10, F-045/F-046):** the discovered difficulty ordering is closer to the
-> *inverse* of the original guess. Textures/assets (Phase 3) need a hook → they move **behind Phase 5**.
-> redscript (Phase 6) is largely on disk → it's the **cheapest unverified win** and could come next. The
-> live-edit tool (Phase 2, done), redscript (verify), and the TweakDB→gameplay RE (Phase 4) are all
-> reachable **without** the hooking primitive; ArchiveXL/CET/Codeware are what truly gate on Phase 5.
+> **Re-sequencing note (2026-07-02, F-045/F-046/F-047 supersedes the 2026-06-10 note):** redscript is
+> **not** the cheap win it looked like on 2026-06-10 — the compile-time proof (F-046) did not hold at
+> runtime (F-047). Both asset mods (Phase 3) and script mods (Phase 6) now depend on the same missing
+> piece: understanding/driving native loader code that exists in the binary (`RedScriptsHost` et al.) but
+> isn't reached on macOS. The live-edit tool (Phase 2, done) and the TweakDB→gameplay RE (Phase 4) remain
+> the only capabilities reachable **without** further hooking/RE work; Phase 3, Phase 6, ArchiveXL
+> extensions, and CET all now cluster around Phase 5 (or a lighter-weight "find the macOS gate" RE task
+> that may precede full inline-hooking).
 
 ---
 

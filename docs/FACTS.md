@@ -36,6 +36,17 @@ The `doc-keeper` may mark an entry invalid by appending:
 
 ## Entries
 
+### F-052 — ✅✅ redscript EXECUTES natively on macOS — a `@wrapMethod` hook ran on load and called a native game system with visible in-game effect (2026-07-03)
+
+- **Date:** 2026-07-03; **in-vivo empirical test**, build 2.3.1, no RED4ext / no CET / no hooks — pure native `scc`-compiled blob + the shipping engine's own loader.
+- **Test mod (`r6/scripts/MacRedscriptTest/test.reds`):** `@wrapMethod(PlayerPuppet) OnGameAttached` → `GameInstance.GetTransactionSystem(this.GetGame()).GiveItem(this, ItemID.FromTDBID(t"Items.money"), 7770000)`. Compiled clean via native `scc`; `final.redscripts` grew 15.4 MB → 16.1 MB.
+- **DECISIVE POSITIVE — exact arithmetic:** the test save (the F-044 save) held **310,915** eddies. After launching, loading that save, the player's money read **8,080,915**. `310,915 + 7,770,000 = 8,080,915` **exactly.** The `@wrapMethod` hook fired on `OnGameAttached` and its native `TransactionSystem.GiveItem` call took visible effect.
+- **What this proves end-to-end:** the compiled bytecode is (F-050) opened/mmap'd at boot, (F-051) parsed + RTTI-validated + registered into the script VM, and **now confirmed executed** — including correct **native-function binding** (`GetTransactionSystem`, `GiveItem`, `ItemID.FromTDBID`, TweakDBID literal resolution) and `@wrapMethod` wrapping of a base-game method. The core of redscript modding (`@wrapMethod`/`@replaceMethod` + calls into game systems) **works natively on Apple Silicon with the stock install** — no injection, no hook, no RED4ext.
+- **Scope of the claim:** proven for `@wrapMethod` + native system calls invoked from a gameplay callback. Not yet exercised: `@addField`/`@addMethod` struct extension, custom native imports (Codeware/RED4ext-provided natives — those still need the RED4ext-equivalent, unrelated to this), and heavy cross-mod ordering. But the load+execute foundation is real.
+- **Roadmap implication (for `doc-keeper` to action — do NOT edit `status.yaml` here):** redscript runtime was slotted at **v2.0** (`AGENTS.md` Mission, `ROADMAP.md` Phase 6). It is in fact **already working natively**, dependent only on the community `scc` + `launch_modded.sh` pipeline that ships in the install (F-046). Phase 6 (redscript half) should be re-sequenced from "v2.0, needs a hook" to "**done / verified**." This does not change v1.0 (TweakXL) scope.
+- **How to re-verify:** restore a `@wrapMethod` money-give `.reds` in `r6/scripts/`, `scc`-compile (or `launch_modded.sh`), load a save whose eddies you know, and read the wallet — expect old+7,770,000. (Note: the effect re-applies every `OnGameAttached`, so money grows each load until the mod is removed.)
+- **Invalidates:** the "redscript runtime is v2.0 / needs a Phase-5 hook" framing wherever it appears (Mission, ROADMAP Phase 6, and the already-corrected F-047). Confirms the F-051 prediction (the blob validates against its own build's RTTI). Completes bean `cp2077-mac-mods-q90k`.
+
 ### F-051 — The macOS redscript load→parse→validate→register→link path is FULLY IMPLEMENTED (not stubbed); only the in-process compiler is a stub, and the one realistic failure mode (RTTI validation mismatch) fails silently (2026-07-03)
 
 - **Date:** 2026-07-03; Ghidra (read-only, headless), decompiler-confirmed, `Cyberpunk2077` macOS build 2.3.1. Static complement to the F-050 runtime open() observation; traces what happens to the blob bytes *after* the open.

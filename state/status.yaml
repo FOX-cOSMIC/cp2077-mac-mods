@@ -1,7 +1,7 @@
 ---
 project: cp2077-mac-mods
 version: 0.1.0
-last_updated: 2026-07-02
+last_updated: 2026-07-03
 current_phase:
   id: 1
   name: foundation-engineering
@@ -54,34 +54,31 @@ next_action:
     tool is usable (set + delta-narrow + revert), safe (guards/caps/version-gate/dedup),
     documented (docs/guides/live-edit.md), tested (ctest). Launcher /tmp/run_liveedit.sh.
     PHASE 3 TESTED (F-045): native .archive mod loading is NOT wired on macOS (lsof + fs_usage
-    both confirm no mod folder scanned) -> textures/assets now depend on Phase 5 hooking; Phase 3
+    both confirm no mod folder scanned) -> textures/assets still depend on Phase 5 hooking; Phase 3
     moves behind Phase 5. DISCOVERY (F-046): the install ships a NATIVE redscript compiler
-    (engine/tools/scc + launch_modded.sh) + InputLoader -> redscript/.reds mods likely already
-    work; it is the cheapest UNVERIFIED win. REDSCRIPT VERIFIED, NEGATIVE (F-047, 2026-07-02):
-    redscript compiles cleanly on macOS (confirms F-046''s compile half; scc -> final.redscripts,
-    exit 0, two independent launches) but the game NEVER loads r6/cache/final.redscripts at
-    runtime — confirmed via lsof (single-shot + rapid polling across two full
-    startup->menu->save-load windows), zero opens of any redscript-related path. Binary strings
-    show RedScriptsHost/final.redscripts exist in compiled code but the load path is not reached
-    on macOS. This invalidates F-046''s "redscript is the cheapest unverified win / no Phase-5
-    hook needed" framing: redscript now needs the same category of fix as Phase 3 (F-045) and
-    moves alongside it in the roadmap, likely clustering around Phase 5 hooking work (see ROADMAP
-    Phase 6 re-sequencing note, 2026-07-02). OPEN (decision pending with user): (a) RE work to
-    find why RedScriptsHost''s native load path isn''t reached on macOS (could be a cheaper
-    unlock than full Phase 5 hooking) vs (b) proceed to Phase 4 TweakDB->gameplay parity RE vs
-    (c) start Phase 5 hooking foundation directly.'
-recent_facts_added:
-- F-036
-- F-037
-- F-038
-- F-039
-- F-040
-- F-041
-- F-042
-- F-043
-- F-044
-- F-046
-- F-047
+    (engine/tools/scc + launch_modded.sh) + InputLoader. REDSCRIPT RUNTIME: ✅ VERIFIED WORKING
+    NATIVELY (F-050/F-051/F-052, 2026-07-03). The redscript half of Phase 6 is DONE: scc compiles
+    r6/scripts -> r6/cache/final.redscripts (F-046), the shipping macOS engine stat64+opens that
+    blob at boot (F-050, caught by fs_usage), and runs the full parse->RTTI-validate->register->link
+    path into the script VM (F-051, only the in-process compiler is a stub, correctly, since scc
+    compiles externally). In-game proof (F-052): a @wrapMethod(PlayerPuppet) OnGameAttached mod
+    compiled by stock scc fired on save-load and called TransactionSystem.GiveItem(money,7,770,000)
+    -> the F-044 test save''s 310,915 eddies became exactly 8,080,915. No RED4ext, no CET, no hooks
+    -- stock install via the scc/launch_modded.sh pipeline. This RESOLVES the earlier F-047 negative,
+    which was an lsof measurement artifact (a snapshot/poll tool cannot see a single transient
+    open->mmap->close of a 15 MB blob) corrected by the continuous fs_usage trace in F-050. Redscript
+    needs NO Phase-5 hook. Caveats: proven for @wrapMethod/@replaceMethod + native game-system calls;
+    NOT yet exercised are @addField/@addMethod struct extension and custom native imports (Codeware/
+    RED4ext-equivalent natives, a separate track). See ROADMAP Phase 6 re-sequencing note (2026-07-03).
+    OPEN (decision pending with user): (a) proceed to Phase 4 TweakDB->gameplay parity RE vs
+    (b) start Phase 5 hooking foundation (the gate for CET, ArchiveXL extensions, Codeware, and native
+    .archive mods) vs (c) extend the now-working redscript track (@addField/@addMethod + custom natives).'
+recent_facts_added:   # last 5
+- F-048
+- F-049
+- F-050
+- F-051
+- F-052
 recent_failed_added:
 - FA-012
 - FA-013
@@ -108,7 +105,10 @@ version_roadmap:
   v2.0:
     name: Scripting
     scope: CET (Lua + ImGui-on-Metal), redscript runtime, Codeware
-    status: planned
+    status: 'partial — redscript runtime VERIFIED WORKING NATIVELY on the stock install (F-052:
+      @wrapMethod hook executed in-game via the shipped scc/launch_modded.sh pipeline, no hook/RED4ext);
+      CET (ImGui-on-Metal + render/input hooks) and Codeware/custom natives remain planned (gated on
+      Phase 5 hooking).'
 v1_progress:
   red4ext_loads_into_game: 1
   hooks_work: 1            # functional equiv: apply-trigger polling (inline hooks blocked, FA-001)

@@ -115,33 +115,49 @@ which the codesigning reference already documents):
   ArchiveXL-extensions, redscript, Codeware.
 - **Source:** Apple Hardened Runtime (https://developer.apple.com/documentation/security/hardened-runtime).
 
-### Phase 6 — Scripting (redscript → CET) — compile-side present, runtime NOT wired (F-046/F-047)
-- **redscript compiles cleanly on macOS (F-046)** — `engine/tools/scc` + `libscc_lib.dylib` is a native
-  Apple Silicon build; `launch_modded.sh` runs `scc -compile r6/scripts` before launch and produces
-  `r6/cache/final.redscripts` (confirmed by `r6/logs/redscript_*.log` and matching file mtimes).
-- **⚠ Runtime does NOT load it (F-047, tested 2026-07-02).** With a clean compile confirmed, `lsof`
-  (both single-shot and rapid-polled across the full startup → main-menu → save-load window, two separate
-  launches) shows the game **never opens** `r6/cache/final.redscripts`, `r6/scripts`, or anything
-  redscript-related. The on-screen message from a trivial `@wrapMethod` test mod never appeared in-game.
-  Notably `strings` on the binary *does* contain `RedScriptsHost`/`final.redscripts`/etc. — the feature
-  exists in compiled code but is dead, gated, or short-circuited before reaching `open()` on this build.
-- **Revised implication:** redscript is **not** a free/cheap win — it needs the same category of fix as
-  Phase 3 (F-045): either a hook that drives the existing `RedScriptsHost` code path, or RE to find/lift
-  whatever gates it on macOS. It moves alongside Phase 3, likely **behind or bundled with Phase 5**.
-- **CET:** Lua VM (portable) + **ImGui-on-Metal overlay + Metal render/input hooks** — the single largest
-  piece; still needs Phase 5.
-- **Input mods** also work today (InputLoader, F-046) — untouched by this finding.
-- **Done looks like:** find/trigger the `RedScriptsHost` load path (RE or hook) so a redscript mod's effect
-  is observable in-game; (stretch) a CET overlay renders.
+### Phase 6 — Scripting (redscript → CET) — redscript half ✅ DONE / VERIFIED NATIVE (F-050/F-051/F-052); CET still gated on Phase 5
+- **✅ redscript RUNS natively on macOS, stock install (F-052, in-game verified 2026-07-03).** A
+  `@wrapMethod(PlayerPuppet) OnGameAttached` mod compiled by the shipped native `scc` (F-046) fired on
+  save-load and called `TransactionSystem.GiveItem(money, 7,770,000)`: the test save's **310,915 eddies
+  became exactly 8,080,915** (`310,915 + 7,770,000`). **No RED4ext, no CET, no hooks** — just the community
+  `scc` + `launch_modded.sh` pipeline that ships in the install. The core of redscript modding
+  (`@wrapMethod`/`@replaceMethod` + calls into game systems) works today.
+- **How it loads (F-050/F-051):** `scc` compiles `r6/scripts` → `r6/cache/final.redscripts` (F-046); the
+  shipping macOS engine **`stat64`+`open`s that blob at boot** (F-050, caught by `fs_usage` — a continuous
+  syscall trace) and runs the full **parse → RTTI-validate → register → link** path into the script VM
+  (F-051, statically confirmed; only the *in-process compiler* is a stub, correctly, because compilation is
+  external via `scc`).
+- **Caveats (do not overclaim):** proven for `@wrapMethod`/`@replaceMethod` + native game-system calls
+  invoked from a gameplay callback. **Not yet exercised:** `@addField`/`@addMethod` struct extension and
+  custom native imports (Codeware/RED4ext-provided natives — those still need a RED4ext-equivalent, a
+  separate track). But the load+execute foundation is real and in-game verified.
+- **CET (unchanged — still needs Phase 5):** Lua VM (portable) + **ImGui-on-Metal overlay + Metal
+  render/input hooks** — the single largest piece; gated on the Phase 5 hooking primitive.
+- **Input mods** also work today (InputLoader, F-046) — unchanged.
+- **Done looks like:** ✅ redscript mods observably change gameplay (met, F-052); (remaining) `@addField`/
+  `@addMethod` + custom natives exercised; (stretch) a CET overlay renders (Phase 5).
 
-> **Re-sequencing note (2026-07-02, F-045/F-046/F-047 supersedes the 2026-06-10 note):** redscript is
-> **not** the cheap win it looked like on 2026-06-10 — the compile-time proof (F-046) did not hold at
-> runtime (F-047). Both asset mods (Phase 3) and script mods (Phase 6) now depend on the same missing
-> piece: understanding/driving native loader code that exists in the binary (`RedScriptsHost` et al.) but
-> isn't reached on macOS. The live-edit tool (Phase 2, done) and the TweakDB→gameplay RE (Phase 4) remain
-> the only capabilities reachable **without** further hooking/RE work; Phase 3, Phase 6, ArchiveXL
-> extensions, and CET all now cluster around Phase 5 (or a lighter-weight "find the macOS gate" RE task
-> that may precede full inline-hooking).
+> **Re-sequencing note (2026-07-03, F-050/F-051/F-052 supersedes the 2026-07-02 note below):** the
+> **redscript half of Phase 6 is DONE and in-game verified.** The 2026-07-02 "runtime NOT wired" negative
+> was a **measurement artifact**: F-047 relied on `lsof` (a snapshot/poll tool) which structurally cannot
+> see a single transient `open`→mmap→close of a 15 MB blob. A continuous `fs_usage` syscall trace caught the
+> game `stat64`+`open`ing `r6/cache/final.redscripts` at boot (**F-050**); static RE confirmed the whole
+> load→parse→validate→register→link path is implemented, not stubbed (**F-051**); and an in-game money test
+> proved a `@wrapMethod` hook actually executes (**F-052**). So redscript needs **no Phase-5 hook** — it
+> works on the stock install via the shipped `scc`/`launch_modded.sh` pipeline (F-046). Only CET (ImGui-on-
+> Metal + render/input hooks), ArchiveXL extensions, and Codeware/custom natives remain clustered around
+> Phase 5. Phase 3 (native `.archive` mods, F-045) is unaffected by this and still needs Phase 5.
+
+> **⚠ SUPERSEDED — Re-sequencing note (2026-07-02, F-045/F-046/F-047):** *(retained for paper trail;
+> corrected by the 2026-07-03 note above — the redscript half of the claim below is now known to be a
+> false negative.)* redscript is **not** the cheap win it looked like on 2026-06-10 — the compile-time
+> proof (F-046) did not hold at runtime (F-047). Both asset mods (Phase 3) and script mods (Phase 6) now
+> depend on the same missing piece: understanding/driving native loader code that exists in the binary
+> (`RedScriptsHost` et al.) but isn't reached on macOS. The live-edit tool (Phase 2, done) and the
+> TweakDB→gameplay RE (Phase 4) remain the only capabilities reachable **without** further hooking/RE work;
+> Phase 3, Phase 6, ArchiveXL extensions, and CET all now cluster around Phase 5 (or a lighter-weight "find
+> the macOS gate" RE task that may precede full inline-hooking). *(F-047's runtime negative was later shown
+> to be an `lsof` artifact — see F-050; redscript in fact loads and executes. Phase 3 / F-045 still holds.)*
 
 ---
 
@@ -164,11 +180,13 @@ which the codesigning reference already documents):
 ## Dependency shape
 
 ```
+redscript (Phase 6, redscript half) ✅ DONE — works native via scc/launch_modded.sh, NO hook (F-050/051/052)
 Phase 2 (live-edit tool) ──┐  (independent; ships now)
-Phase 3 (native archives) ─┤  (independent; needs a validation experiment)
+Phase 3 (native archives) ─┤  (independent; needs a validation experiment — gated on Phase 5)
 Phase 4 (TweakDB parity) ──┤  (reuses Phase 2 live-write technique)
-Phase 5 (hooking) ─────────┴──► unlocks ─► Phase 6 (redscript, CET) and ArchiveXL-extensions
+Phase 5 (hooking) ─────────┴──► unlocks ─► CET (ImGui-on-Metal), ArchiveXL-extensions, Codeware/custom natives
 ```
 
-Phases 2–4 need **no** new hook primitive. Phase 5 is the gate for everything in Phase 6 and for ArchiveXL
-beyond plain replacement.
+Phases 2–4 need **no** new hook primitive, and **neither does the redscript half of Phase 6** (verified
+working native, F-052). Phase 5 remains the gate for CET, ArchiveXL beyond plain replacement, Codeware /
+custom natives, and native `.archive` mod loading (Phase 3, F-045).

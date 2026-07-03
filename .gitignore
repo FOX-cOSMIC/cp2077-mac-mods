@@ -47,3 +47,6 @@ reference/gibbed-schema/
 reference/example-mods
 reference/ghidra
 reference/windows-tweakxl
+
+# external research clones, not part of this project
+.research/

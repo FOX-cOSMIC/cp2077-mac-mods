@@ -49,9 +49,11 @@ All four must be present. Missing any one will cause injection to fail or the ga
 
 ### Optional fifth — for inline `__TEXT` patching (Phase 5 fallback)
 
+> **⚠ CORRECTED 2026-07-04 by F-053.** The claim below ("a re-sign carrying this entitlement lifts [`__TEXT` immutability]") was never empirically tested when written and is now known to be **wrong as stated**, at least for ad-hoc signing. `h004_probe.cpp` tested this entitlement (plus the four above, plus `get-task-allow`) against 4 distinct ad-hoc-resigned copies of the real game binary: `mach_vm_protect`/`mprotect` on `__TEXT` failed identically (KERN_PROTECTION_FAILURE / EPERM) in every configuration, including this one. See **F-053** for full methodology. The remaining untested lever is a real (non-ad-hoc) Apple Developer ID signature — not ruled out by this experiment, but a materially higher-cost path (see H-012's discussion of memaxo's own analysis).
+
 | Entitlement key | Rationale |
 |---|---|
-| `com.apple.security.cs.disable-executable-page-protection` | Disables Hardened Runtime's protection on **existing** executable pages, allowing in-place modification of the game's `__TEXT` (true inline hooking). This is what scopes **FA-001**: the stock binary's `__TEXT` is immutable, but a re-sign carrying this entitlement lifts that. It is the **most security-reducing** entitlement Apple ships (explicitly discouraged) and is **not** in the four above — add it only if the GOT/VTable/`MAP_JIT`-trampoline routes can't intercept a needed direct call. See `docs/ROADMAP.md` Phase 5. |
+| `com.apple.security.cs.disable-executable-page-protection` | Disables Hardened Runtime's protection on **existing** executable pages, allowing in-place modification of the game's `__TEXT` (true inline hooking). This is what scopes **FA-001**: the stock binary's `__TEXT` is immutable, but a re-sign carrying this entitlement lifts that. It is the **most security-reducing** entitlement Apple ships (explicitly discouraged) and is **not** in the four above — add it only if the GOT/VTable/`MAP_JIT`-trampoline routes can't intercept a needed direct call. See `docs/ROADMAP.md` Phase 5. **UPDATE: empirically refuted for ad-hoc signing — see the correction note above and F-053.** |
 
 Entitlement plist fragment for reference (the four required; add the fifth only for inline `__TEXT` hooking):
 
@@ -122,6 +124,8 @@ EOF
 ### Step 4 — Merge the four entitlements into the plist
 
 Open `$ENT_FILE` in any text editor and add the four `<key>/<true/>` pairs inside the `<dict>` block. Do not remove any entitlements that were already present (e.g., `com.apple.security.network.client`).
+
+> **⚠ EXCEPTION (added 2026-07-04, per F-053): DO remove CDPR's *restricted*, Apple-provisioned entitlements before ad-hoc re-signing.** Empirically, preserving `com.apple.application-identifier`, `com.apple.developer.team-identifier`, and `com.apple.developer.sustained-execution` (all present on the stock binary, all tied to CDPR's real Apple Developer provisioning) while signing ad-hoc (`--sign -`) causes the process to be **SIGKILL'd instantly at launch (exit 137, no crash report)** — confirmed directly, not theoretical. These three keys are the one category of "already present" entitlement that must be dropped, not kept, when re-signing ad-hoc. The four/five entitlements this doc adds are unaffected (they are ordinary developer opt-outs, not Apple-provisioned identifiers) and launch fine once the restricted keys are excluded.
 
 Alternatively, use PlistBuddy:
 

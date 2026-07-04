@@ -20,3 +20,25 @@ set_target_properties(h001_probe PROPERTIES
     SUFFIX                   ".dylib"
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src/red4ext-mac"
 )
+
+# h004_probe — diagnostic dylib for H-004/T-005 (inline __TEXT hooking:
+# mprotect/mach_vm_protect under a given re-sign entitlement configuration).
+# NEVER writes to __TEXT; only tests + immediately reverts page protection.
+# See tools/run-h004-probe.sh for the launch wrapper.
+
+add_library(h004_probe SHARED
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/probes/h004_probe.cpp
+)
+
+target_compile_options(h004_probe PRIVATE
+    -Wall
+    -Wextra
+    -Wno-unused-parameter
+)
+
+set_target_properties(h004_probe PROPERTIES
+    OUTPUT_NAME              "h004_probe"
+    PREFIX                   "lib"
+    SUFFIX                   ".dylib"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/src/red4ext-mac"
+)

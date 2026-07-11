@@ -1,7 +1,18 @@
 ---
 project: cp2077-mac-mods
 version: 0.1.0
-last_updated: 2026-07-03
+last_updated: 2026-07-04
+project_status: paused
+paused_note: 'Project PAUSED (on ice) as of 2026-07-04 — not abandoned. The human
+  developer got a Windows PC and no longer needs this macOS port day-to-day, so
+  active development has stopped. All state below is left intact and accurate as
+  of the pause point; nothing was rushed or half-finished to close this out. Most
+  recent milestones: redscript runtime verified working natively in-game (F-050,
+  F-051, F-052) and the __TEXT hooking question resolved — no ad-hoc resign
+  entitlement unlock needed (F-053). To resume, start at AGENTS.md (top-level
+  entry point) and follow Quick Bring-Up in CLAUDE.md: AGENTS.md -> docs/HANDOFF.md
+  -> this file -> docs/FAILED_APPROACHES.md -> the relevant .openclaw/agents/ role
+  file. next_action below is still the live pickup point.'
 current_phase:
   id: 1
   name: foundation-engineering

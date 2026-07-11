@@ -1,5 +1,7 @@
 # cp2077-mac-mods
 
+> 🧊 **On ice (2026-07-04).** The developer moved to a Windows PC and no longer needs this port day-to-day, so active development is paused here. The project is **not abandoned** — it's in a clean, documented, resumable state (see **Status** below and [`AGENTS.md`](AGENTS.md) for a fresh pickup). Issues/PRs from anyone who wants to pick it up are welcome; just don't expect fast responses from the original author for a while.
+
 **Bringing the Cyberpunk 2077 PC modding stack to the native macOS (Apple Silicon) port** — starting with [RED4ext](https://github.com/WopsS/RED4ext) + [TweakXL](https://github.com/psiberx/cp2077-tweak-xl), so that data/tweak mods written for the Windows version can run on Mac.
 
 Cyberpunk 2077 shipped a native Apple Silicon build in 2025. It runs great — but the modding frameworks the community relies on (RED4ext, TweakXL, ArchiveXL, CET, Codeware, redscript) are Windows-only. This project closes that gap, one layer at a time:

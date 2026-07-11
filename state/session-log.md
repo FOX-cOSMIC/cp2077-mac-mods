@@ -48,6 +48,30 @@ Format:
   - Removed empty `Programming/OLD/`
 - **Symlink fix:** `cp2077-mac-mods/reference/windows-tweakxl` re-pointed to the archived location.
 - **Archive README** written, prominently flagging that `cp2077-tweak-xl/` must not be deleted (it's still referenced).
+
+## 2026-07-04 — Project paused, put on ice (doc-keeper)
+
+- **Goal:** Record an administrative status change — no technical work this session.
+- **Outcome:** The human developer got a Windows PC and no longer needs this macOS
+  port day-to-day. Development is being **paused as of 2026-07-04** — not
+  abandoned, just inactive. The project is left in a clean, documented, and
+  resumable state: the most recent milestones are the redscript runtime verified
+  working natively in-game (F-050, F-051, F-052) and the __TEXT hooking question
+  resolved, confirming no ad-hoc resign entitlement unlock is needed (F-053). The
+  repo README and GitHub description were already updated to reflect the paused
+  status. `state/status.yaml` now carries `project_status: paused` and a
+  `paused_note` pointing future readers/contributors at `AGENTS.md` as the pickup
+  entry point.
+- **Files changed:** `state/status.yaml` (added `project_status`/`paused_note`,
+  bumped `last_updated`), `state/session-log.md` (this entry).
+- **FACTS added/invalidated:** None.
+- **FAILED_APPROACHES added:** None.
+- **Blockers:** None new — existing blockers in `state/status.yaml` are left as-is
+  and still accurate.
+- **Next:** Whoever resumes the project should start at `AGENTS.md`, then
+  `docs/HANDOFF.md`, then `state/status.yaml`'s `next_action` field, which still
+  reflects the live decision point (Phase 4 TweakDB parity vs Phase 5 hooking vs
+  extending the redscript track).
 - **Files changed:** Archive folder created; symlink updated; this log; task T-011 closed.
 - **FACTS added/invalidated:** None.
 - **FAILED_APPROACHES added:** None.

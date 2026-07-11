@@ -16,6 +16,10 @@ Cyberpunk 2077 shipped a native Apple Silicon build in 2025. It runs great — b
 
 **First visible, verified, native-macOS in-game change achieved** ✅ — a direct live-memory write changed the player's eddies **310,915 → 1,000,000** on a live save, no reload, no crash, cleanly reverted (fact **F-044**).
 
+**redscript mods run natively on macOS** ✅ — verified in-game: a `@wrapMethod` hook, compiled by the game's own bundled `scc`, fired on save-load and called a native game system with visible effect (facts **F-050**–**F-052**). No RED4ext, no CET, no code hooking required — just the stock install's own toolchain. This is the cheapest real win in the project: any pure-redscript Nexus mod (no Codeware/ArchiveXL dependency) is a strong candidate to already work unchanged.
+
+**Inline (`__TEXT`) hooking is confirmed blocked, not just untested** — 6 real re-signed copies of the game binary, every entitlement combination a known community fork claims works, all fail identically at the kernel level (fact **F-053**). `__DATA`/GOT/vtable hooking remains the only working primitive on this platform; a full RED4ext-equivalent plugin host is still an open problem.
+
 **Phase 1 (TweakXL foundation) — proven end-to-end.** The data pipeline works in-game and is verified against the game's own code:
 
 `DYLD` injection → image-slide capture → TweakDB singleton → apply-trigger (polling) → flat lookup → flat **write / create + array-append** → record re-materialization (`UpdateRecord`) — each confirmed by the game's *own* `GetFlat`/`GetRecord` accessors (not just our write-back). YAML/`.tweak` parsing and the applicator run end-to-end.
@@ -30,13 +34,13 @@ Cyberpunk 2077 shipped a native Apple Silicon build in 2025. It runs great — b
 
 > **Derived stats are different:** displayed numbers like cyberdeck RAM or max HP are *computed* from base + modifiers at read time — never stored as the value you see — so they aren't reachable by a value-scan. Stored counters (money/components/XP) are. (See `FA-017`…`FA-019`.)
 
-**What's not done yet:** general Windows-mod-file (`.yaml`) changes taking visible effect (the wall above), asset/texture mods, scripting, stability hardening, and a packaged installer. The full plan is in [`docs/ROADMAP.md`](docs/ROADMAP.md); current state, blockers, and next action in [`state/status.yaml`](state/status.yaml); the engineering record in [`docs/FACTS.md`](docs/FACTS.md) and [`state/session-log.md`](state/session-log.md).
+**What's not done yet:** general Windows-mod-file (`.yaml`) changes taking visible effect (the wall above), asset/texture mods, the rest of the scripting ecosystem (CET, Codeware, redscript mods with custom natives), stability hardening, and a packaged installer. The full plan is in [`docs/ROADMAP.md`](docs/ROADMAP.md); current state, blockers, and next action in [`state/status.yaml`](state/status.yaml); the engineering record in [`docs/FACTS.md`](docs/FACTS.md) and [`state/session-log.md`](state/session-log.md).
 
 ## How it differs from Windows RED4ext/TweakXL
 
 The Windows stack relies on DLL injection + **inline hooking**. On macOS that doesn't translate directly:
 
-- **Inline hooking is blocked** — the `__TEXT` segment is read-only under macOS Hardened Runtime / code signing (on the stock binary). We use data-side techniques (GOT/vtable/function-pointer tables) and a polling apply-trigger instead. (A re-sign with the right entitlement could lift this for inline hooking later — see [`docs/ROADMAP.md`](docs/ROADMAP.md) Phase 5.)
+- **Inline hooking is blocked, confirmed empirically** — the `__TEXT` segment is read-only under macOS Hardened Runtime / code signing, on the stock binary *and* across every ad-hoc re-sign entitlement combination tested, including ones a community fork claims work (fact **F-053**). We use data-side techniques (GOT/vtable/function-pointer tables) and a polling apply-trigger instead. The one untested lever left is a real (non-ad-hoc) Apple Developer ID signature — see [`docs/ROADMAP.md`](docs/ROADMAP.md) Phase 5.
 - **The in-memory TweakDB layout differs** from Windows — the struct offsets, flat-value representation, and accessors were re-derived for the macOS build.
 - **Visible changes go through live memory, not TweakDB** — because flat edits don't reach the game's materialized runtime structures, the live-edit tool writes the running process memory directly (`mach_vm_write`) and holds/reverts the result.
 - **Injection** uses `DYLD_INSERT_LIBRARIES`; the shipped build already carries the entitlements that make it work.
